@@ -1,0 +1,3 @@
+{
+  "extends": "@fiscode/config/tsconfig.base.json"
+}
