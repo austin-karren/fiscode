@@ -24,7 +24,7 @@ Branch: `first-features` (clean working tree as of last typecheck).
 ## Task list state
 
 - #31–37 ✅ completed
-- **Next up — Part 2 (apps/fumadocs)**, scoped in the master plan at `/Users/austinkarren/.claude/plans/eventual-giggling-star.md` (expanded section to be added next).
+- **Next up — Part 2 (apps/fumadocs)**, fully scoped in the master plan at `/Users/austinkarren/.claude/plans/eventual-giggling-star.md` under "Part 2 — Fumadocs docs app" (framework choice, stack, route shape, content outline, 9-step build sequence). Template: `/Users/austinkarren/workspaces/personal/fiscode-reference/apps/fumadocs`.
 
 ## Key conventions to keep in mind
 
