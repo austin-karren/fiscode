@@ -1,0 +1,20 @@
+---
+title: Data entry
+description: Every route in apps/web — one page per entity.
+icon: Database
+---
+
+Each data-entry route shares the same shape: a table of existing rows, a "+ Add" button that opens
+a dialog form, and inline edit/delete. Forms validate on blur per field and on submit at the form
+level; dates use a `Date | undefined` model converted to ISO at the submit boundary.
+
+<Cards>
+  <Card title="Profile" href="/docs/data-entry/profile" />
+  <Card title="Clients" href="/docs/data-entry/clients" />
+  <Card title="Income" href="/docs/data-entry/income" />
+  <Card title="Expenses" href="/docs/data-entry/expenses" />
+  <Card title="Vehicles" href="/docs/data-entry/vehicles" />
+  <Card title="Mileage" href="/docs/data-entry/mileage" />
+  <Card title="Home office" href="/docs/data-entry/home-office" />
+  <Card title="Time" href="/docs/data-entry/time" />
+</Cards>
