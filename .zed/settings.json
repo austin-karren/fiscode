@@ -1,0 +1,173 @@
+{
+  "lsp": {
+    "oxlint": {
+      "initialization_options": {
+        "settings": {
+          "configPath": null,
+          "run": "onType",
+          "disableNestedConfig": false,
+          "fixKind": "safe_fix",
+          "unusedDisableDirectives": "deny"
+        }
+      }
+    },
+    "oxfmt": {
+      "initialization_options": {
+        "settings": {
+          "fmt.configPath": null,
+          "run": "onSave"
+        }
+      }
+    },
+    "tailwindcss-language-server": {
+      "settings": {
+        "classFunctions": ["cva", "cx"],
+        "experimental": {
+          "configFile": {
+            "packages/ui/src/styles/globals.css": ["apps/**/src/**", "packages/ui/src/**"]
+          }
+        }
+      }
+    }
+  },
+  "languages": {
+    "CSS": {
+      "language_servers": ["tailwindcss-language-server", "..."],
+      "format_on_save": "on",
+      "prettier": {
+        "allowed": false
+      },
+      "formatter": [
+        {
+          "language_server": {
+            "name": "oxfmt"
+          }
+        }
+      ]
+    },
+    "HTML": {
+      "format_on_save": "on",
+      "prettier": {
+        "allowed": false
+      },
+      "formatter": [
+        {
+          "language_server": {
+            "name": "oxfmt"
+          }
+        }
+      ]
+    },
+    "JavaScript": {
+      "format_on_save": "on",
+      "prettier": {
+        "allowed": false
+      },
+      "formatter": [
+        {
+          "language_server": {
+            "name": "oxfmt"
+          }
+        },
+        {
+          "code_action": "source.fixAll.oxc"
+        }
+      ]
+    },
+    "JSON": {
+      "format_on_save": "on",
+      "prettier": {
+        "allowed": false
+      },
+      "formatter": [
+        {
+          "language_server": {
+            "name": "oxfmt"
+          }
+        }
+      ]
+    },
+    "JSONC": {
+      "format_on_save": "on",
+      "prettier": {
+        "allowed": false
+      },
+      "formatter": [
+        {
+          "language_server": {
+            "name": "oxfmt"
+          }
+        }
+      ]
+    },
+    "Markdown": {
+      "format_on_save": "on",
+      "prettier": {
+        "allowed": false
+      },
+      "formatter": [
+        {
+          "language_server": {
+            "name": "oxfmt"
+          }
+        }
+      ]
+    },
+    "TypeScript": {
+      "format_on_save": "on",
+      "prettier": {
+        "allowed": false
+      },
+      "formatter": [
+        {
+          "language_server": {
+            "name": "oxfmt"
+          }
+        },
+        {
+          "code_action": "source.fixAll.oxc"
+        }
+      ]
+    },
+    "TSX": {
+      "format_on_save": "on",
+      "prettier": {
+        "allowed": false
+      },
+      "formatter": [
+        {
+          "language_server": {
+            "name": "oxfmt"
+          }
+        },
+        {
+          "code_action": "source.fixAll.oxc"
+        }
+      ]
+    },
+    "YAML": {
+      "format_on_save": "on",
+      "prettier": {
+        "allowed": false
+      },
+      "formatter": [
+        {
+          "language_server": {
+            "name": "oxfmt"
+          }
+        }
+      ]
+    },
+    // Disable Formatting for plain text files (for tanstack routeTree.gen files)
+    "Plain Text": {
+      "format_on_save": "off",
+      "enable_language_server": false
+    }
+  },
+  // Disable Formatting for routeTree.gen files
+  "file_types": {
+    "Plain Text": ["routeTree.gen.ts"]
+  }
+  // Disable search for generated TanStack routeTree.gen files
+  // "file_scan_exclusions": ["**/routeTree.gen.ts"]
+}

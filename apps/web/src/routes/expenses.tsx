@@ -1,15 +1,34 @@
 import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
-import { Label } from "@fiscode/ui/components/label";
-import { Card } from "@fiscode/ui/components/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
+import { Badge } from "@fiscode/ui/components/badge";
+import { Checkbox } from "@fiscode/ui/components/checkbox";
+import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+  FieldTitle,
+} from "@fiscode/ui/components/field";
 import { expenseRepo } from "@fiscode/db";
-import { cents, formatUSD, parseUSD, todayIso } from "@fiscode/core";
-import { useState } from "react";
+import { cents, formatUSD, parseUSD } from "@fiscode/core";
+import { useForm } from "@tanstack/react-form";
+import { Receipt } from "lucide-react";
 import { toast } from "sonner";
+import { z } from "zod";
 
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
+import { TSFormField } from "../components/forms/ts-form-field";
+import { DatePicker, dateToIso } from "../components/forms/date-picker";
+import { SelectWithLabels } from "../components/forms/select-with-labels";
+import { LabelWithTooltip } from "../components/forms/labeled";
+import { NoDataEmpty } from "../components/empty-states/no-data";
+import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@fiscode/ui/components/tooltip";
+import { GLOSSARY } from "../lib/tax-glossary";
 
 const CATEGORIES = [
   ["health_insurance", "Self-employed health insurance"],
@@ -28,6 +47,16 @@ const CATEGORIES = [
 
 const labelFor = (code: string) => CATEGORIES.find(([c]) => c === code)?.[1] ?? code;
 
+const expenseFormSchema = z.object({
+  date: z.date({ message: "Pick a date" }),
+  amount: z.string().refine((v) => parseUSD(v) !== undefined, "Enter a valid amount"),
+  category: z.string(),
+  description: z.string(),
+  flagForSection179: z.boolean(),
+});
+// Per-field schemas (onBlur). Form-level schema (onSubmit) re-runs them all.
+const fs = expenseFormSchema.shape;
+
 export const Route = createFileRoute("/expenses")({
   loader: async () => ({ expenses: await expenseRepo.list() }),
   component: ExpensesPage,
@@ -36,36 +65,34 @@ export const Route = createFileRoute("/expenses")({
 function ExpensesPage() {
   const { expenses } = useLoaderData({ from: "/expenses" });
   const router = useRouter();
-  const [date, setDate] = useState<string>(todayIso());
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("software_subs");
-  const [description, setDescription] = useState("");
-  const [flag, setFlag] = useState(false);
 
-  const add = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const parsed = parseUSD(amount);
-    if (parsed === undefined) {
-      toast.error("Enter a valid amount.");
-      return;
-    }
-    await expenseRepo.create({
-      date,
-      amountCents: parsed,
-      category,
-      clientId: null,
-      description: description || null,
-      reason: null,
-      notes: null,
-      flagForSection179: flag,
-      deletedAt: null,
-    });
-    setAmount("");
-    setDescription("");
-    setFlag(false);
-    toast.success("Expense added.");
-    router.invalidate();
-  };
+  const form = useForm({
+    defaultValues: {
+      date: new Date() as Date | undefined,
+      amount: "",
+      category: "software_subs",
+      description: "",
+      flagForSection179: false,
+    },
+    validators: { onSubmit: expenseFormSchema },
+    onSubmit: async ({ value, formApi }) => {
+      const parsed = parseUSD(value.amount)!;
+      await expenseRepo.create({
+        date: dateToIso(value.date!),
+        amountCents: parsed,
+        category: value.category,
+        clientId: null,
+        description: value.description || null,
+        reason: null,
+        notes: null,
+        flagForSection179: value.flagForSection179,
+        deletedAt: null,
+      });
+      toast.success("Expense added.");
+      formApi.reset();
+      router.invalidate();
+    },
+  });
 
   const remove = async (id: string) => {
     await expenseRepo.softDelete(id);
@@ -77,83 +104,147 @@ function ExpensesPage() {
       title="Expenses"
       description="Business expenses. Categorize so the year-end packet groups cleanly."
     >
-      <Card className="p-4">
-        <form onSubmit={add} className="grid gap-3 @md:grid-cols-[1fr_1fr_1.5fr_2fr_auto_auto]">
-          <div className="grid gap-1">
-            <Label htmlFor="edate">Date</Label>
-            <Input
-              id="edate"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              required
-            />
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="eamt">Amount</Label>
-            <Input
-              id="eamt"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="$0.00"
-              required
-            />
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="ecat">Category</Label>
-            <select
-              id="ecat"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="rounded-md border border-input bg-background px-3 py-2 text-sm h-8"
+      <EnterToSubmitForm
+        onSubmit={(e) => {
+          e.preventDefault();
+          void form.handleSubmit();
+        }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
+              Add expense
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1fr_1.5fr_2fr_auto] @4xl:items-end">
+            <TSFormField form={form} name="date" validators={{ onBlur: fs.date }}>
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Date</FormLabel>
+                  <FormControl>
+                    <DatePicker
+                      value={field.state.value as Date | undefined}
+                      onValueChange={(d) => field.handleChange(d)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField form={form} name="amount" validators={{ onBlur: fs.amount }}>
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Amount</FormLabel>
+                  <FormControl>
+                    <Input
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="$0.00"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField form={form} name="category">
+              {(field) => (
+                <FormItem>
+                  <LabelWithTooltip tooltip={GLOSSARY.expenseCategory}>Category</LabelWithTooltip>
+                  <FormControl>
+                    <SelectWithLabels
+                      value={field.state.value}
+                      onValueChange={(v) => field.handleChange(v)}
+                      items={CATEGORIES.map(([c, l]) => ({
+                        value: c,
+                        label: l,
+                      }))}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField form={form} name="description">
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Input
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField form={form} name="flagForSection179">
+              {(field) => (
+                <FormItem className="@sm:col-span-2 @4xl:col-span-5">
+                  <FieldLabel htmlFor="flag-section-179">
+                    <Field orientation="horizontal">
+                      <FormControl>
+                        <Checkbox
+                          id="flag-section-179"
+                          checked={field.state.value}
+                          onCheckedChange={(v) => field.handleChange(v === true)}
+                        />
+                      </FormControl>
+                      <FieldContent>
+                        <FieldTitle>
+                          <LabelWithTooltip tooltip={GLOSSARY.section179}>
+                            §179 candidate
+                          </LabelWithTooltip>
+                        </FieldTitle>
+                        <FieldDescription>
+                          Equipment you'd like to fully expense this year rather than depreciate.
+                        </FieldDescription>
+                      </FieldContent>
+                    </Field>
+                  </FieldLabel>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+          </CardContent>
+          <CardFooter className="justify-end">
+            <form.Subscribe
+              selector={(s) => ({
+                canSubmit: s.canSubmit,
+                isSubmitting: s.isSubmitting,
+              })}
             >
-              {CATEGORIES.map(([c, l]) => (
-                <option key={c} value={c}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="edesc">Description</Label>
-            <Input
-              id="edesc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-          <div className="flex items-end gap-2 pb-1">
-            <input
-              id="eflag"
-              type="checkbox"
-              checked={flag}
-              onChange={(e) => setFlag(e.target.checked)}
-            />
-            <Label htmlFor="eflag" className="text-xs">
-              §179
-            </Label>
-          </div>
-          <div className="flex items-end">
-            <Button type="submit">Add</Button>
-          </div>
-        </form>
-      </Card>
+              {({ canSubmit, isSubmitting }) => (
+                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+                  {isSubmitting ? "Adding..." : "Add"}
+                </Button>
+              )}
+            </form.Subscribe>
+          </CardFooter>
+        </Card>
+      </EnterToSubmitForm>
 
-      <DataTable>
-        <DataTable.Head>
-          <DataTable.Row>
-            <DataTable.HeaderCell>Date</DataTable.HeaderCell>
-            <DataTable.HeaderCell>Category</DataTable.HeaderCell>
-            <DataTable.HeaderCell>Description</DataTable.HeaderCell>
-            <DataTable.HeaderCell align="right">Amount</DataTable.HeaderCell>
-            <DataTable.HeaderCell />
-          </DataTable.Row>
-        </DataTable.Head>
-        <DataTable.Body>
-          {expenses.length === 0 ? (
-            <DataTable.Empty message="No expenses yet." />
-          ) : (
-            expenses
+      {expenses.length === 0 ? (
+        <NoDataEmpty
+          icon={Receipt}
+          title="No expenses yet"
+          description="Add a business expense above. Categories drive how it lands in the year-end packet."
+        />
+      ) : (
+        <DataTable>
+          <DataTable.Head>
+            <DataTable.Row>
+              <DataTable.HeaderCell>Date</DataTable.HeaderCell>
+              <DataTable.HeaderCell>Category</DataTable.HeaderCell>
+              <DataTable.HeaderCell>Description</DataTable.HeaderCell>
+              <DataTable.HeaderCell align="right">Amount</DataTable.HeaderCell>
+              <DataTable.HeaderCell />
+            </DataTable.Row>
+          </DataTable.Head>
+          <DataTable.Body>
+            {expenses
               .slice()
               .sort((a, b) => (a.date > b.date ? -1 : 1))
               .map((x) => (
@@ -164,9 +255,18 @@ function ExpensesPage() {
                   <DataTable.Cell>
                     {labelFor(x.category)}
                     {x.flagForSection179 ? (
-                      <span className="ml-2 rounded-md bg-yellow-500/20 px-1.5 py-0.5 text-xs text-yellow-700 dark:text-yellow-300">
-                        §179
-                      </span>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <span className="ml-2 inline-flex cursor-help">
+                              <Badge variant="secondary">§179</Badge>
+                            </span>
+                          }
+                        />
+                        <TooltipContent className="max-w-xs text-xs">
+                          {GLOSSARY.section179}
+                        </TooltipContent>
+                      </Tooltip>
                     ) : null}
                   </DataTable.Cell>
                   <DataTable.Cell>{x.description ?? "—"}</DataTable.Cell>
@@ -177,10 +277,10 @@ function ExpensesPage() {
                     </Button>
                   </DataTable.Cell>
                 </DataTable.Row>
-              ))
-          )}
-        </DataTable.Body>
-      </DataTable>
+              ))}
+          </DataTable.Body>
+        </DataTable>
+      )}
     </Page>
   );
 }

@@ -16,6 +16,7 @@
     "@fiscode/tax": "workspace:*",
     "@fiscode/ui": "workspace:*",
     "@tailwindcss/vite": "^4.2.2",
+    "@tanstack/react-form": "^1.33.0",
     "@tanstack/react-router": "^1.168.14",
     "drizzle-orm": "catalog:",
     "lucide-react": "^0.546.0",

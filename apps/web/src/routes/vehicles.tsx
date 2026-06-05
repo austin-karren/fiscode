@@ -1,14 +1,29 @@
 import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
-import { Label } from "@fiscode/ui/components/label";
-import { Card } from "@fiscode/ui/components/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
+import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { vehicleRepo } from "@fiscode/db";
-import { useState } from "react";
+import { useForm } from "@tanstack/react-form";
+import { Car } from "lucide-react";
 import { toast } from "sonner";
+import { z } from "zod";
 
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
+import { TSFormField } from "../components/forms/ts-form-field";
+import { NoDataEmpty } from "../components/empty-states/no-data";
+import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
+import { InfoTooltip } from "../components/info-tooltip";
+import { GLOSSARY } from "../lib/tax-glossary";
+
+const vehicleSchema = z.object({
+  make: z.string().min(1, "Make is required"),
+  model: z.string().min(1, "Model is required"),
+  year: z.string(),
+  mpg: z.string(),
+});
+const fs = vehicleSchema.shape;
 
 export const Route = createFileRoute("/vehicles")({
   loader: async () => ({ vehicles: await vehicleRepo.list() }),
@@ -18,31 +33,26 @@ export const Route = createFileRoute("/vehicles")({
 function VehiclesPage() {
   const { vehicles } = useLoaderData({ from: "/vehicles" });
   const router = useRouter();
-  const [make, setMake] = useState("");
-  const [model, setModel] = useState("");
-  const [year, setYear] = useState("");
-  const [mpg, setMpg] = useState("");
 
-  const add = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!make.trim() || !model.trim()) return;
-    await vehicleRepo.create({
-      make: make.trim(),
-      model: model.trim(),
-      year: year ? Number(year) : null,
-      mpg: mpg ? Number(mpg) : null,
-      method: "standard_mileage",
-      inServiceDate: null,
-      notes: null,
-      deletedAt: null,
-    });
-    setMake("");
-    setModel("");
-    setYear("");
-    setMpg("");
-    toast.success("Vehicle added.");
-    router.invalidate();
-  };
+  const form = useForm({
+    defaultValues: { make: "", model: "", year: "", mpg: "" },
+    validators: { onSubmit: vehicleSchema },
+    onSubmit: async ({ value, formApi }) => {
+      await vehicleRepo.create({
+        make: value.make.trim(),
+        model: value.model.trim(),
+        year: value.year ? Number(value.year) : null,
+        mpg: value.mpg ? Number(value.mpg) : null,
+        method: "standard_mileage",
+        inServiceDate: null,
+        notes: null,
+        deletedAt: null,
+      });
+      toast.success("Vehicle added.");
+      formApi.reset();
+      router.invalidate();
+    },
+  });
 
   const remove = async (id: string) => {
     await vehicleRepo.softDelete(id);
@@ -52,53 +62,126 @@ function VehiclesPage() {
   return (
     <Page
       title="Vehicles"
-      description="Vehicles used for business. MPG is informational only — the tax deduction uses business miles × IRS rate."
+      description="Vehicles used for business. MPG is informational only — the tax deduction uses business miles × the IRS rate."
     >
-      <Card className="p-4">
-        <form onSubmit={add} className="grid gap-3 @md:grid-cols-[1fr_1fr_1fr_1fr_auto]">
-          <div className="grid gap-1">
-            <Label htmlFor="vmake">Make</Label>
-            <Input id="vmake" value={make} onChange={(e) => setMake(e.target.value)} required />
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="vmodel">Model</Label>
-            <Input id="vmodel" value={model} onChange={(e) => setModel(e.target.value)} required />
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="vyear">Year</Label>
-            <Input
-              id="vyear"
-              type="number"
-              value={year}
-              onChange={(e) => setYear(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="vmpg">MPG</Label>
-            <Input id="vmpg" type="number" value={mpg} onChange={(e) => setMpg(e.target.value)} />
-          </div>
-          <div className="flex items-end">
-            <Button type="submit">Add</Button>
-          </div>
-        </form>
-      </Card>
+      <EnterToSubmitForm
+        onSubmit={(e) => {
+          e.preventDefault();
+          void form.handleSubmit();
+        }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
+              Add vehicle
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.5fr_1.5fr_1fr_1fr] @4xl:items-end">
+            <TSFormField form={form} name="make" validators={{ onBlur: fs.make }}>
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Make</FormLabel>
+                  <FormControl>
+                    <Input
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField form={form} name="model" validators={{ onBlur: fs.model }}>
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Model</FormLabel>
+                  <FormControl>
+                    <Input
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField form={form} name="year">
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Year</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField form={form} name="mpg">
+              {(field) => (
+                <FormItem>
+                  <FormLabel>MPG</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+          </CardContent>
+          <CardFooter className="justify-end">
+            <form.Subscribe
+              selector={(s) => ({
+                canSubmit: s.canSubmit,
+                isSubmitting: s.isSubmitting,
+              })}
+            >
+              {({ canSubmit, isSubmitting }) => (
+                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+                  {isSubmitting ? "Adding..." : "Add"}
+                </Button>
+              )}
+            </form.Subscribe>
+          </CardFooter>
+        </Card>
+      </EnterToSubmitForm>
 
-      <DataTable>
-        <DataTable.Head>
-          <DataTable.Row>
-            <DataTable.HeaderCell>Make</DataTable.HeaderCell>
-            <DataTable.HeaderCell>Model</DataTable.HeaderCell>
-            <DataTable.HeaderCell>Year</DataTable.HeaderCell>
-            <DataTable.HeaderCell>MPG</DataTable.HeaderCell>
-            <DataTable.HeaderCell>Method</DataTable.HeaderCell>
-            <DataTable.HeaderCell />
-          </DataTable.Row>
-        </DataTable.Head>
-        <DataTable.Body>
-          {vehicles.length === 0 ? (
-            <DataTable.Empty message="No vehicles yet." />
-          ) : (
-            vehicles.map((v) => (
+      {vehicles.length === 0 ? (
+        <NoDataEmpty
+          icon={Car}
+          title="No vehicles yet"
+          description="Add a vehicle so mileage entries can reference it."
+        />
+      ) : (
+        <DataTable>
+          <DataTable.Head>
+            <DataTable.Row>
+              <DataTable.HeaderCell>Make</DataTable.HeaderCell>
+              <DataTable.HeaderCell>Model</DataTable.HeaderCell>
+              <DataTable.HeaderCell>Year</DataTable.HeaderCell>
+              <DataTable.HeaderCell>MPG</DataTable.HeaderCell>
+              <DataTable.HeaderCell>
+                <span className="inline-flex items-center gap-1.5">
+                  Method
+                  <InfoTooltip text={GLOSSARY.vehicleMethod} />
+                </span>
+              </DataTable.HeaderCell>
+              <DataTable.HeaderCell />
+            </DataTable.Row>
+          </DataTable.Head>
+          <DataTable.Body>
+            {vehicles.map((v) => (
               <DataTable.Row key={v.id}>
                 <DataTable.Cell>{v.make}</DataTable.Cell>
                 <DataTable.Cell>{v.model}</DataTable.Cell>
@@ -111,10 +194,10 @@ function VehiclesPage() {
                   </Button>
                 </DataTable.Cell>
               </DataTable.Row>
-            ))
-          )}
-        </DataTable.Body>
-      </DataTable>
+            ))}
+          </DataTable.Body>
+        </DataTable>
+      )}
     </Page>
   );
 }

@@ -1,14 +1,46 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
-import { Input } from "@fiscode/ui/components/input";
-import { Label } from "@fiscode/ui/components/label";
-import { Card } from "@fiscode/ui/components/card";
+import { Card, CardContent, CardFooter, CardHeader } from "@fiscode/ui/components/card";
+import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo } from "@fiscode/db";
-import { todayIso } from "@fiscode/core";
-import { useState } from "react";
+import { filingStatusSchema, stateCodeSchema } from "@fiscode/core";
+import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { z } from "zod";
 
 import { Page } from "../components/page";
+import { TSFormField } from "../components/forms/ts-form-field";
+import { SelectWithLabels } from "../components/forms/select-with-labels";
+import { StateCombobox } from "../components/forms/state-combobox";
+import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
+import { DatePicker, dateToIso } from "../components/forms/date-picker";
+
+const FILING_OPTIONS = [
+  { value: "single", label: "Single" },
+  { value: "mfj", label: "Married filing jointly" },
+  { value: "mfs", label: "Married filing separately" },
+  { value: "hoh", label: "Head of household" },
+];
+
+const ENTITY_OPTIONS = [
+  { value: "sole_prop", label: "Sole proprietor" },
+  { value: "single_member_llc", label: "Single-member LLC" },
+  { value: "s_corp", label: "S corp (coming soon)" },
+];
+
+// Per-field schemas attached on each Field's `onBlur` so errors surface
+// when the user leaves an empty input, not while typing. The form-level
+// `setupSchema` re-runs all of them on submit. Keep these in lock-step.
+const fieldSchemas = {
+  filingStatus: filingStatusSchema.refine((v) => v.length > 0, "Pick a filing status"),
+  state: stateCodeSchema,
+  seStartDate: z.date({ message: "Pick a start date" }),
+  entityType: z.enum(["sole_prop", "single_member_llc"], {
+    message: "Pick an entity type",
+  }),
+};
+
+const setupSchema = z.object(fieldSchemas);
 
 export const Route = createFileRoute("/setup")({
   beforeLoad: async () => {
@@ -21,105 +53,155 @@ export const Route = createFileRoute("/setup")({
 
 function SetupPage() {
   const navigate = useNavigate();
-  const [filingStatus, setFilingStatus] = useState("mfj");
-  const [state, setState] = useState("UT");
-  const [seStartDate, setSeStartDate] = useState<string>(todayIso());
-  const [entityType, setEntityType] = useState("sole_prop");
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await profileRepo.upsert({
-        filingStatus,
-        state,
-        seStartDate,
-        dependents: 0,
-        tracksRoth: false,
-        usesRetirement: false,
-        quarterlyMethod: "annualized",
-        prepLeadDays: 14,
-      });
-      await entityRepo.create({
-        type: entityType,
-        startDate: seStartDate,
-        endDate: null,
-        notes: null,
-        deletedAt: null,
-      });
-      toast.success("Profile saved.");
-      navigate({ to: "/" });
-    } catch (err) {
-      console.error(err);
-      toast.error("Could not save profile.");
-      setBusy(false);
-    }
-  };
+  // Defaults are intentionally empty — the user picks every field. No
+  // auto-filled assumptions about filing status, state, start date, or
+  // entity type. Submit stays disabled until zod accepts all four.
+  const form = useForm({
+    defaultValues: {
+      filingStatus: "",
+      state: "",
+      seStartDate: undefined as Date | undefined,
+      entityType: "",
+    },
+    validators: { onSubmit: setupSchema },
+    onSubmit: async ({ value }) => {
+      // setupSchema (form-level onSubmit) guarantees seStartDate is a Date
+      // by the time we reach here. Convert to the ISO string the DB stores.
+      const seStartIso = dateToIso(value.seStartDate!);
+      try {
+        await profileRepo.upsert({
+          filingStatus: value.filingStatus,
+          state: value.state,
+          seStartDate: seStartIso,
+          dependents: 0,
+          tracksRoth: false,
+          usesRetirement: false,
+          quarterlyMethod: "annualized",
+          prepLeadDays: 14,
+        });
+        await entityRepo.create({
+          type: value.entityType,
+          startDate: seStartIso,
+          endDate: null,
+          notes: null,
+          deletedAt: null,
+        });
+        toast.success("Profile saved.");
+        navigate({ to: "/" });
+      } catch (err) {
+        console.error(err);
+        toast.error("Could not save profile.");
+      }
+    },
+  });
 
   return (
     <Page
       title="Welcome to fiscode"
       description="Just the minimum to get started. Everything else is optional."
     >
-      <Card className="p-6">
-        <form onSubmit={submit} className="grid max-w-xl gap-4">
-          <div className="grid gap-1.5">
-            <Label htmlFor="filing">Filing status</Label>
-            <select
-              id="filing"
-              value={filingStatus}
-              onChange={(e) => setFilingStatus(e.target.value)}
-              className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+      <EnterToSubmitForm
+        onSubmit={(e) => {
+          e.preventDefault();
+          void form.handleSubmit();
+        }}
+      >
+        <Card>
+          <CardHeader>SETUP</CardHeader>
+          <CardContent className="grid gap-4 pb-2">
+            <TSFormField
+              form={form}
+              name="filingStatus"
+              validators={{ onBlur: fieldSchemas.filingStatus }}
             >
-              <option value="single">Single</option>
-              <option value="mfj">Married filing jointly</option>
-              <option value="mfs">Married filing separately</option>
-              <option value="hoh">Head of household</option>
-            </select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="state">State of residence</Label>
-            <Input
-              id="state"
-              value={state}
-              onChange={(e) => setState(e.target.value.toUpperCase())}
-              maxLength={2}
-              required
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="ssd">Self-employment start date</Label>
-            <Input
-              id="ssd"
-              type="date"
-              value={seStartDate}
-              onChange={(e) => setSeStartDate(e.target.value)}
-              required
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="entity">Entity type</Label>
-            <select
-              id="entity"
-              value={entityType}
-              onChange={(e) => setEntityType(e.target.value)}
-              className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Filing status</FormLabel>
+                  <FormControl>
+                    <SelectWithLabels
+                      value={field.state.value}
+                      onValueChange={(v) => field.handleChange(v)}
+                      items={FILING_OPTIONS}
+                      placeholder="Pick a filing status…"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+
+            <TSFormField form={form} name="state" validators={{ onBlur: fieldSchemas.state }}>
+              {(field) => (
+                <FormItem>
+                  <FormLabel>State of residence</FormLabel>
+                  <FormControl>
+                    <StateCombobox
+                      value={field.state.value}
+                      onValueChange={(code) => field.handleChange(code)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+
+            <TSFormField
+              form={form}
+              name="seStartDate"
+              validators={{ onBlur: fieldSchemas.seStartDate }}
             >
-              <option value="sole_prop">Sole proprietor</option>
-              <option value="single_member_llc">Single-member LLC</option>
-              <option value="s_corp" disabled>
-                S corp (coming soon)
-              </option>
-            </select>
-          </div>
-          <div className="mt-2">
-            <Button type="submit" disabled={busy}>
-              {busy ? "Saving..." : "Save and continue"}
-            </Button>
-          </div>
-        </form>
-      </Card>
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Self-employment start date</FormLabel>
+                  <FormControl>
+                    <DatePicker
+                      value={field.state.value as Date | undefined}
+                      onValueChange={(d) => field.handleChange(d)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+
+            <TSFormField
+              form={form}
+              name="entityType"
+              validators={{ onBlur: fieldSchemas.entityType }}
+            >
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Entity type</FormLabel>
+                  <FormControl>
+                    <SelectWithLabels
+                      value={field.state.value}
+                      onValueChange={(v) => field.handleChange(v)}
+                      items={ENTITY_OPTIONS}
+                      disabledValues={["s_corp"]}
+                      placeholder="Pick an entity type…"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+          </CardContent>
+          <CardFooter className="justify-end">
+            <form.Subscribe
+              selector={(s) => ({
+                canSubmit: s.canSubmit,
+                isSubmitting: s.isSubmitting,
+              })}
+            >
+              {({ canSubmit, isSubmitting }) => (
+                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+                  {isSubmitting ? "Saving..." : "Save and continue"}
+                </Button>
+              )}
+            </form.Subscribe>
+          </CardFooter>
+        </Card>
+      </EnterToSubmitForm>
     </Page>
   );
 }

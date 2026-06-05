@@ -19,7 +19,6 @@ import { Route as IncomeRouteImport } from './routes/income'
 import { Route as HomeOfficeRouteImport } from './routes/home-office'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as ExpensesRouteImport } from './routes/expenses'
-import { Route as DataRouteImport } from './routes/data'
 import { Route as ClientsRouteImport } from './routes/clients'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -73,11 +72,6 @@ const ExpensesRoute = ExpensesRouteImport.update({
   path: '/expenses',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DataRoute = DataRouteImport.update({
-  id: '/data',
-  path: '/data',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ClientsRoute = ClientsRouteImport.update({
   id: '/clients',
   path: '/clients',
@@ -92,7 +86,6 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/clients': typeof ClientsRoute
-  '/data': typeof DataRoute
   '/expenses': typeof ExpensesRoute
   '/history': typeof HistoryRoute
   '/home-office': typeof HomeOfficeRoute
@@ -107,7 +100,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/clients': typeof ClientsRoute
-  '/data': typeof DataRoute
   '/expenses': typeof ExpensesRoute
   '/history': typeof HistoryRoute
   '/home-office': typeof HomeOfficeRoute
@@ -123,7 +115,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/clients': typeof ClientsRoute
-  '/data': typeof DataRoute
   '/expenses': typeof ExpensesRoute
   '/history': typeof HistoryRoute
   '/home-office': typeof HomeOfficeRoute
@@ -140,7 +131,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/clients'
-    | '/data'
     | '/expenses'
     | '/history'
     | '/home-office'
@@ -155,7 +145,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/clients'
-    | '/data'
     | '/expenses'
     | '/history'
     | '/home-office'
@@ -170,7 +159,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/clients'
-    | '/data'
     | '/expenses'
     | '/history'
     | '/home-office'
@@ -186,7 +174,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ClientsRoute: typeof ClientsRoute
-  DataRoute: typeof DataRoute
   ExpensesRoute: typeof ExpensesRoute
   HistoryRoute: typeof HistoryRoute
   HomeOfficeRoute: typeof HomeOfficeRoute
@@ -271,13 +258,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ExpensesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/data': {
-      id: '/data'
-      path: '/data'
-      fullPath: '/data'
-      preLoaderRoute: typeof DataRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/clients': {
       id: '/clients'
       path: '/clients'
@@ -298,7 +278,6 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ClientsRoute: ClientsRoute,
-  DataRoute: DataRoute,
   ExpensesRoute: ExpensesRoute,
   HistoryRoute: HistoryRoute,
   HomeOfficeRoute: HomeOfficeRoute,
