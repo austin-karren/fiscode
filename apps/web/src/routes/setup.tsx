@@ -108,7 +108,7 @@ function SetupPage() {
       >
         <Card>
           <CardHeader>SETUP</CardHeader>
-          <CardContent className="grid gap-4 pb-2">
+          <CardContent className="grid gap-3 pb-2 @sm:grid-cols-2">
             <TSFormField
               form={form}
               name="filingStatus"
