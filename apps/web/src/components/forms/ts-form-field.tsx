@@ -23,7 +23,6 @@ export function TSFormField({
   validators,
   children,
 }: {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   form: any;
   name: string;
   validators?: { onBlur?: ZodTypeAny };

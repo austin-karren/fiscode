@@ -33,6 +33,7 @@
   "scripts": {
     "dev": "turbo dev",
     "dev:web": "turbo -F web dev",
+    "dev:fumadocs": "turbo -F fumadocs dev",
     "build": "turbo build",
     "test": "turbo test",
     "lint": "turbo lint",

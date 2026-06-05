@@ -24,7 +24,8 @@ Branch: `first-features` (clean working tree as of last typecheck).
 ## Task list state
 
 - #31–37 ✅ completed
-- **Next up — Part 2 (apps/fumadocs)**, fully scoped in the master plan at `/Users/austinkarren/.claude/plans/eventual-giggling-star.md` under "Part 2 — Fumadocs docs app" (framework choice, stack, route shape, content outline, 9-step build sequence). Template: `/Users/austinkarren/workspaces/personal/fiscode-reference/apps/fumadocs`.
+- **Part 2 (apps/fumadocs) — first PR landed.** App is real: TanStack Start + Nitro/Vercel preset, fumadocs-mdx + fumadocs-ui, port 4000, lucide-icons-plugin, search at `/api/search`, llms.txt + llms-full.txt + per-page `.md` variants. 16 pages prerender; all routes return 200 on dev. Content stubs for index, setup, csv-format, tax-engine, accountant-handoff, year-end-packet, and 8 data-entry pages. Next: flesh out the stubs (one PR per topic cluster) and add a Vercel project for docs deploy.
+- **Next up — Part 3 (apps/desktop, Electrobun)** — schema/scope is in the master plan but not yet expanded the way Part 2 was.
 
 ## Key conventions to keep in mind
 

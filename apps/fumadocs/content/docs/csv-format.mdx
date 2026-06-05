@@ -1,0 +1,51 @@
+---
+title: CSV format
+description: The lossless source-of-truth format fiscode reads and writes.
+icon: FileText
+---
+
+CSV is the canonical format for fiscode data. Every entity is a row in a single CSV, discriminated
+by the `record_type` column.
+
+## Provenance header
+
+Each exported CSV begins with `#`-prefixed comment lines containing app version, export timestamp,
+filter (full vs yearly), and a SHA-256 of the data section. Comments are stripped on import via
+`Papa.parse({ comments: '#' })`.
+
+```
+# fiscode v0.1.0
+# exported_at: 2026-06-04T18:00:00Z
+# filter: full
+# data_sha256: abc123...
+record_type,id,...
+```
+
+## Record types
+
+A discriminated union keyed by `record_type`:
+
+- `profile` — single row (filing status, state, SE start date, dependent count).
+- `entity` — dated period(s); `sole_prop` or `s_corp`.
+- `spouse` — dated income/withholding spans.
+- `client` — payer.
+- `income` — 1099 or W-2 entries (per-payment granularity).
+- `time` — time-tracking sessions.
+- `vehicle` — registered vehicles.
+- `mileage` — per-trip miles by vehicle.
+- `home_office` — dated configuration + acknowledgement flag.
+- `expense` — categorized business expense; supports §179 candidate flag.
+- `retirement` — SEP / Solo 401(k) / Roth (gated by profile flags).
+
+The authoritative schema lives at `packages/csv/src/schema.ts`.
+
+## Import modes
+
+- **overwrite** — snapshot current state into history, truncate tables, load CSV.
+- **append** — insert; on PK conflict, append a history entry recording the conflict and skip.
+- **restore** — alias for overwrite with confirmation copy emphasizing the snapshot.
+
+## Round-trip guarantee
+
+Snapshot → export full CSV → wipe → import → export full CSV is byte-stable across data rows. The
+header line containing the timestamp is masked during equality checks.
