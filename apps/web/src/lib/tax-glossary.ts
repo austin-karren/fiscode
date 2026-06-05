@@ -72,6 +72,10 @@ export const GLOSSARY = {
     "How quarterly payments are computed. Annualized adapts to when income lands; even-split divides the year-end estimate by four.",
   spouseBlock:
     "Date-ranged W-2 wages and withholding for a spouse. Spouse withholding is subtracted from required quarterly payments; spouse wages flow into joint AGI for bracket calcs.",
+  entityType:
+    "Sole prop / single-member LLC are pass-through: business profit lands on Schedule C and is hit with self-employment tax. S corp (not implemented yet) splits owner pay into salary (employment tax) + distribution (no SE tax) — saves SE tax above a profitability threshold but adds payroll and a separate return. Entities are dated periods: don't change retroactively, add a new row from the date you actually switched.",
+  seStartDate:
+    "When you started this self-employed work. Drives partial-year mileage, home-office, and quarterly bucketing. Change this if you got the original date wrong; don't shift it forward to skip past income.",
 
   // ── App / data ────────────────────────────────────────────────────────
   backupNudge:

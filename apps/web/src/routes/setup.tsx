@@ -14,6 +14,8 @@ import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { StateCombobox } from "../components/forms/state-combobox";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { DatePicker, dateToIso } from "../components/forms/date-picker";
+import { LabelWithTooltip } from "../components/forms/labeled";
+import { GLOSSARY } from "../lib/tax-glossary";
 
 const FILING_OPTIONS = [
   { value: "single", label: "Single" },
@@ -108,7 +110,7 @@ function SetupPage() {
       >
         <Card>
           <CardHeader>SETUP</CardHeader>
-          <CardContent className="grid gap-3 pb-2 @sm:grid-cols-2">
+          <CardContent className="grid gap-3 pb-2 @sm:grid-cols-3">
             <TSFormField
               form={form}
               name="filingStatus"
@@ -171,7 +173,7 @@ function SetupPage() {
             >
               {(field) => (
                 <FormItem>
-                  <FormLabel>Entity type</FormLabel>
+                  <LabelWithTooltip tooltip={GLOSSARY.entityType}>Entity type</LabelWithTooltip>
                   <FormControl>
                     <SelectWithLabels
                       value={field.state.value}
