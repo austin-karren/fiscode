@@ -1,0 +1,40 @@
+---
+title: Tax engine
+description: How fiscode estimates taxes — assumptions, strategies, and the // todo verify registry.
+icon: Calculator
+---
+
+The tax engine lives in `@fiscode/tax` as **pure** functions: no React, no DOM, no DB. It takes a
+plain bundle and returns plain estimates.
+
+## Strategy seam
+
+```ts
+interface TaxStrategy {
+  compute(input: TaxInput, year: YearConfig): TaxEstimate;
+  quarterly(input: TaxInput, year: YearConfig, method: "even" | "annualized"): QuarterlyPlan;
+}
+```
+
+`engine.computeForYear(year)` picks a strategy based on the **active entity record for that year**,
+not a global. Today there are two strategies:
+
+- `SoleProprietorStrategy` — full implementation. SE tax (with wage-base + additional Medicare),
+  QBI, federal brackets per filing status, state, quarterly + annualized + safe-harbor.
+- `SCorpStrategy` — `NotImplemented` stub. The interface exists so adding it later is data + an
+  implementation, not a refactor. Excluded from the UI by the `isSCorp` flag.
+
+## Year config
+
+`packages/tax/src/config/<year>.ts` is the canonical example. Constants that change annually
+(brackets, SS wage base, mileage rate, standard deduction, QBI thresholds, etc.) are marked
+`// todo: verify against IRS/SSA for <year>` in the source.
+
+`getYearConfig(year)` falls back to the nearest defined year and surfaces a console warning + UI
+banner — stale data is loud, not silent.
+
+## What fiscode does not do
+
+- No IRS form generation. No filing.
+- No actual-expense vehicle method (standard mileage only).
+- No retirement / Roth UI in v1 (schema + CSV + flags only).

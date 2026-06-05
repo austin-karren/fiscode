@@ -1,53 +1,65 @@
 import { Toaster } from "@fiscode/ui/components/sonner";
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@fiscode/ui/components/sidebar";
+import { Separator } from "@fiscode/ui/components/separator";
+import { TooltipProvider } from "@fiscode/ui/components/tooltip";
+import { Outlet, createRootRoute, useLocation } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
-import Header from "../components/header";
+import { AppSidebar } from "../components/app-sidebar";
+import { ErrorEmpty } from "../components/empty-states/error";
+import { NotFoundEmpty } from "../components/empty-states/not-found";
 
-import appCss from "../index.css?url";
-
-export interface RouterAppContext {}
-
-export const Route = createRootRouteWithContext<RouterAppContext>()({
-  head: () => ({
-    meta: [
-      {
-        charSet: "utf-8",
-      },
-      {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
-      },
-      {
-        title: "My App",
-      },
-    ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-    ],
-  }),
-
-  component: RootDocument,
+export const Route = createRootRoute({
+  component: RootLayout,
+  errorComponent: ({ error, reset }) => (
+    <FullPageWrap>
+      <ErrorEmpty error={error} reset={reset} />
+    </FullPageWrap>
+  ),
+  notFoundComponent: () => (
+    <FullPageWrap>
+      <NotFoundEmptyWrapper />
+    </FullPageWrap>
+  ),
 });
 
-function RootDocument() {
+function NotFoundEmptyWrapper() {
+  const { pathname } = useLocation();
+  return <NotFoundEmpty pathname={pathname} />;
+}
+
+function FullPageWrap({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <div className="grid h-svh grid-rows-[auto_1fr]">
-          <Header />
-          <Outlet />
-        </div>
+    <div className="mx-auto flex min-h-svh max-w-2xl items-center justify-center p-6">
+      {children}
+    </div>
+  );
+}
+
+function RootLayout() {
+  const { pathname } = useLocation();
+  // format pathname to remove slashes and upper case first letter
+  const formattedPathname = pathname.replace(/^\/|\/$/g, "").replace(/^./, (m) => m.toUpperCase());
+  return (
+    <TooltipProvider delay={200}>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <header className="flex h-12 shrink-0 items-center gap-2 bg-background/80 px-3 backdrop-blur sticky top-0 z-10">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mx-1 h-4 data-vertical:self-center" />
+            <span className="font-mono text-sm font-medium tracking-tight">
+              {formattedPathname}
+            </span>
+          </header>
+          <Separator orientation="horizontal" className="w-full" />
+          <main className="@container px-4 py-6 md:px-8">
+            <Outlet />
+          </main>
+        </SidebarInset>
         <Toaster richColors />
-        <TanStackRouterDevtools position="bottom-left" />
-        <Scripts />
-      </body>
-    </html>
+        {import.meta.env.DEV && <TanStackRouterDevtools position="bottom-right" />}
+      </SidebarProvider>
+    </TooltipProvider>
   );
 }

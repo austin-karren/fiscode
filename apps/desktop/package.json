@@ -1,0 +1,12 @@
+{
+  "name": "desktop",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:hmr": "echo 'desktop app stubbed. Populate in part 3 (Electrobun).' && exit 0",
+    "build:stable": "echo 'desktop app stubbed.' && exit 0",
+    "build:canary": "echo 'desktop app stubbed.' && exit 0",
+    "check-types": "echo 'desktop app stubbed.' && exit 0",
+    "test": "echo 'desktop app stubbed.' && exit 0"
+  }
+}

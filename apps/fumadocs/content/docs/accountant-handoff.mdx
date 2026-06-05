@@ -1,0 +1,32 @@
+---
+title: Accountant handoff
+description: Exporting yearly CSV, importing amended data, and reverting via history.
+icon: ArrowRightLeft
+---
+
+fiscode is an estimator, not a filer. At year-end you hand off a yearly CSV (and the printable
+year-end packet) to a tax pro, then import any amendments they send back.
+
+## Export the year
+
+From `/year-end`, click **Download year-end packet**. You get:
+
+- `fiscode-<year>-yearly.csv` — every record dated within the year, plus the active profile,
+  entity, spouse, and home-office spans clipped to the year boundaries.
+- A printable summary view (open in a new tab, then print to PDF).
+
+## Import an amended CSV
+
+From `/` (data page), choose an import mode:
+
+- **overwrite** if the accountant is sending the canonical state back.
+- **append** if they're sending additions only.
+
+Every import snapshots current state into history first. If anything is wrong, revert from
+`/history`.
+
+## History & revert
+
+Every write goes through a repository function that appends a `history` row with the before-state.
+Revert is itself a non-destructive mutation — it writes a new row reflecting the revert and
+appends another history entry.

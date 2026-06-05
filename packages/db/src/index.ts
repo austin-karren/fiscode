@@ -1,15 +1,6 @@
-import { env } from "@fiscode/env/server";
-import { createClient } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
-
-import * as schema from "./schema";
-
-export function createDb() {
-  const client = createClient({
-    url: env.DATABASE_URL,
-  });
-
-  return drizzle({ client, schema });
-}
-
-export const db = createDb();
+export * from "./schema/index.ts";
+export * from "./bundle.ts";
+export { boot } from "./boot.ts";
+export { getDb, getRawSqlocal } from "./client.ts";
+export type { Db } from "./client.ts";
+export * from "./repo/index.ts";

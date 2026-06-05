@@ -1,5 +1,12 @@
 {
   "name": "@fiscode/config",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./tsconfig.base.json": "./tsconfig.base.json",
+    "./tsconfig.library.json": "./tsconfig.library.json",
+    "./tsconfig.react-library.json": "./tsconfig.react-library.json",
+    "./tsconfig.react-app.json": "./tsconfig.react-app.json"
+  }
 }

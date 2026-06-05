@@ -1,0 +1,28 @@
+{
+  "name": "@fiscode/csv",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts",
+    "./export": "./src/export.ts",
+    "./import": "./src/import.ts",
+    "./provenance": "./src/provenance.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fiscode/core": "workspace:*",
+    "papaparse": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@fiscode/config": "workspace:*",
+    "@types/papaparse": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

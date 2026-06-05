@@ -1,0 +1,278 @@
+---
+title: CSV format
+description: The lossless source-of-truth format fiscode reads and writes.
+icon: FileText
+---
+
+CSV is the canonical format for fiscode data. Every entity is a row in a single CSV, discriminated
+by the `record_type` column. The flat row shape lives at `packages/csv/src/schema.ts`; adding new
+fields means adding new optional columns at the end so old exports still parse.
+
+## Provenance header
+
+Each exported CSV begins with `#`-prefixed comment lines containing app version, export timestamp,
+filter (full vs yearly), and a SHA-256 of the data section. Comments are stripped on import via
+`Papa.parse({ comments: '#' })`.
+
+```
+# fiscode v0.1.0
+# exported_at: 2026-06-04T18:00:00Z
+# filter: full
+# data_sha256: abc123...
+record_type,id,...
+```
+
+## Common columns
+
+Every row carries these five columns regardless of `record_type`. Empty values are serialized as
+empty strings.
+
+<TypeTable
+  type={{
+    record_type: {
+      description:
+        "Discriminator. One of: profile, entity, spouse, client, income, time_entry, vehicle, mileage, home_office, expense, retirement_contribution.",
+      type: "enum",
+      required: true,
+    },
+    id: {
+      description: "ULID. Stable across exports.",
+      type: "string",
+      required: true,
+    },
+    created_at: {
+      description: "ISO-8601 timestamp.",
+      type: "string",
+    },
+    updated_at: {
+      description: "ISO-8601 timestamp.",
+      type: "string",
+    },
+    deleted_at: {
+      description: "ISO-8601 timestamp. Soft-delete marker.",
+      type: "string",
+    },
+  }}
+/>
+
+## Record types
+
+Below: one table per `record_type` showing the columns that apply to that record. The common
+columns above always apply too; they're omitted here to keep each table focused.
+
+### `profile`
+
+Single row. Drives the tax engine's filing status, state, and feature flags.
+
+<TypeTable
+  type={{
+    filing_status: {
+      description: "single | mfj | mfs | hoh",
+      type: "enum",
+      required: true,
+    },
+    state: {
+      description: "Two-letter state code (e.g. UT).",
+      type: "string",
+      required: true,
+    },
+    se_start_date: {
+      description: "Self-employment start date. Drives partial-year mileage and home-office.",
+      type: "date",
+    },
+    dependents: {
+      description: "Dependent count. Full dependent records are a later feature.",
+      type: "integer",
+    },
+    tracks_roth: {
+      description: "1 = surface Roth UI. 0 or empty = hide.",
+      type: "boolean",
+    },
+    uses_retirement: {
+      description: "1 = surface SEP / Solo 401(k) UI.",
+      type: "boolean",
+    },
+    quarterly_method: {
+      description: "even | annualized",
+      type: "enum",
+    },
+    prep_lead_days: {
+      description: "Days before each quarterly due date to surface a prep reminder.",
+      type: "integer",
+    },
+  }}
+/>
+
+### `entity`
+
+Dated entity periods. Currently one active per year, validated at import.
+
+<TypeTable
+  type={{
+    type: {
+      description: "sole_prop | s_corp. s_corp is schema-only in v1.",
+      type: "enum",
+      required: true,
+    },
+    start_date: { description: "Period start (inclusive).", type: "date", required: true },
+    end_date: { description: "Period end. Empty = open-ended.", type: "date" },
+  }}
+/>
+
+### `spouse`
+
+Dated spouse income/withholding spans. Optional; only emitted when filing status implies a
+spouse and the user has entered any data.
+
+<TypeTable
+  type={{
+    start_date: { description: "Span start.", type: "date", required: true },
+    end_date: { description: "Span end. Empty = open-ended.", type: "date" },
+    annual_w2_wages_cents: { description: "Integer cents.", type: "integer" },
+    annual_federal_withholding_cents: { description: "Integer cents.", type: "integer" },
+    annual_state_withholding_cents: { description: "Integer cents.", type: "integer" },
+  }}
+/>
+
+### `client`
+
+Payers. Income rows reference clients by `client_id`.
+
+<TypeTable
+  type={{
+    name: { description: "Display name.", type: "string", required: true },
+    default_rate_cents: { description: "Default hourly rate in integer cents.", type: "integer" },
+    default_commission_rate_basis_points: {
+      description: "Default commission rate in basis points (1 bp = 0.01%).",
+      type: "integer",
+    },
+  }}
+/>
+
+### `income`
+
+1099 or W-2 entries, per payment. Dated so the quarterly engine can bucket them.
+
+<TypeTable
+  type={{
+    date: { description: "Payment date.", type: "date", required: true },
+    client_id: { description: "FK to client.id. Empty for W-2 entries.", type: "string" },
+    amount_cents: { description: "Integer cents.", type: "integer", required: true },
+    source_type: { description: "1099 | w2", type: "enum", required: true },
+    kind: { description: "Free-form sub-category (e.g. commission, hourly).", type: "string" },
+    description: { description: "Short label.", type: "string" },
+    notes: { description: "Long-form notes.", type: "string" },
+  }}
+/>
+
+### `time_entry`
+
+Time-tracking sessions. Independent of income; not consumed by the tax engine.
+
+<TypeTable
+  type={{
+    date: { description: "Session date.", type: "date", required: true },
+    client_id: { description: "FK to client.id.", type: "string" },
+    minutes: { description: "Duration in minutes.", type: "integer", required: true },
+    description: { description: "Short label.", type: "string" },
+    notes: { description: "Long-form notes.", type: "string" },
+  }}
+/>
+
+### `vehicle`
+
+Vehicles available for business mileage.
+
+<TypeTable
+  type={{
+    make: { description: "Manufacturer.", type: "string", required: true },
+    model: { description: "Model name.", type: "string", required: true },
+    year: { description: "Model year.", type: "integer" },
+    mpg: {
+      description: "Miles per gallon (informational; not used by tax engine in v1).",
+      type: "integer",
+    },
+    method: { description: "standard | actual. v1 only supports standard.", type: "enum" },
+    in_service_date: { description: "Date placed in service.", type: "date" },
+  }}
+/>
+
+### `mileage`
+
+Per-trip business miles.
+
+<TypeTable
+  type={{
+    date: { description: "Trip date.", type: "date", required: true },
+    vehicle_id: { description: "FK to vehicle.id.", type: "string", required: true },
+    business_miles: { description: "Whole miles.", type: "integer", required: true },
+    purpose: { description: "Short label (e.g. client meeting).", type: "string" },
+    notes: { description: "Long-form notes.", type: "string" },
+  }}
+/>
+
+### `home_office`
+
+Dated home-office configuration. Only the simplified method is supported in v1.
+
+<TypeTable
+  type={{
+    start_date: { description: "Config start.", type: "date", required: true },
+    end_date: { description: "Config end. Empty = open-ended.", type: "date" },
+    office_sqft: { description: "Office area, square feet.", type: "integer", required: true },
+    home_sqft: { description: "Total home area (informational).", type: "integer" },
+    monthly_rent_mortgage_cents: {
+      description: "Informational; not used by simplified method.",
+      type: "integer",
+    },
+    monthly_utilities_cents: { description: "Informational.", type: "integer" },
+    monthly_insurance_cents: { description: "Informational.", type: "integer" },
+    regular_exclusive_ack: {
+      description: "1 = user acknowledged regular + exclusive use (IRS requirement).",
+      type: "boolean",
+      required: true,
+    },
+  }}
+/>
+
+### `expense`
+
+Categorized business expenses. `flag_for_section_179` marks candidates for §179 expensing.
+
+<TypeTable
+  type={{
+    date: { description: "Expense date.", type: "date", required: true },
+    category: { description: "Schedule C category.", type: "string", required: true },
+    description: { description: "Short label.", type: "string" },
+    amount_cents: { description: "Integer cents.", type: "integer", required: true },
+    flag_for_section_179: {
+      description: "1 = candidate for §179. Your accountant makes the final call.",
+      type: "boolean",
+    },
+    reason: { description: "Optional business-purpose justification.", type: "string" },
+    notes: { description: "Long-form notes.", type: "string" },
+  }}
+/>
+
+### `retirement_contribution`
+
+Gated by `profile.uses_retirement`. SEP / Solo 401(k) / Roth contributions.
+
+<TypeTable
+  type={{
+    date: { description: "Contribution date.", type: "date", required: true },
+    account: { description: "sep | solo_401k | roth_ira | trad_ira", type: "enum", required: true },
+    amount_cents: { description: "Integer cents.", type: "integer", required: true },
+  }}
+/>
+
+## Import modes
+
+- **overwrite** — snapshot current state into history, truncate tables, load CSV.
+- **append** — insert; on PK conflict, append a history entry recording the conflict and skip.
+- **restore** — alias for overwrite with confirmation copy emphasizing the snapshot.
+
+## Round-trip guarantee
+
+Snapshot → export full CSV → wipe → import → export full CSV is byte-stable across data rows. The
+header line containing the timestamp is masked during equality checks.

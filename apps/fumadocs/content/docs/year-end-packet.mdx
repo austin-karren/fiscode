@@ -1,0 +1,25 @@
+---
+title: Year-end packet
+description: What fiscode prepares for you at year end.
+icon: Package
+---
+
+The year-end packet is a printable summary plus a yearly CSV, intended as a handoff to a tax
+professional. It is not a tax return.
+
+## Contents
+
+- **Profile snapshot** — filing status, state, active entity for the year, dependents.
+- **Income totals** — by client, by source type (1099 vs W-2), by quarter.
+- **Expense totals** — by category, with §179 candidates flagged.
+- **Vehicle + mileage** — per-vehicle business miles, standard-mileage deduction.
+- **Home office** — simplified-method calculation with the acknowledgement flag.
+- **Tax estimate** — federal, state, SE, additional Medicare, QBI; quarterly plan and
+  safe-harbor status.
+- **`// todo: verify` registry** — every year-config constant that has not been verified against
+  IRS/SSA for the active year, surfaced so your accountant can spot stale assumptions.
+
+## Generating it
+
+From `/year-end`, click **Download year-end packet**. The yearly CSV is filtered to records dated
+inside the year plus the active singletons clipped to the year boundaries.
