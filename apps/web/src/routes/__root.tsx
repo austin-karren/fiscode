@@ -1,53 +1,22 @@
 import { Toaster } from "@fiscode/ui/components/sonner";
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import { Outlet, createRootRoute } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
-import Header from "../components/header";
+import { AppHeader } from "../components/app-header";
 
-import appCss from "../index.css?url";
-
-export interface RouterAppContext {}
-
-export const Route = createRootRouteWithContext<RouterAppContext>()({
-  head: () => ({
-    meta: [
-      {
-        charSet: "utf-8",
-      },
-      {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
-      },
-      {
-        title: "My App",
-      },
-    ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-    ],
-  }),
-
-  component: RootDocument,
+export const Route = createRootRoute({
+  component: RootLayout,
 });
 
-function RootDocument() {
+function RootLayout() {
   return (
-    <html lang="en" className="dark">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <div className="grid h-svh grid-rows-[auto_1fr]">
-          <Header />
-          <Outlet />
-        </div>
-        <Toaster richColors />
-        <TanStackRouterDevtools position="bottom-left" />
-        <Scripts />
-      </body>
-    </html>
+    <div className="grid min-h-svh grid-rows-[auto_1fr] bg-background text-foreground">
+      <AppHeader />
+      <main className="@container px-4 py-6 md:px-8">
+        <Outlet />
+      </main>
+      <Toaster richColors />
+      {import.meta.env.DEV && <TanStackRouterDevtools position="bottom-right" />}
+    </div>
   );
 }

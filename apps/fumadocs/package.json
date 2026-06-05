@@ -1,0 +1,11 @@
+{
+  "name": "fumadocs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'fumadocs app stubbed. Populate in part 2.' && exit 0",
+    "build": "echo 'fumadocs app stubbed. Populate in part 2.' && exit 0",
+    "check-types": "echo 'fumadocs app stubbed.' && exit 0",
+    "test": "echo 'fumadocs app stubbed.' && exit 0"
+  }
+}
