@@ -18,9 +18,10 @@ export default defineConfig({
       },
     }),
     react(),
-    // please see https://tanstack.com/start/latest/docs/framework/react/guide/hosting#nitro for guides on hosting
+    // Node-server output, deployed as a Docker container on Dokploy.
+    // See apps/fumadocs/Dockerfile.
     nitro({
-      preset: "vercel",
+      preset: "node-server",
     }),
   ],
   resolve: {

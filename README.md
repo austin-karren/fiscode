@@ -39,7 +39,7 @@ sync, docs site, native desktop).
 
 - **bun** + **turborepo** monorepo
 - **TanStack Router SPA** on **Vite** (apps/web)
-- **TanStack Start + Nitro (vercel preset)** + **fumadocs-mdx/ui** (apps/fumadocs)
+- **TanStack Start + Nitro (node-server preset)** + **fumadocs-mdx/ui** (apps/fumadocs)
 - **shadcn/ui** + **Tailwind v4**
 - **Drizzle** + **SQLocal** (sqlite-wasm over OPFS)
 - **Papaparse** for CSV
@@ -51,10 +51,18 @@ sync, docs site, native desktop).
 A full docs site lives in `apps/fumadocs` (TanStack Start + Nitro + fumadocs-mdx/ui).
 
 - Local: `bun run dev:fumadocs` → <http://localhost:4000>
-- Deployed: <https://docs.fiscode.austink.dev> (Vercel project + DNS is a follow-up — URL is the planned canonical)
+- Deployed: <https://docs.fiscode.austink.dev> via Dokploy (self-hosted Docker PaaS). Nitro's `node-server` preset produces `apps/fumadocs/.output/server/index.mjs`; the container runs `node ./server/index.mjs`. Dockerfile + DNS are a follow-up.
 - Highlights: [/docs/csv-format](https://docs.fiscode.austink.dev/docs/csv-format) ·
   [/docs/tax-engine](https://docs.fiscode.austink.dev/docs/tax-engine) ·
   [/docs/year-end-packet](https://docs.fiscode.austink.dev/docs/year-end-packet)
+
+## Deploy
+
+Both apps target **Dokploy** (self-hosted Docker PaaS on my own infrastructure). Not Vercel, not Cloudflare.
+
+- **apps/web** — Vite SPA, fully client-side. The "deploy" is just shipping `dist/` to a static host inside a small container. Bun (`bun serve` style) and any static-file server work identically here. Dockerfile is a follow-up.
+- **apps/fumadocs** — Nitro `node-server` output; runs as `node ./server/index.mjs` in a Node container. Handles prerendered HTML + `/api/search`.
+- **Future, Part 3 (Electrobun desktop)** — runs Bun as the desktop shell process. That's where `bun:sqlite` becomes the obvious swap-in for `sqlite-wasm` (same SQLite file on disk, native bindings, no WASM overhead). The browser PWA stays on `sqlite-wasm + OPFS` because there is no Bun runtime in a browser tab.
 
 ## Layout
 
