@@ -8,6 +8,15 @@ a PWA.
 gets you most of the way to a quarterly estimate and a year-end packet. A tax
 accountant (or you) finishes from there.
 
+> ⚠️ **Use at your own risk.** fiscode is a personal project I built for my
+> own self-employed tax planning. It is **not** legal, tax, financial, or
+> accounting advice. Estimates are best-effort approximations based on
+> annually-changing tax constants that may be stale or wrong. Always consult
+> a qualified tax professional before filing or making financial decisions.
+> No warranty, no support, no guarantee of accuracy. By using fiscode you
+> accept full responsibility for any decisions made on the basis of its
+> output.
+
 ## Core principles
 
 - **Local only.** All data lives on device (SQLite via OPFS). No backend, no
@@ -29,12 +38,23 @@ sync, docs site, native desktop).
 ## Stack
 
 - **bun** + **turborepo** monorepo
-- **TanStack Router SPA** on **Vite**
+- **TanStack Router SPA** on **Vite** (apps/web)
+- **TanStack Start + Nitro (vercel preset)** + **fumadocs-mdx/ui** (apps/fumadocs)
 - **shadcn/ui** + **Tailwind v4**
 - **Drizzle** + **SQLocal** (sqlite-wasm over OPFS)
 - **Papaparse** for CSV
 - **vite-plugin-pwa**
 - **vitest**, **oxlint + oxfmt**
+
+## Docs
+
+A full docs site lives in `apps/fumadocs` (TanStack Start + Nitro + fumadocs-mdx/ui).
+
+- Local: `bun run dev:fumadocs` → <http://localhost:4000>
+- Deployed: <https://docs.fiscode.austink.dev> (Vercel project + DNS is a follow-up — URL is the planned canonical)
+- Highlights: [/docs/csv-format](https://docs.fiscode.austink.dev/docs/csv-format) ·
+  [/docs/tax-engine](https://docs.fiscode.austink.dev/docs/tax-engine) ·
+  [/docs/year-end-packet](https://docs.fiscode.austink.dev/docs/year-end-packet)
 
 ## Layout
 
@@ -42,7 +62,7 @@ sync, docs site, native desktop).
 fiscode/
 ├── apps/
 │   ├── web/         # the PWA (UI only)
-│   ├── fumadocs/    # stub: docs site (part 2)
+│   ├── fumadocs/    # docs site (TanStack Start + fumadocs-mdx/ui, port 4000)
 │   └── desktop/     # stub: Electrobun wrapper (part 3)
 └── packages/
     ├── core/        # money, dates, ids, shared types
@@ -58,6 +78,7 @@ fiscode/
 ```bash
 bun install
 bun run dev:web        # vite dev server on http://localhost:3001
+bun run dev:fumadocs   # docs dev server on http://localhost:4000
 bun run build          # turbo build across all apps + packages
 bun run test           # vitest run, all packages
 bun run check-types    # tsc --noEmit, all packages
