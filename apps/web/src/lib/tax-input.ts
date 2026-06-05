@@ -9,32 +9,46 @@ type ActiveSpouse = {
   annualStateWithholdingCents: number;
 };
 
+// A row counts toward the year iff it lands in the calendar year AND on or
+// after the user's self-employment start date. Pre-SE rows are excluded
+// from the tax estimate but stay in the user's data; the dashboard surfaces
+// the excluded count so the discrepancy isn't silent.
+const inSeRange = (date: string, seStartDate: string, year: number): boolean =>
+  yearOf(date as never) === year && date >= seStartDate;
+
 const sumWithinYear = (
   rows: Array<{ date: string; amountCents: number; deletedAt: string | null }>,
   year: number,
+  seStartDate: string,
 ): Cents =>
   rows
-    .filter((r) => r.deletedAt === null && yearOf(r.date as never) === year)
+    .filter((r) => r.deletedAt === null && inSeRange(r.date, seStartDate, year))
     .reduce((sum, r) => addCents(sum, cents(r.amountCents)), cents(0));
 
-const sumMileageDeductionWithinYear = (bundle: Bundle, year: number): Cents => {
+const sumMileageDeductionWithinYear = (
+  bundle: Bundle,
+  year: number,
+  seStartDate: string,
+): Cents => {
   const cfg = getYearConfig(year);
   const totalMiles = bundle.mileage
-    .filter((m) => m.deletedAt === null && yearOf(m.date as never) === year)
+    .filter((m) => m.deletedAt === null && inSeRange(m.date, seStartDate, year))
     .reduce((acc, m) => acc + m.businessMiles, 0);
   return dollars(totalMiles * cfg.mileageRatePerMile);
 };
 
-const sumHomeOfficeWithinYear = (bundle: Bundle, year: number): Cents => {
+const sumHomeOfficeWithinYear = (bundle: Bundle, year: number, seStartDate: string): Cents => {
   const cfg = getYearConfig(year);
   const activeForYear = bundle.homeOffice.filter(
     (h) => h.deletedAt === null && h.startDate.slice(0, 4) <= String(year),
   );
-  // Simplified method only for now. Pro-rate across months active in-year.
+  // Simplified method only for now. Pro-rate across months active in-year,
+  // clamping the effective start to seStartDate so home-office periods that
+  // pre-date the SE start don't pad the deduction.
   const hoVal = activeForYear.reduce((acc, h) => {
     if (h.method !== "simplified") return acc;
     const sqft = Math.min(h.officeSqft ?? 0, cfg.homeOffice.simplifiedMaxSqft);
-    const monthsActive = monthsActiveIn(year, h.startDate, h.endDate);
+    const monthsActive = monthsActiveIn(year, h.startDate, h.endDate, seStartDate);
     if (sqft <= 0 || monthsActive <= 0) return acc;
     const annual = sqft * cfg.homeOffice.simplifiedRatePerSqft;
     const prorated = Math.round((annual * monthsActive) / 12);
@@ -43,13 +57,21 @@ const sumHomeOfficeWithinYear = (bundle: Bundle, year: number): Cents => {
   return hoVal;
 };
 
-const monthsActiveIn = (year: number, start: string, end: string | null): number => {
+const monthsActiveIn = (
+  year: number,
+  start: string,
+  end: string | null,
+  seStartDate: string,
+): number => {
   const yStart = `${year}-01-01`;
   const yEnd = `${year}-12-31`;
   if (start > yEnd) return 0;
   if (end !== null && end < yStart) return 0;
-  const effStart = start > yStart ? start : yStart;
+  // Clamp to the year window AND the SE start (whichever is later).
+  const lowerBound = seStartDate > yStart ? seStartDate : yStart;
+  const effStart = start > lowerBound ? start : lowerBound;
   const effEnd = end === null || end > yEnd ? yEnd : end;
+  if (effStart > effEnd) return 0;
   const sm = Number(effStart.slice(5, 7));
   const em = Number(effEnd.slice(5, 7));
   return em - sm + 1;
@@ -74,6 +96,31 @@ const activeEntityFor = (bundle: Bundle, year: number) => {
   );
 };
 
+// Counts of rows that fall in the calendar year but pre-date the user's
+// SE start date. Used by the dashboard banner so the user knows something
+// they entered isn't being counted.
+export type ExcludedBeforeSeStart = {
+  income: number;
+  expense: number;
+  mileage: number;
+};
+
+const countExcludedBeforeSeStart = (
+  bundle: Bundle,
+  year: number,
+  seStartDate: string,
+): ExcludedBeforeSeStart => {
+  const inYear = (d: string) => yearOf(d as never) === year;
+  const isExcluded = (d: string) => inYear(d) && d < seStartDate;
+  return {
+    income: bundle.income.filter(
+      (i) => i.deletedAt === null && i.sourceType === "1099" && isExcluded(i.date),
+    ).length,
+    expense: bundle.expenses.filter((e) => e.deletedAt === null && isExcluded(e.date)).length,
+    mileage: bundle.mileage.filter((m) => m.deletedAt === null && isExcluded(m.date)).length,
+  };
+};
+
 export type DerivedYear = {
   gross1099: Cents;
   directExpenses: Cents;
@@ -81,16 +128,23 @@ export type DerivedYear = {
   homeOfficeDeduction: Cents;
   totalDeductibleExpenses: Cents;
   activeEntityType: string;
+  seStartDate: string;
+  excludedBeforeSeStart: ExcludedBeforeSeStart;
 };
 
 export const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
+  // Floor at Jan 1 of the year if no profile — defensive; buildTaxInput
+  // throws on missing profile anyway, but deriveYear is also called for
+  // read-only dashboard display.
+  const seStartDate = bundle.profile?.seStartDate ?? `${year}-01-01`;
   const gross1099 = sumWithinYear(
     bundle.income.filter((i) => i.sourceType === "1099"),
     year,
+    seStartDate,
   );
-  const directExpenses = sumWithinYear(bundle.expenses, year);
-  const mileageDeduction = sumMileageDeductionWithinYear(bundle, year);
-  const homeOfficeDeduction = sumHomeOfficeWithinYear(bundle, year);
+  const directExpenses = sumWithinYear(bundle.expenses, year, seStartDate);
+  const mileageDeduction = sumMileageDeductionWithinYear(bundle, year, seStartDate);
+  const homeOfficeDeduction = sumHomeOfficeWithinYear(bundle, year, seStartDate);
   const total = addCents(directExpenses, mileageDeduction, homeOfficeDeduction);
   return {
     gross1099,
@@ -99,6 +153,8 @@ export const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
     homeOfficeDeduction,
     totalDeductibleExpenses: total,
     activeEntityType: activeEntityFor(bundle, year)?.type ?? "sole_prop",
+    seStartDate,
+    excludedBeforeSeStart: countExcludedBeforeSeStart(bundle, year, seStartDate),
   };
 };
 
@@ -125,6 +181,7 @@ export const buildTaxInput = (bundle: Bundle, year: number): TaxInput => {
 /** Cumulative period bundles for annualized installments. */
 export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedInput => {
   const base = buildTaxInput(bundle, year);
+  const seStartDate = bundle.profile?.seStartDate ?? `${year}-01-01`;
   const endsDates: Array<{ q: 1 | 2 | 3 | 4; ends: string }> = [
     { q: 1, ends: `${year}-03-31` },
     { q: 2, ends: `${year}-05-31` },
@@ -133,12 +190,14 @@ export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedIn
   ];
   const cumulative = (cutoff: string) => {
     const yStart = `${year}-01-01`;
+    // Same SE-start gate as deriveYear so cumulative totals reflect what
+    // the engine will actually count.
+    const lower = seStartDate > yStart ? seStartDate : yStart;
     const incomeRows = bundle.income.filter(
-      (r) =>
-        r.deletedAt === null && r.sourceType === "1099" && r.date >= yStart && r.date <= cutoff,
+      (r) => r.deletedAt === null && r.sourceType === "1099" && r.date >= lower && r.date <= cutoff,
     );
     const expRows = bundle.expenses.filter(
-      (r) => r.deletedAt === null && r.date >= yStart && r.date <= cutoff,
+      (r) => r.deletedAt === null && r.date >= lower && r.date <= cutoff,
     );
     const cumGross = incomeRows.reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0));
     const cumExp = expRows.reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0));

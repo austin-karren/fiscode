@@ -12,7 +12,7 @@ import {
   FieldLabel,
   FieldTitle,
 } from "@fiscode/ui/components/field";
-import { expenseRepo } from "@fiscode/db";
+import { expenseRepo, profileRepo } from "@fiscode/db";
 import { cents, formatUSD, parseUSD } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { Receipt } from "lucide-react";
@@ -26,6 +26,7 @@ import { DatePicker, dateToIso } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { NoDataEmpty } from "../components/empty-states/no-data";
+import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@fiscode/ui/components/tooltip";
 import { GLOSSARY } from "../lib/tax-glossary";
@@ -58,12 +59,15 @@ const expenseFormSchema = z.object({
 const fs = expenseFormSchema.shape;
 
 export const Route = createFileRoute("/expenses")({
-  loader: async () => ({ expenses: await expenseRepo.list() }),
+  loader: async () => ({
+    expenses: await expenseRepo.list(),
+    profile: await profileRepo.get(),
+  }),
   component: ExpensesPage,
 });
 
 function ExpensesPage() {
-  const { expenses } = useLoaderData({ from: "/expenses" });
+  const { expenses, profile } = useLoaderData({ from: "/expenses" });
   const router = useRouter();
 
   const form = useForm({
@@ -250,7 +254,10 @@ function ExpensesPage() {
               .map((x) => (
                 <DataTable.Row key={x.id}>
                   <DataTable.Cell>
-                    <span className="font-mono">{x.date}</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="font-mono">{x.date}</span>
+                      <PreSeStartBadge rowDate={x.date} seStartDate={profile?.seStartDate} />
+                    </span>
                   </DataTable.Cell>
                   <DataTable.Cell>
                     {labelFor(x.category)}

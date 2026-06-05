@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
@@ -9,6 +10,8 @@ import { cents, parseUSD } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
+
+import { ConfirmDialog } from "@fiscode/ui/components/confirm-dialog";
 
 import { Page } from "../components/page";
 import { TSFormField } from "../components/forms/ts-form-field";
@@ -164,6 +167,30 @@ function ProfileFormPanel({
     router.invalidate();
   }
 
+  // Scope-shifting fields rewrite what counts / how it's taxed for the
+  // whole year. Gate them behind a confirm dialog. The non-scope fields
+  // (dependents, prepLeadDays, tracksRoth, usesRetirement) save without
+  // confirmation.
+  const [scopeConfirmOpen, setScopeConfirmOpen] = useState(false);
+  const changedScopeFields = (): string[] => {
+    const v = profileForm.state.values;
+    const changed: string[] = [];
+    if (v.seStartDate && dateToIso(v.seStartDate) !== profile.seStartDate) {
+      changed.push("self-employment start date");
+    }
+    if (v.filingStatus !== profile.filingStatus) changed.push("filing status");
+    if (v.state !== profile.state) changed.push("state");
+    return changed;
+  };
+  const handleProfileSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (changedScopeFields().length > 0) {
+      setScopeConfirmOpen(true);
+      return;
+    }
+    void profileForm.handleSubmit();
+  };
+
   const spouseForm = useForm({
     defaultValues: {
       startDate: undefined as Date | undefined,
@@ -193,12 +220,17 @@ function ProfileFormPanel({
 
   return (
     <Page title="Profile" description="Filing status, residence, dependents, and preferences.">
-      <EnterToSubmitForm
-        onSubmit={(e) => {
-          e.preventDefault();
-          void profileForm.handleSubmit();
-        }}
-      >
+      <ConfirmDialog
+        open={scopeConfirmOpen}
+        onOpenChange={setScopeConfirmOpen}
+        title="Save changes to scope-shifting fields?"
+        description={`Changing your ${changedScopeFields().join(" and ")} retroactively recomputes the year. Rows dated outside the new window stop being counted; brackets and rates change with the new filing-status / state. The underlying data is unchanged.`}
+        confirmLabel="Save"
+        confirmVariant="destructive"
+        onConfirm={() => void profileForm.handleSubmit()}
+      />
+
+      <EnterToSubmitForm onSubmit={handleProfileSubmit}>
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
@@ -379,15 +411,18 @@ function ProfileFormPanel({
                   </span>
                   <span>{e.type}</span>
                   {e.endDate ? null : (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="ms-auto"
-                      onClick={() => void endEntityNow(e.id)}
-                    >
-                      End today
-                    </Button>
+                    <ConfirmDialog
+                      trigger={
+                        <Button type="button" variant="ghost" size="sm" className="ms-auto">
+                          End today
+                        </Button>
+                      }
+                      title="End this entity period today?"
+                      description={`This ${e.type} period (started ${e.startDate}) will close at today's date. You can edit the end date later from your data.`}
+                      confirmLabel="End it"
+                      confirmVariant="destructive"
+                      onConfirm={() => void endEntityNow(e.id)}
+                    />
                   )}
                 </li>
               ))}
@@ -438,6 +473,7 @@ function ProfileFormPanel({
                     <DatePicker
                       value={field.state.value as Date | undefined}
                       onValueChange={(d) => field.handleChange(d)}
+                      disableFuture={false}
                     />
                   </FormControl>
                   <FormMessage />
@@ -498,6 +534,7 @@ function ProfileFormPanel({
                     <DatePicker
                       value={field.state.value as Date | undefined}
                       onValueChange={(d) => field.handleChange(d)}
+                      disableFuture={false}
                     />
                   </FormControl>
                   <FormMessage />

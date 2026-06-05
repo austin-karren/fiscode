@@ -3,7 +3,7 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
-import { clientRepo, timeRepo } from "@fiscode/db";
+import { clientRepo, profileRepo, timeRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Clock } from "lucide-react";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import { TSFormField } from "../components/forms/ts-form-field";
 import { DatePicker, dateToIso } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { NoDataEmpty } from "../components/empty-states/no-data";
+import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 
 const timeSchema = z.object({
@@ -35,12 +36,13 @@ export const Route = createFileRoute("/time")({
   loader: async () => ({
     entries: await timeRepo.list(),
     clients: await clientRepo.list(),
+    profile: await profileRepo.get(),
   }),
   component: TimePage,
 });
 
 function TimePage() {
-  const { entries, clients } = useLoaderData({ from: "/time" });
+  const { entries, clients, profile } = useLoaderData({ from: "/time" });
   const router = useRouter();
 
   const form = useForm({
@@ -202,7 +204,10 @@ function TimePage() {
               .map((t) => (
                 <DataTable.Row key={t.id}>
                   <DataTable.Cell>
-                    <span className="font-mono">{t.date}</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="font-mono">{t.date}</span>
+                      <PreSeStartBadge rowDate={t.date} seStartDate={profile?.seStartDate} />
+                    </span>
                   </DataTable.Cell>
                   <DataTable.Cell>{clientName(t.clientId)}</DataTable.Cell>
                   <DataTable.Cell>{t.description ?? "—"}</DataTable.Cell>
