@@ -227,11 +227,18 @@ export const parseCsv = (raw: string): ImportResult => {
       });
     }
   }
-  return {
-    bundle: rowToBundle(validated),
-    provenance,
-    validationErrors,
-  };
+  const bundle = rowToBundle(validated);
+  // Post-pass invariants. se_start_date is required by the DB schema and
+  // by the tax-engine SE-range filter; an empty value silently disables
+  // the filter (every date is lexically > "") and would import without
+  // complaint. Fail loudly here instead.
+  if (bundle.profile && !bundle.profile.seStartDate) {
+    validationErrors.push({
+      rowIndex: -1,
+      message: "profile.se_start_date is required but missing or empty",
+    });
+  }
+  return { bundle, provenance, validationErrors };
 };
 
 export { rowToBundle };

@@ -12,9 +12,14 @@ type ActiveSpouse = {
 // A row counts toward the year iff it lands in the calendar year AND on or
 // after the user's self-employment start date. Pre-SE rows are excluded
 // from the tax estimate but stay in the user's data; the dashboard surfaces
-// the excluded count so the discrepancy isn't silent.
-const inSeRange = (date: string, seStartDate: string, year: number): boolean =>
-  yearOf(date as never) === year && date >= seStartDate;
+// the excluded count so the discrepancy isn't silent. An empty seStartDate
+// (legacy data, manual SQL edits, broken imports) is treated as "no filter"
+// rather than "everything passes" — the previous `date >= ""` semantics
+// happened to do the right thing for lexical ISO dates but is fragile.
+const inSeRange = (date: string, seStartDate: string, year: number): boolean => {
+  const floor = seStartDate || `${year}-01-01`;
+  return yearOf(date as never) === year && date >= floor;
+};
 
 const sumWithinYear = (
   rows: Array<{ date: string; amountCents: number; deletedAt: string | null }>,
@@ -57,6 +62,12 @@ const sumHomeOfficeWithinYear = (bundle: Bundle, year: number, seStartDate: stri
   return hoVal;
 };
 
+// Returns a fractional month count (active-day-count / year-days * 12)
+// for the home-office simplified deduction. Day-count proration matches
+// what an accountant does for partial-year periods — the previous
+// month-number subtraction over-credited any month containing even one
+// active day. With the new SE-start clamp, mid-month boundaries are
+// common, so the bucket math became materially wrong.
 const monthsActiveIn = (
   year: number,
   start: string,
@@ -67,34 +78,59 @@ const monthsActiveIn = (
   const yEnd = `${year}-12-31`;
   if (start > yEnd) return 0;
   if (end !== null && end < yStart) return 0;
-  // Clamp to the year window AND the SE start (whichever is later).
-  const lowerBound = seStartDate > yStart ? seStartDate : yStart;
+  const lowerBound = (seStartDate || yStart) > yStart ? seStartDate || yStart : yStart;
   const effStart = start > lowerBound ? start : lowerBound;
   const effEnd = end === null || end > yEnd ? yEnd : end;
   if (effStart > effEnd) return 0;
-  const sm = Number(effStart.slice(5, 7));
-  const em = Number(effEnd.slice(5, 7));
-  return em - sm + 1;
+  const activeDays = daysBetweenInclusive(effStart, effEnd);
+  const yearDays = isLeapYear(year) ? 366 : 365;
+  return (activeDays / yearDays) * 12;
 };
 
-const activeSpouseFor = (bundle: Bundle, year: number): ActiveSpouse | undefined => {
-  const yStart = `${year}-01-01`;
-  const yEnd = `${year}-12-31`;
-  const match = bundle.spouses.find(
-    (s) =>
-      s.deletedAt === null && s.startDate <= yEnd && (s.endDate === null || s.endDate >= yStart),
-  );
-  return match;
+const isLeapYear = (year: number): boolean =>
+  year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+
+const daysBetweenInclusive = (startIso: string, endIso: string): number => {
+  // ISO YYYY-MM-DD; parse as UTC midnight on both sides so the diff is in
+  // whole UTC days regardless of the runtime timezone. +1 because the
+  // range is inclusive of both endpoints (e.g. Mar 31 → Mar 31 = 1 day).
+  const ms = Date.UTC(...isoParts(endIso)) - Date.UTC(...isoParts(startIso));
+  return Math.round(ms / 86_400_000) + 1;
 };
 
-const activeEntityFor = (bundle: Bundle, year: number) => {
+const isoParts = (iso: string): [number, number, number] => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return [y!, (m ?? 1) - 1, d ?? 1];
+};
+
+// Pick the LATEST overlapping row, not the earliest. Bundle arrays are
+// sorted by startDate ASC (`makeCrudRepo` orderBy default), so a naive
+// `.find()` would return the oldest entity/spouse that overlaps the year
+// — wrong for mid-year switches (sole_prop Jan–Jun then S-corp Jul–Dec
+// returns sole_prop for the whole year). Sort matches by startDate DESC
+// and take the first.
+const latestOverlap = <
+  T extends { startDate: string; endDate: string | null; deletedAt: string | null },
+>(
+  rows: T[],
+  year: number,
+): T | undefined => {
   const yStart = `${year}-01-01`;
   const yEnd = `${year}-12-31`;
-  return bundle.entities.find(
-    (e) =>
-      e.deletedAt === null && e.startDate <= yEnd && (e.endDate === null || e.endDate >= yStart),
+  const matches = rows.filter(
+    (r) =>
+      r.deletedAt === null && r.startDate <= yEnd && (r.endDate === null || r.endDate >= yStart),
   );
+  if (matches.length === 0) return undefined;
+  // Sort DESC by startDate (string compare works for ISO YYYY-MM-DD).
+  matches.sort((a, b) => (a.startDate < b.startDate ? 1 : a.startDate > b.startDate ? -1 : 0));
+  return matches[0];
 };
+
+const activeSpouseFor = (bundle: Bundle, year: number): ActiveSpouse | undefined =>
+  latestOverlap(bundle.spouses, year);
+
+const activeEntityFor = (bundle: Bundle, year: number) => latestOverlap(bundle.entities, year);
 
 // Counts of rows that fall in the calendar year but pre-date the user's
 // SE start date. Used by the dashboard banner so the user knows something
