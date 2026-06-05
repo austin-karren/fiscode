@@ -3,7 +3,7 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
-import { clientRepo, incomeRepo } from "@fiscode/db";
+import { clientRepo, incomeRepo, profileRepo } from "@fiscode/db";
 import { cents, formatUSD, parseUSD } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { Coins } from "lucide-react";
@@ -16,6 +16,7 @@ import { TSFormField } from "../components/forms/ts-form-field";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { DatePicker, dateToIso } from "../components/forms/date-picker";
 import { NoDataEmpty } from "../components/empty-states/no-data";
+import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 
 const KIND_OPTIONS = [
@@ -41,12 +42,13 @@ export const Route = createFileRoute("/income")({
   loader: async () => ({
     income: await incomeRepo.list(),
     clients: await clientRepo.list(),
+    profile: await profileRepo.get(),
   }),
   component: IncomePage,
 });
 
 function IncomePage() {
-  const { income, clients } = useLoaderData({ from: "/income" });
+  const { income, clients, profile } = useLoaderData({ from: "/income" });
   const router = useRouter();
 
   const form = useForm({
@@ -223,7 +225,10 @@ function IncomePage() {
               .map((i) => (
                 <DataTable.Row key={i.id}>
                   <DataTable.Cell>
-                    <span className="font-mono">{i.date}</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="font-mono">{i.date}</span>
+                      <PreSeStartBadge rowDate={i.date} seStartDate={profile?.seStartDate} />
+                    </span>
                   </DataTable.Cell>
                   <DataTable.Cell>{clientName(i.clientId)}</DataTable.Cell>
                   <DataTable.Cell>{i.kind}</DataTable.Cell>

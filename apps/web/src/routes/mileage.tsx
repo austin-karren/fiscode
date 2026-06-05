@@ -3,7 +3,7 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
-import { mileageRepo, vehicleRepo } from "@fiscode/db";
+import { mileageRepo, profileRepo, vehicleRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Car } from "lucide-react";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ import { DatePicker, dateToIso } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { NoDataEmpty } from "../components/empty-states/no-data";
+import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { GLOSSARY } from "../lib/tax-glossary";
 
@@ -31,12 +32,13 @@ export const Route = createFileRoute("/mileage")({
   loader: async () => ({
     mileage: await mileageRepo.list(),
     vehicles: await vehicleRepo.list(),
+    profile: await profileRepo.get(),
   }),
   component: MileagePage,
 });
 
 function MileagePage() {
-  const { mileage, vehicles } = useLoaderData({ from: "/mileage" });
+  const { mileage, vehicles, profile } = useLoaderData({ from: "/mileage" });
   const router = useRouter();
 
   const form = useForm({
@@ -202,7 +204,10 @@ function MileagePage() {
               .map((m) => (
                 <DataTable.Row key={m.id}>
                   <DataTable.Cell>
-                    <span className="font-mono">{m.date}</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="font-mono">{m.date}</span>
+                      <PreSeStartBadge rowDate={m.date} seStartDate={profile?.seStartDate} />
+                    </span>
                   </DataTable.Cell>
                   <DataTable.Cell>{vehicleName(m.vehicleId)}</DataTable.Cell>
                   <DataTable.Cell>{m.purpose ?? "—"}</DataTable.Cell>

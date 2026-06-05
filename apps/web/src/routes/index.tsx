@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useLoaderData } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useLoaderData } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
 import { buildBundle, profileRepo } from "@fiscode/db";
@@ -69,6 +69,8 @@ function Dashboard() {
           </AlertDescription>
         </Alert>
       ) : null}
+
+      <ExcludedBeforeSeAlert derived={derived} />
 
       <div className="grid gap-4 @md:grid-cols-2 @xl:grid-cols-4">
         <StatCard
@@ -268,5 +270,26 @@ function Row({
       </dt>
       <dd className="tabular-nums">{value}</dd>
     </div>
+  );
+}
+
+function ExcludedBeforeSeAlert({ derived }: { derived: ReturnType<typeof deriveYear> }) {
+  const { income, expense, mileage } = derived.excludedBeforeSeStart;
+  const total = income + expense + mileage;
+  if (total === 0) return null;
+  const parts: string[] = [];
+  if (income) parts.push(`${income} income entr${income === 1 ? "y" : "ies"}`);
+  if (expense) parts.push(`${expense} expense${expense === 1 ? "" : "s"}`);
+  if (mileage) parts.push(`${mileage} mileage trip${mileage === 1 ? "" : "s"}`);
+  const summary = parts.join(", ");
+  return (
+    <Alert variant="warning">
+      <CircleAlert />
+      <AlertTitle>Some rows are dated before your SE start date</AlertTitle>
+      <AlertDescription>
+        {summary} dated before {derived.seStartDate} are not counted in this estimate. They stay in
+        your data — edit them or change your start date on <Link to="/profile">your profile</Link>.
+      </AlertDescription>
+    </Alert>
   );
 }

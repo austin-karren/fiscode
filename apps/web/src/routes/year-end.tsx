@@ -1,11 +1,12 @@
 import { createFileRoute, useLoaderData } from "@tanstack/react-router";
 import { Card } from "@fiscode/ui/components/card";
 import { Button } from "@fiscode/ui/components/button";
+import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
 import { buildBundle } from "@fiscode/db";
 import { exportBundle } from "@fiscode/csv";
 import { estimateYear, getYearConfig } from "@fiscode/tax";
 import { cents, formatUSD, todayIso, yearOf } from "@fiscode/core";
-import { FileSpreadsheet } from "lucide-react";
+import { CircleAlert, FileSpreadsheet } from "lucide-react";
 
 import { Page } from "../components/page";
 import { buildAnnualizedInput, buildTaxInput, deriveYear } from "../lib/tax-input";
@@ -98,12 +99,26 @@ function YearEndPage() {
     );
   }
 
+  const excl = derived.excludedBeforeSeStart;
+  const exclTotal = excl.income + excl.expense + excl.mileage;
+
   return (
     <Page
       title={`Year-end packet · ${year}`}
       description="Printable summary for the accountant. CSV download below contains the underlying data."
       actions={<Button onClick={download}>Download {year} CSV</Button>}
     >
+      {exclTotal > 0 ? (
+        <Alert variant="warning">
+          <CircleAlert />
+          <AlertTitle>Some rows are dated before your SE start date</AlertTitle>
+          <AlertDescription>
+            {excl.income} income, {excl.expense} expense, {excl.mileage} mileage rows dated before{" "}
+            {derived.seStartDate} are not counted. Review them on their respective pages.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <Card className="p-4 print:border-0 print:shadow-none">
         <dl className="grid gap-2 @md:grid-cols-2">
           <Row label="Filing status" tooltip={GLOSSARY.filingStatus}>
