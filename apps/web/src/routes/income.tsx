@@ -30,7 +30,9 @@ const fieldSchemas = {
   date: z.date({ message: "Pick a date" }),
   amount: z.string().refine((v) => parseUSD(v) !== undefined, "Enter a valid amount"),
   clientId: z.string(),
-  kind: z.enum(["recurring", "bonus", "consulting", "other"]),
+  kind: z.enum(["recurring", "bonus", "consulting", "other"], {
+    message: "Pick an income kind",
+  }),
   description: z.string(),
 };
 const incomeFormSchema = z.object(fieldSchemas);

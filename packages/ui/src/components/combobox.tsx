@@ -51,14 +51,29 @@ function ComboboxInput({
   disabled = false,
   showTrigger = true,
   showClear = false,
+  onKeyDown,
   ...props
 }: ComboboxPrimitive.Input.Props & {
   showTrigger?: boolean;
   showClear?: boolean;
 }) {
+  // Swallow Enter so it cannot bubble up to the surrounding <form> and
+  // trigger submit + form-level validation. Base UI's combobox already
+  // handles Enter internally to pick the highlighted item; when nothing
+  // is highlighted (no match, popup closed, etc.) Enter should do
+  // nothing, NOT submit the parent form. Submit comes from the explicit
+  // submit button only.
+  const handleKeyDown: NonNullable<ComboboxPrimitive.Input.Props["onKeyDown"]> = (e) => {
+    if (e.key === "Enter") e.preventDefault();
+    onKeyDown?.(e);
+  };
   return (
     <InputGroup className={cn("w-auto", className)}>
-      <ComboboxPrimitive.Input render={<InputGroupInput disabled={disabled} />} {...props} />
+      <ComboboxPrimitive.Input
+        render={<InputGroupInput disabled={disabled} />}
+        onKeyDown={handleKeyDown}
+        {...props}
+      />
       <InputGroupAddon align="inline-end">
         {showTrigger && (
           <InputGroupButton

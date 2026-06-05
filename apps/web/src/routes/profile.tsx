@@ -33,10 +33,14 @@ const QUARTERLY_OPTIONS = [
 ];
 
 const profileSchema = z.object({
-  filingStatus: z.enum(["single", "mfj", "mfs", "hoh"]),
-  state: z.string().min(2).max(2),
+  filingStatus: z.enum(["single", "mfj", "mfs", "hoh"], {
+    message: "Pick a filing status",
+  }),
+  state: z.string().min(2, "Pick a state").max(2, "Pick a state"),
   dependents: z.string(),
-  quarterlyMethod: z.enum(["annualized", "even"]),
+  quarterlyMethod: z.enum(["annualized", "even"], {
+    message: "Pick a quarterly method",
+  }),
   prepLeadDays: z.string(),
   tracksRoth: z.boolean(),
   usesRetirement: z.boolean(),
