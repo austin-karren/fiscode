@@ -36,7 +36,7 @@ const METHOD_OPTIONS = [
 // refine and runs on submit.
 const fs = {
   startDate: z.date({ message: "Pick a start date" }),
-  method: z.enum(["simplified", "actual"]),
+  method: z.enum(["simplified", "actual"], { message: "Pick a method" }),
   officeSqft: z.string(),
   homeSqft: z.string(),
   regularExclusiveAck: z.boolean().refine((v) => v === true, "Acknowledge regular & exclusive use"),

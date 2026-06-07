@@ -38,7 +38,8 @@
     "test": "turbo test",
     "lint": "turbo lint",
     "check-types": "turbo check-types",
-    "check": "oxlint && oxfmt --write",
+    "check": "oxlint && oxfmt --check",
+    "format": "oxfmt --write",
     "db:generate": "turbo -F @fiscode/db db:generate"
   },
   "devDependencies": {

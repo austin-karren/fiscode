@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
@@ -10,10 +11,13 @@ import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { ConfirmDialog } from "@fiscode/ui/components/confirm-dialog";
+
 import { Page } from "../components/page";
 import { TSFormField } from "../components/forms/ts-form-field";
 import { DatePicker, dateToIso } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
+import { StateCombobox } from "../components/forms/state-combobox";
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { InfoTooltip } from "../components/info-tooltip";
 import { SetupRequiredEmpty } from "../components/empty-states/setup-required";
@@ -32,15 +36,33 @@ const QUARTERLY_OPTIONS = [
   { value: "even", label: "Even split (annual / 4)" },
 ];
 
+const ENTITY_OPTIONS = [
+  { value: "sole_prop", label: "Sole proprietor" },
+  { value: "single_member_llc", label: "Single-member LLC" },
+  { value: "s_corp", label: "S corp (coming soon)" },
+];
+
 const profileSchema = z.object({
-  filingStatus: z.enum(["single", "mfj", "mfs", "hoh"]),
-  state: z.string().min(2).max(2),
+  filingStatus: z.enum(["single", "mfj", "mfs", "hoh"], {
+    message: "Pick a filing status",
+  }),
+  state: z.string().min(2, "Pick a state").max(2, "Pick a state"),
+  seStartDate: z.date({ message: "Pick a start date" }),
   dependents: z.string(),
-  quarterlyMethod: z.enum(["annualized", "even"]),
+  quarterlyMethod: z.enum(["annualized", "even"], {
+    message: "Pick a quarterly method",
+  }),
   prepLeadDays: z.string(),
   tracksRoth: z.boolean(),
   usesRetirement: z.boolean(),
 });
+
+const entitySchema = z.object({
+  type: z.enum(["sole_prop", "single_member_llc"], { message: "Pick an entity type" }),
+  startDate: z.date({ message: "Pick a start date" }),
+  endDate: z.date().optional(),
+});
+const efs = entitySchema.shape;
 
 const spouseSchema = z.object({
   startDate: z.date({ message: "Pick a start date" }),
@@ -90,18 +112,23 @@ function ProfileFormPanel({
     defaultValues: {
       filingStatus: profile.filingStatus,
       state: profile.state,
+      seStartDate: profile.seStartDate
+        ? new Date(profile.seStartDate)
+        : (undefined as Date | undefined),
       dependents: String(profile.dependents),
       quarterlyMethod: profile.quarterlyMethod,
       prepLeadDays: String(profile.prepLeadDays),
       tracksRoth: profile.tracksRoth,
       usesRetirement: profile.usesRetirement,
     },
-    validators: { onSubmit: profileSchema },
+    // Cast because zod's optional Date doesn't line up with TanStack Form's
+    // exactOptional handling.
+    validators: { onSubmit: profileSchema as never },
     onSubmit: async ({ value }) => {
       await profileRepo.upsert({
         filingStatus: value.filingStatus,
         state: value.state,
-        seStartDate: profile.seStartDate,
+        seStartDate: dateToIso(value.seStartDate!),
         dependents: Number(value.dependents) || 0,
         tracksRoth: value.tracksRoth,
         usesRetirement: value.usesRetirement,
@@ -112,6 +139,57 @@ function ProfileFormPanel({
       router.invalidate();
     },
   });
+
+  const entityForm = useForm({
+    defaultValues: {
+      type: "" as "" | "sole_prop" | "single_member_llc",
+      startDate: undefined as Date | undefined,
+      endDate: undefined as Date | undefined,
+    },
+    validators: { onSubmit: entitySchema as never },
+    onSubmit: async ({ value, formApi }) => {
+      await entityRepo.create({
+        type: value.type as "sole_prop" | "single_member_llc",
+        startDate: dateToIso(value.startDate!),
+        endDate: value.endDate ? dateToIso(value.endDate) : null,
+        notes: null,
+        deletedAt: null,
+      });
+      toast.success("Entity period added.");
+      formApi.reset();
+      router.invalidate();
+    },
+  });
+
+  async function endEntityNow(id: string) {
+    await entityRepo.update(id, { endDate: dateToIso(new Date()) });
+    toast.success("Entity period ended.");
+    router.invalidate();
+  }
+
+  // Scope-shifting fields rewrite what counts / how it's taxed for the
+  // whole year. Gate them behind a confirm dialog. The non-scope fields
+  // (dependents, prepLeadDays, tracksRoth, usesRetirement) save without
+  // confirmation.
+  const [scopeConfirmOpen, setScopeConfirmOpen] = useState(false);
+  const changedScopeFields = (): string[] => {
+    const v = profileForm.state.values;
+    const changed: string[] = [];
+    if (v.seStartDate && dateToIso(v.seStartDate) !== profile.seStartDate) {
+      changed.push("self-employment start date");
+    }
+    if (v.filingStatus !== profile.filingStatus) changed.push("filing status");
+    if (v.state !== profile.state) changed.push("state");
+    return changed;
+  };
+  const handleProfileSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (changedScopeFields().length > 0) {
+      setScopeConfirmOpen(true);
+      return;
+    }
+    void profileForm.handleSubmit();
+  };
 
   const spouseForm = useForm({
     defaultValues: {
@@ -142,12 +220,17 @@ function ProfileFormPanel({
 
   return (
     <Page title="Profile" description="Filing status, residence, dependents, and preferences.">
-      <EnterToSubmitForm
-        onSubmit={(e) => {
-          e.preventDefault();
-          void profileForm.handleSubmit();
-        }}
-      >
+      <ConfirmDialog
+        open={scopeConfirmOpen}
+        onOpenChange={setScopeConfirmOpen}
+        title="Save changes to scope-shifting fields?"
+        description={`Changing your ${changedScopeFields().join(" and ")} retroactively recomputes the year. Rows dated outside the new window stop being counted; brackets and rates change with the new filing-status / state. The underlying data is unchanged.`}
+        confirmLabel="Save"
+        confirmVariant="destructive"
+        onConfirm={() => void profileForm.handleSubmit()}
+      />
+
+      <EnterToSubmitForm onSubmit={handleProfileSubmit}>
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
@@ -175,11 +258,25 @@ function ProfileFormPanel({
                 <FormItem>
                   <FormLabel>State</FormLabel>
                   <FormControl>
-                    <Input
+                    <StateCombobox
                       value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value.toUpperCase())}
-                      onBlur={field.handleBlur}
-                      maxLength={2}
+                      onValueChange={(code) => field.handleChange(code)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField form={profileForm} name="seStartDate">
+              {(field) => (
+                <FormItem>
+                  <LabelWithTooltip tooltip={GLOSSARY.seStartDate}>
+                    Self-employment start date
+                  </LabelWithTooltip>
+                  <FormControl>
+                    <DatePicker
+                      value={field.state.value as Date | undefined}
+                      onValueChange={(d) => field.handleChange(d)}
                     />
                   </FormControl>
                   <FormMessage />
@@ -292,25 +389,114 @@ function ProfileFormPanel({
         </Card>
       </EnterToSubmitForm>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-            Entities
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-1 text-sm">
-            {entities.map((e) => (
-              <li key={e.id} className="font-mono">
-                {e.startDate} – {e.endDate ?? "open"} · <span className="font-sans">{e.type}</span>
-              </li>
-            ))}
-            {entities.length === 0 ? (
-              <li className="text-muted-foreground">No entity records.</li>
-            ) : null}
-          </ul>
-        </CardContent>
-      </Card>
+      <EnterToSubmitForm
+        onSubmit={(e) => {
+          e.preventDefault();
+          void entityForm.handleSubmit();
+        }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="inline-flex items-center gap-1.5 text-sm font-medium uppercase text-muted-foreground">
+              Entity periods
+              <InfoTooltip text={GLOSSARY.entityType} />
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1 text-sm">
+              {entities.map((e) => (
+                <li key={e.id} className="flex items-center gap-3">
+                  <span className="font-mono">
+                    {e.startDate} – {e.endDate ?? "open"}
+                  </span>
+                  <span>{e.type}</span>
+                  {e.endDate ? null : (
+                    <ConfirmDialog
+                      trigger={
+                        <Button type="button" variant="ghost" size="sm" className="ms-auto">
+                          End today
+                        </Button>
+                      }
+                      title="End this entity period today?"
+                      description={`This ${e.type} period (started ${e.startDate}) will close at today's date. You can edit the end date later from your data.`}
+                      confirmLabel="End it"
+                      confirmVariant="destructive"
+                      onConfirm={() => void endEntityNow(e.id)}
+                    />
+                  )}
+                </li>
+              ))}
+              {entities.length === 0 ? (
+                <li className="text-muted-foreground">No entity records.</li>
+              ) : null}
+            </ul>
+          </CardContent>
+          <CardContent className="grid gap-3 pb-2 @sm:grid-cols-3 @sm:items-end">
+            <TSFormField form={entityForm} name="type" validators={{ onBlur: efs.type }}>
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Type</FormLabel>
+                  <FormControl>
+                    <SelectWithLabels
+                      value={field.state.value}
+                      onValueChange={(v) =>
+                        field.handleChange(v as "" | "sole_prop" | "single_member_llc")
+                      }
+                      items={ENTITY_OPTIONS}
+                      disabledValues={["s_corp"]}
+                      placeholder="Pick a type…"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField form={entityForm} name="startDate" validators={{ onBlur: efs.startDate }}>
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Start</FormLabel>
+                  <FormControl>
+                    <DatePicker
+                      value={field.state.value as Date | undefined}
+                      onValueChange={(d) => field.handleChange(d)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField form={entityForm} name="endDate">
+              {(field) => (
+                <FormItem>
+                  <FormLabel>End (optional)</FormLabel>
+                  <FormControl>
+                    <DatePicker
+                      value={field.state.value as Date | undefined}
+                      onValueChange={(d) => field.handleChange(d)}
+                      disableFuture={false}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+          </CardContent>
+          <CardFooter className="justify-end">
+            <entityForm.Subscribe
+              selector={(s) => ({
+                canSubmit: s.canSubmit,
+                isSubmitting: s.isSubmitting,
+              })}
+            >
+              {({ canSubmit, isSubmitting }) => (
+                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+                  {isSubmitting ? "Adding..." : "Add entity period"}
+                </Button>
+              )}
+            </entityForm.Subscribe>
+          </CardFooter>
+        </Card>
+      </EnterToSubmitForm>
 
       <EnterToSubmitForm
         onSubmit={(e) => {
@@ -348,6 +534,7 @@ function ProfileFormPanel({
                     <DatePicker
                       value={field.state.value as Date | undefined}
                       onValueChange={(d) => field.handleChange(d)}
+                      disableFuture={false}
                     />
                   </FormControl>
                   <FormMessage />

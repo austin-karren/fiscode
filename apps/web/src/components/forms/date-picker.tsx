@@ -16,20 +16,36 @@ const displayFormat = (d: Date): string =>
     day: "numeric",
   });
 
+// Defaults to past-or-today because "when did this happen" fields
+// (income, expenses, mileage, time, SE start) cannot legitimately be in
+// the future. Period-end fields (entity end, spouse end, home-office end)
+// opt out with `disableFuture={false}` so they can plan ahead.
 export function DatePicker({
   value,
   onValueChange,
   placeholder = "Pick a date…",
   disabled,
+  disableFuture = true,
   className,
 }: {
   value: Date | undefined;
   onValueChange: (date: Date | undefined) => void;
   placeholder?: string;
   disabled?: boolean;
+  disableFuture?: boolean;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  // `endOfToday` so today itself remains pickable; only strictly-after-today
+  // is gated. Computed per render; the cost is one Date construction and
+  // round-tripping is cheap.
+  const calendarDisabled = disableFuture
+    ? (d: Date) => {
+        const end = new Date();
+        end.setHours(23, 59, 59, 999);
+        return d > end;
+      }
+    : undefined;
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
@@ -53,6 +69,7 @@ export function DatePicker({
         <Calendar
           mode="single"
           selected={value}
+          disabled={calendarDisabled}
           // `dropdown` caption surfaces month + year dropdowns inline so the
           // user can jump to e.g. an SE start date five years ago without
           // sixty clicks on the chevron.
