@@ -55,6 +55,7 @@
         "@tanstack/react-form": "^1.33.0",
         "@tanstack/react-router": "^1.168.14",
         "drizzle-orm": "catalog:",
+        "hono": "^4.10.4",
         "lucide-react": "^0.546.0",
         "papaparse": "catalog:",
         "react": "catalog:",

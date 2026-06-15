@@ -6,11 +6,13 @@
     "dev": "vite dev",
     "build": "vite build",
     "serve": "vite preview",
+    "start": "bun run server.ts",
     "test": "vitest run --passWithNoTests",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
     "@fiscode/core": "workspace:*",
+    "hono": "^4.10.4",
     "@fiscode/csv": "workspace:*",
     "@fiscode/db": "workspace:*",
     "@fiscode/tax": "workspace:*",
