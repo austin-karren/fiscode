@@ -62,7 +62,20 @@ export default defineConfig({
       workbox: {
         // SPA shell precache; no runtime data API to cache.
         globPatterns: ["**/*.{js,css,html,svg,woff2}"],
+        // The sqlite-wasm worker MUST hit the network so the Hono server's
+        // COOP/COEP/CORP headers reach the browser. A precached Response can
+        // arrive without those headers (especially if cached from a prior
+        // nginx/Caddy deploy that didn't set them on /assets/) and the
+        // COOP/COEP-isolated document then refuses to instantiate the worker.
+        globIgnores: ["**/worker-*.js", "**/*-worker-*.js"],
         navigateFallback: "/index.html",
+        // Take over open tabs as soon as a new SW activates, so a fresh
+        // deploy isn't shadowed by a stale SW serving cache-without-headers.
+        clientsClaim: true,
+        skipWaiting: true,
+        // Drop precaches from previous SW versions on activation so stale
+        // worker-*.js entries from earlier deploys don't linger.
+        cleanupOutdatedCaches: true,
       },
     }),
   ],

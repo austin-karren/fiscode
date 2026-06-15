@@ -69,12 +69,12 @@ FROM oven/bun:1.3.14-alpine AS serve
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=80
+ENV PORT=3001
 
 # Just the static bundle + the bundled server. No node_modules, no source.
 COPY --from=build /repo/apps/web/server.js ./server.js
 COPY --from=build /repo/apps/web/dist ./dist
 
-EXPOSE 80
+EXPOSE 3001
 
 CMD ["bun", "run", "server.js"]

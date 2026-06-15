@@ -17,7 +17,7 @@ const DIST = "./dist";
 // Railway / Dokploy / Fly etc. inject PORT — bind to whatever they give us.
 // Bind to 0.0.0.0 always so the container is reachable from the host.
 // (Avoid reading HOSTNAME — Docker sets it to the container ID.)
-const PORT = Number(process.env.PORT ?? 80);
+const PORT = Number(process.env.PORT ?? 3001);
 const HOSTNAME = "0.0.0.0";
 
 const ISOLATION_HEADERS = {
