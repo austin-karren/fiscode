@@ -34,8 +34,8 @@ RUN bun install --frozen-lockfile --ignore-scripts
 FROM oven/bun:1.3.14-alpine AS build
 WORKDIR /repo
 
-COPY --from=deps /repo/node_modules ./node_modules
-COPY --from=deps /repo/apps/fumadocs/node_modules ./apps/fumadocs/node_modules
+# Reuse the entire installed tree (root + every packages/*/node_modules).
+COPY --from=deps /repo /repo
 
 COPY . .
 
