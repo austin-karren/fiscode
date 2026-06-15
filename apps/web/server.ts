@@ -1,62 +1,52 @@
-// fiscode web — Hono static server (runs on Bun).
+// fiscode web — static file server for the Vite SPA bundle.
 //
-// Three load-bearing pieces, same as the previous nginx/Caddy attempts:
-//   1. SPA fallback: every non-asset request returns /index.html so
-//      TanStack Router's client-side routing works on direct visits.
-//   2. COOP/COEP/CORP: required by sqlite-wasm's OPFS sync-access VFS (and
-//      SharedArrayBuffer in general). Set on EVERY response (HTML, assets,
-//      workers, manifest) so the COOP/COEP-isolated document can use the
-//      bundled `worker-*.js`. This is the exact thing nginx silently
-//      dropped for /assets/ — keeping it explicit in code avoids that.
-//   3. Long-cache for hashed assets, no-cache for HTML/SW/manifest.
+// Runs on Bun, uses Hono for routing. Responsibilities:
+//   1. Serve `dist/` with a SPA fallback to /index.html so TanStack Router's
+//      client-side routes work on direct visits and reloads.
+//   2. Set COOP/COEP/CORP on every response — required by sqlite-wasm's
+//      OPFS sync-access VFS (and SharedArrayBuffer in general). Setting
+//      them in middleware avoids the per-path drift that bit us with
+//      nginx (`add_header` doesn't cascade) and Caddy.
+//   3. Long-cache hashed assets, no-cache `index.html` so deploys roll out
+//      immediately.
 
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 
 const DIST = "./dist";
-// Railway / Dokploy / Fly etc. inject PORT — bind to whatever they give us.
-// Bind to 0.0.0.0 always so the container is reachable from the host.
-// (Avoid reading HOSTNAME — Docker sets it to the container ID.)
-const PORT = Number(process.env.PORT ?? 80);
+const PORT = Number(process.env.PORT ?? 3001);
 const HOSTNAME = "0.0.0.0";
-
-const ISOLATION_HEADERS = {
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Embedder-Policy": "require-corp",
-  "Cross-Origin-Resource-Policy": "same-origin",
-  "X-Content-Type-Options": "nosniff",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-} as const;
 
 const app = new Hono();
 
-// Apply isolation + defensive headers to every response.
+// Cross-origin isolation + defensive defaults on every response.
 app.use("*", async (c, next) => {
   await next();
-  for (const [k, v] of Object.entries(ISOLATION_HEADERS)) {
-    c.header(k, v);
-  }
+  c.header("Cross-Origin-Opener-Policy", "same-origin");
+  c.header("Cross-Origin-Embedder-Policy", "require-corp");
+  c.header("Cross-Origin-Resource-Policy", "same-origin");
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("Referrer-Policy", "strict-origin-when-cross-origin");
 });
 
-// Cache-Control by path. Hashed assets get a year + immutable; anything that
-// updates on each deploy gets no-store so PWA users see new builds promptly.
+// Vite emits content-hashed filenames under /assets — safe to cache forever.
 app.use("/assets/*", async (c, next) => {
   await next();
   c.header("Cache-Control", "public, max-age=31536000, immutable");
 });
-app.use("/index.html", "/sw.js", "/registerSW.js", "/manifest.webmanifest", async (c, next) => {
+
+// The entry HTML is not hashed; never cache it so deploys take effect on
+// the next navigation.
+app.use("/index.html", async (c, next) => {
   await next();
   c.header("Cache-Control", "no-store");
 });
 
-// Orchestrator health probe.
+// Health probe for orchestrators (Dokploy, Railway, etc.).
 app.get("/healthz", (c) => c.text("ok"));
 
-// Static files first.
+// Static files, then SPA fallback for everything else.
 app.use("/*", serveStatic({ root: DIST }));
-
-// SPA fallback — anything that didn't match a static file becomes /index.html
-// so client-side routes (TanStack Router) work on direct visits and reloads.
 app.get("/*", serveStatic({ path: `${DIST}/index.html` }));
 
 console.log(`[fiscode-web] listening on http://${HOSTNAME}:${PORT}`);
