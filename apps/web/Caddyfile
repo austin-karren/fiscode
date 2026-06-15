@@ -1,0 +1,54 @@
+# fiscode web — Caddy config for serving the Vite SPA bundle.
+#
+# Three load-bearing pieces:
+#   1. SPA fallback: every non-asset request falls back to /index.html so
+#      TanStack Router's client-side routing works on direct visits.
+#   2. COOP/COEP/CORP: required by sqlite-wasm's OPFS sync-access VFS (and
+#      SharedArrayBuffer in general). Set globally so they apply to every
+#      response, including bundled workers under /assets/.
+#   3. Long-cache for hashed assets, short-cache for HTML / SW / manifest so
+#      PWA updates roll out promptly.
+
+{
+  # Caddy is the only thing in the container; bind directly to :80.
+  auto_https off
+  admin off
+}
+
+:80 {
+  root * /usr/share/caddy
+  encode zstd gzip
+
+  # SharedArrayBuffer / OPFS — same-origin isolation. Required by sqlocal.
+  # Caddy applies these to every response that matches this site block.
+  header {
+    Cross-Origin-Opener-Policy "same-origin"
+    Cross-Origin-Embedder-Policy "require-corp"
+    Cross-Origin-Resource-Policy "same-origin"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    -Server
+  }
+
+  # Long-cache hashed assets. Files in /assets/ are content-hashed by Vite.
+  @assets path /assets/*
+  header @assets Cache-Control "public, max-age=31536000, immutable"
+
+  # Short-cache anything that needs to update on each deploy.
+  @nocache {
+    path /index.html /sw.js /registerSW.js /manifest.webmanifest
+  }
+  header @nocache Cache-Control "no-store"
+
+  # Health endpoint for Dokploy / orchestrator probes.
+  handle /healthz {
+    header Content-Type "text/plain"
+    respond "ok" 200
+  }
+
+  # Static files + SPA fallback to /index.html.
+  handle {
+    try_files {path} /index.html
+    file_server
+  }
+}

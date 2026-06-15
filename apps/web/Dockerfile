@@ -4,8 +4,10 @@
 #
 #   stage 1 (deps):   bun install of the whole monorepo (workspaces)
 #   stage 2 (build):  vite build → apps/web/dist
-#   stage 3 (serve):  nginx:alpine serves dist with SPA fallback + COOP/COEP
-#                     headers (required by sqlite-wasm OPFS).
+#   stage 3 (serve):  caddy:alpine serves dist with SPA fallback + COOP/COEP
+#                     headers (required by sqlite-wasm OPFS). Caddy's global
+#                     `header` directive applies to every response, including
+#                     bundled workers — nginx's add_header doesn't cascade.
 #
 # Build context MUST be the repo root (NOT apps/web/), so the build has access
 # to the workspaces. Dokploy: set "Build context" to the repo root and
@@ -55,12 +57,12 @@ ENV VITE_TAX_DATA_BASE_URL=${VITE_TAX_DATA_BASE_URL}
 RUN cd apps/web && bun run build
 
 # ----- serve ---------------------------------------------------------------
-FROM nginx:1.29-alpine AS serve
+FROM caddy:2.10-alpine AS serve
 
 # COOP/COEP headers + SPA fallback config.
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
+COPY apps/web/Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /repo/apps/web/dist /usr/share/caddy
 
 EXPOSE 80
 
-# nginx:alpine's default CMD does the right thing (daemon off, foreground).
+# caddy:alpine's default CMD runs the Caddyfile at /etc/caddy/Caddyfile.
