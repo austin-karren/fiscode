@@ -1,0 +1,25 @@
+# fiscode export
+# source: https://fiscode.austink.dev
+# schema: v1
+# exported: 2026-06-04T12:00:00.000Z
+# scope: full
+# note: import at the source URL to reconstruct full local state.
+# warning: Excel will not strip these header lines. The fiscode importer does.
+record_type,id,created_at,updated_at,deleted_at,filing_status,state,se_start_date,dependents,tracks_roth,uses_retirement,quarterly_method,prep_lead_days,start_date,end_date,type,annual_w2_wages_cents,annual_federal_withholding_cents,annual_state_withholding_cents,name,default_rate_cents,default_commission_rate_basis_points,date,client_id,amount_cents,source_type,kind,description,notes,category,reason,flag_for_section_179,minutes,make,model,year,mpg,method,in_service_date,vehicle_id,business_miles,purpose,office_sqft,home_sqft,monthly_rent_mortgage_cents,monthly_utilities_cents,monthly_insurance_cents,regular_exclusive_ack,account
+profile,profile,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,mfj,UT,2024-01-01,0,1,1,annualized,14,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+entity,ent_01HXSP00ENTITY0000000,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,2024-01-01,,sole_prop,,,,,,,,,,,,,Filed DBA in Q1 2024.,,,,,,,,,,,,,,,,,,,,
+spouse,sp_01HXSP00SPOUSE0000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,2024-01-01,,,4500000,450000,180000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+client,cl_01HXSP00CLIENT0000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,,,recurring,,,,Stable Commission Co,,600,,,,,,,Monthly retainer + bonus structure.,,,,,,,,,,,,,,,,,,,,
+client,cl_01HXSP00CLIENT0000002,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,,,consulting,,,,Ad-hoc Consulting,1500000,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+income,in_01HXSP00INCOME0000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,,,,,,,,,,2026-01-15,cl_01HXSP00CLIENT0000001,1000000,1099,recurring,January retainer,,,,,,,,,,,,,,,,,,,,,
+income,in_01HXSP00INCOME0000002,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,,,,,,,,,,2026-03-31,cl_01HXSP00CLIENT0000001,350000,1099,bonus,Q1 commission bonus,,,,,,,,,,,,,,,,,,,,,
+income,in_01HXSP00INCOME0000003,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,,,,,,,,,,2026-07-10,cl_01HXSP00CLIENT0000002,625000,1099,consulting,Q3 engagement,Includes $250 travel reimbursement (deducted separately).,,,,,,,,,,,,,,,,,,,,
+time_entry,te_01HXSP00TIME000000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,,,,,,,,,,2026-01-15,cl_01HXSP00CLIENT0000001,,,,Full day onsite,,,,,480,,,,,,,,,,,,,,,,
+vehicle,v_01HXSP00VEHICLE000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,Toyota,RAV4,2022,28,standard_mileage,2024-01-01,,,,,,,,,,
+mileage,mi_01HXSP00MILEAGE000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,,,,,,,,,,2026-02-10,,,,,,,,,,,,,,,,,v_01HXSP00VEHICLE000001,47,Client visit (Stable Commission Co),,,,,,,
+mileage,mi_01HXSP00MILEAGE000002,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,,,,,,,,,,2026-07-08,,,,,,,,,,,,,,,,,v_01HXSP00VEHICLE000001,124,Conference (Ad-hoc Consulting),,,,,,,
+home_office,ho_01HXSP00HOMEOFFICE001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,2024-01-01,,,,,,,,,,,,,,,,,,,,,,,,simplified,,,,,150,2000,,,,1,
+expense,ex_01HXSP00EXPENSE000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,,,,,,,,,,2026-01-20,,89999,,,Standing desk,,equipment,Home-office setup stipend purchase.,1,,,,,,,,,,,,,,,,,
+expense,ex_01HXSP00EXPENSE000002,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,,,,,,,,,,2026-03-05,,12000,,,Linear annual subscription,,software_subs,PM tooling,0,,,,,,,,,,,,,,,,,
+expense,ex_01HXSP00EXPENSE000003,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,,,,,,,,,,2026-07-09,cl_01HXSP00CLIENT0000002,25000,,,Conference hotel + airfare,,travel,,0,,,,,,,,,,,,,,,,,
+retirement_contribution,ret_01HXSP00RETIRE0000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,,,,,,,,,,,,,,,,,,,2026-04-15,,700000,,,,"Personal Roth (informational, not deducted).",,,,,,,,,,,,,,,,,,,,roth_ira

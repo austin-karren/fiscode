@@ -3,6 +3,25 @@ title: Mileage
 description: Per-trip business miles.
 ---
 
-Edit at `/mileage`. Each trip has a date, vehicle, business miles, and an optional purpose. The
-tax engine multiplies total business miles by the year's standard mileage rate (see
-[tax engine](/docs/tax-engine)).
+Edit at `/mileage`. Each trip has a date, optional vehicle, business miles, and an optional
+purpose. The tax engine sums all trips for the year and multiplies by the year's IRS standard
+mileage rate (see [tax engine](/docs/tax-engine)).
+
+## Rate by year
+
+- **2025** — $0.70/mile (IRS Notice 2024-)
+- **2026** — $0.725/mile (placeholder until IRS publishes the official rate)
+
+Numbers are seeded in `packages/tax/src/config/{year}.ts`. If the remote tax-data mirror is
+configured, it overrides the seed.
+
+## SE-start gating
+
+Trips dated before your `profile.se_start_date` are excluded from the deduction but stay in your
+log. The dashboard surfaces an "excluded" count so the discrepancy isn't silent.
+
+## CSV
+
+CSV `record_type` = `mileage`. See the [CSV format reference](/docs/csv-format#mileage). The
+`vehicle_id` column is optional — trips without one still count toward the deduction; they're
+just not attributable to a specific vehicle in your records.

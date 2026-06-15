@@ -5,3 +5,15 @@ description: Filing status, state, SE start date, dependents, optional spouse.
 
 Edit at `/profile`. The profile is a single row; the spouse block is a separate dated-period
 record so income/withholding spans can be represented across mid-year changes.
+
+## Self-employment start date
+
+The `se_start_date` is load-bearing for the tax estimate. Rows dated before it are _kept_ in your
+data but excluded from the year's totals — useful when you want a clean record of pre-SE income
+without it polluting your quarterly estimates. Mid-month dates are honored (home-office and
+mileage prorate by day).
+
+## CSV
+
+CSV `record_type` = `profile` (singleton; `id` is the literal string `profile`). See the
+[CSV format reference](/docs/csv-format#profile) for the full column list.

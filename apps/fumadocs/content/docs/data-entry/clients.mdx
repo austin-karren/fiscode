@@ -3,5 +3,12 @@ title: Clients
 description: Payers — who pays you.
 ---
 
-Edit at `/clients`. Each client has a name and optional address/EIN. Income entries reference a
-client; deleting a client is soft-delete (history preserved).
+Edit at `/clients`. Each client has a name and optional default rate or commission percentage.
+Income entries reference a client by ID; deleting a client is soft-delete (history preserved,
+historical income rows keep their reference).
+
+## CSV
+
+CSV `record_type` = `client`. See the [CSV format reference](/docs/csv-format#client). The
+`default_commission_rate_basis_points` column uses basis points so commission percentages stay
+as integers in the wire format — `600` = 6%, `1250` = 12.5%.

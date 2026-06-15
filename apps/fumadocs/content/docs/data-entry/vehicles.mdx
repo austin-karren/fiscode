@@ -4,4 +4,15 @@ description: Vehicles available for business mileage.
 ---
 
 Edit at `/vehicles`. A vehicle is a registration the mileage log references. fiscode v1 supports
-the standard-mileage method only.
+the standard-mileage method only — the actual-method (depreciation, gas, insurance share, etc.)
+is a future feature.
+
+## What gets used
+
+- `make`, `model`, `year`, `mpg` — informational, surfaced in the year-end packet.
+- `in_service_date` — informational for now; relevant when actual-method lands (depreciation
+  schedule keys off it).
+
+## CSV
+
+CSV `record_type` = `vehicle`. See the [CSV format reference](/docs/csv-format#vehicle).

@@ -1,6 +1,6 @@
 ---
 title: CSV format
-description: The lossless source-of-truth format fiscode reads and writes.
+description: The lossless source-of-truth format fiscode reads and writes — and how to author it by hand.
 icon: FileText
 ---
 
@@ -8,17 +8,69 @@ CSV is the canonical format for fiscode data. Every entity is a row in a single 
 by the `record_type` column. The flat row shape lives at `packages/csv/src/schema.ts`; adding new
 fields means adding new optional columns at the end so old exports still parse.
 
+## Two workflows
+
+fiscode supports two ways into the same data model:
+
+1. **App-first** — enter rows in the web app, click **Export** when you want a CSV (for backup,
+   handoff to an accountant, or to load on a different device). This is the common path.
+2. **CSV-first** — author the CSV yourself (in Excel, Numbers, a text editor, a script), then
+   **Import** it into the app. Everything you can do in the UI you can do directly in CSV; the
+   schema below is the contract.
+
+Both paths produce identical state. Round-tripping `Export → Import` is byte-stable across data
+rows; the only thing that changes is the provenance timestamp.
+
+## The manual-workflow example
+
+A complete, ready-to-import example CSV — one row of every `record_type` — is available as
+a download:
+
+<Cards>
+  <Card title="example.csv" href="/downloads/example.csv" external>
+    Download — a synthetic full bundle (sole-prop, MFJ, 2026). Open it in your editor of choice,
+    edit the rows, then `Import → overwrite` in the app.
+  </Card>
+</Cards>
+
+To regenerate it from the latest schema:
+
+```sh
+bun run example:csv
+```
+
+The example exercises every record type so a hand-author has a concrete pattern for each row
+shape. Use it as a starting skeleton: keep the ones you need, delete the rest, edit values.
+
+### Authoring tips
+
+- **Column order doesn't matter** on import — the parser keys on the header row. But the export
+  always emits columns in the canonical order from `CSV_COLUMNS` in `packages/csv/src/schema.ts`,
+  so if you want a stable diff, follow that order.
+- **Leave irrelevant columns empty.** A flat row carries every column for every record type; for
+  an `income` row, fields like `office_sqft` and `make` are empty strings.
+- **IDs must be unique within a `record_type`.** They can be any string but ULIDs are what the app
+  emits. A simple convention works fine for hand-authored files: `in_001`, `in_002`, …
+- **The profile row is a singleton.** Its `id` is always the literal string `profile`.
+- **Dates are ISO YYYY-MM-DD.** Timestamps in `created_at` / `updated_at` are ISO 8601 with a `Z`
+  suffix — but if you're hand-authoring, you can leave these empty and the importer will fill them.
+- **Money is integer cents.** $1,234.56 becomes `123456`. No decimals; the importer rejects
+  non-integer numeric cells loudly rather than silently zeroing them.
+- **Booleans are `1` / `0` / empty.** Anything else fails validation.
+
 ## Provenance header
 
 Each exported CSV begins with `#`-prefixed comment lines containing app version, export timestamp,
-filter (full vs yearly), and a SHA-256 of the data section. Comments are stripped on import via
-`Papa.parse({ comments: '#' })`.
+scope (full vs yearly), and the source URL. Comments are stripped on import via
+`Papa.parse({ comments: '#' })`. You can omit these lines in a hand-authored file — they're purely
+informational.
 
 ```
-# fiscode v0.1.0
-# exported_at: 2026-06-04T18:00:00Z
-# filter: full
-# data_sha256: abc123...
+# fiscode export
+# source: https://fiscode.austink.dev
+# schema: v1
+# exported: 2026-06-04T12:00:00.000Z
+# scope: full
 record_type,id,...
 ```
 
@@ -36,20 +88,20 @@ empty strings.
       required: true,
     },
     id: {
-      description: "ULID. Stable across exports.",
+      description: "ULID by default; any unique string works. Stable across exports.",
       type: "string",
       required: true,
     },
     created_at: {
-      description: "ISO-8601 timestamp.",
+      description: "ISO-8601 timestamp. Importer fills this if empty.",
       type: "string",
     },
     updated_at: {
-      description: "ISO-8601 timestamp.",
+      description: "ISO-8601 timestamp. Importer fills this if empty.",
       type: "string",
     },
     deleted_at: {
-      description: "ISO-8601 timestamp. Soft-delete marker.",
+      description: "ISO-8601 timestamp. Soft-delete marker; usually empty.",
       type: "string",
     },
   }}
@@ -62,7 +114,8 @@ columns above always apply too; they're omitted here to keep each table focused.
 
 ### `profile`
 
-Single row. Drives the tax engine's filing status, state, and feature flags.
+Single row. Drives the tax engine's filing status, state, and feature flags. Its `id` must be
+the literal string `profile`.
 
 <TypeTable
   type={{
@@ -77,8 +130,10 @@ Single row. Drives the tax engine's filing status, state, and feature flags.
       required: true,
     },
     se_start_date: {
-      description: "Self-employment start date. Drives partial-year mileage and home-office.",
+      description:
+        "Self-employment start date. Rows dated before this are excluded from the estimate but kept in the data.",
       type: "date",
+      required: true,
     },
     dependents: {
       description: "Dependent count. Full dependent records are a later feature.",
@@ -105,24 +160,27 @@ Single row. Drives the tax engine's filing status, state, and feature flags.
 
 ### `entity`
 
-Dated entity periods. Currently one active per year, validated at import.
+Dated entity periods. Currently one active per year, validated at import. Use `end_date` to
+mark a switch (e.g. sole-prop Jan–Jun, single-member LLC Jul onward = two rows).
 
 <TypeTable
   type={{
     type: {
-      description: "sole_prop | s_corp. s_corp is schema-only in v1.",
+      description: "sole_prop | single_member_llc | s_corp. s_corp is schema-only in v1.",
       type: "enum",
       required: true,
     },
     start_date: { description: "Period start (inclusive).", type: "date", required: true },
     end_date: { description: "Period end. Empty = open-ended.", type: "date" },
+    notes: { description: "Free-form.", type: "string" },
   }}
 />
 
 ### `spouse`
 
-Dated spouse income/withholding spans. Optional; only emitted when filing status implies a
-spouse and the user has entered any data.
+Dated spouse income/withholding spans. Optional; only relevant when `filing_status` is `mfj`
+or `mfs` and your spouse has W-2 income. The app uses the latest-overlapping span for the
+estimate year.
 
 <TypeTable
   type={{
@@ -141,17 +199,21 @@ Payers. Income rows reference clients by `client_id`.
 <TypeTable
   type={{
     name: { description: "Display name.", type: "string", required: true },
+    type: { description: "Free-form (e.g. recurring, consulting).", type: "string" },
     default_rate_cents: { description: "Default hourly rate in integer cents.", type: "integer" },
     default_commission_rate_basis_points: {
       description: "Default commission rate in basis points (1 bp = 0.01%).",
       type: "integer",
     },
+    notes: { description: "Free-form.", type: "string" },
   }}
 />
 
 ### `income`
 
-1099 or W-2 entries, per payment. Dated so the quarterly engine can bucket them.
+1099 or W-2 entries, per payment. Dated so the quarterly engine can bucket them. Tax math
+only sums rows where `source_type` is `1099`; `w2` rows are informational unless you also
+record them on a `spouse` span.
 
 <TypeTable
   type={{
@@ -159,7 +221,7 @@ Payers. Income rows reference clients by `client_id`.
     client_id: { description: "FK to client.id. Empty for W-2 entries.", type: "string" },
     amount_cents: { description: "Integer cents.", type: "integer", required: true },
     source_type: { description: "1099 | w2", type: "enum", required: true },
-    kind: { description: "Free-form sub-category (e.g. commission, hourly).", type: "string" },
+    kind: { description: "recurring | bonus | consulting | other", type: "enum" },
     description: { description: "Short label.", type: "string" },
     notes: { description: "Long-form notes.", type: "string" },
   }}
@@ -181,7 +243,7 @@ Time-tracking sessions. Independent of income; not consumed by the tax engine.
 
 ### `vehicle`
 
-Vehicles available for business mileage.
+Vehicles available for business mileage. Each `mileage` row references one by `vehicle_id`.
 
 <TypeTable
   type={{
@@ -192,19 +254,26 @@ Vehicles available for business mileage.
       description: "Miles per gallon (informational; not used by tax engine in v1).",
       type: "integer",
     },
-    method: { description: "standard | actual. v1 only supports standard.", type: "enum" },
+    method: {
+      description: "standard_mileage | actual. v1 only supports standard_mileage.",
+      type: "enum",
+    },
     in_service_date: { description: "Date placed in service.", type: "date" },
   }}
 />
 
 ### `mileage`
 
-Per-trip business miles.
+Per-trip business miles. The tax engine multiplies the year's total by the IRS standard
+mileage rate (configurable per year).
 
 <TypeTable
   type={{
     date: { description: "Trip date.", type: "date", required: true },
-    vehicle_id: { description: "FK to vehicle.id.", type: "string", required: true },
+    vehicle_id: {
+      description: "FK to vehicle.id. Optional; rows without one still count.",
+      type: "string",
+    },
     business_miles: { description: "Whole miles.", type: "integer", required: true },
     purpose: { description: "Short label (e.g. client meeting).", type: "string" },
     notes: { description: "Long-form notes.", type: "string" },
@@ -213,13 +282,22 @@ Per-trip business miles.
 
 ### `home_office`
 
-Dated home-office configuration. Only the simplified method is supported in v1.
+Dated home-office configuration. Only the simplified method ($5/sqft, capped at 300 sqft /
+$1,500/yr) is calculated in v1; `actual`-method rows are stored but contribute $0 to the
+deduction until the actual-method calc lands.
 
 <TypeTable
   type={{
     start_date: { description: "Config start.", type: "date", required: true },
     end_date: { description: "Config end. Empty = open-ended.", type: "date" },
-    office_sqft: { description: "Office area, square feet.", type: "integer", required: true },
+    method: {
+      description: "simplified | actual. v1 only deducts the simplified method.",
+      type: "enum",
+    },
+    office_sqft: {
+      description: "Office area, square feet. Clamped at 300 for the deduction.",
+      type: "integer",
+    },
     home_sqft: { description: "Total home area (informational).", type: "integer" },
     monthly_rent_mortgage_cents: {
       description: "Informational; not used by simplified method.",
@@ -237,12 +315,19 @@ Dated home-office configuration. Only the simplified method is supported in v1.
 
 ### `expense`
 
-Categorized business expenses. `flag_for_section_179` marks candidates for §179 expensing.
+Categorized business expenses. `flag_for_section_179` marks candidates for §179 expensing —
+purely informational in v1 since every expense is already fully deducted in the year incurred.
 
 <TypeTable
   type={{
     date: { description: "Expense date.", type: "date", required: true },
-    category: { description: "Schedule C category.", type: "string", required: true },
+    category: {
+      description:
+        "health_insurance | phone_internet | software_subs | professional_services | meals | equipment | home_office | vehicle | supplies | travel | advertising | other",
+      type: "enum",
+      required: true,
+    },
+    client_id: { description: "FK to client.id. Optional.", type: "string" },
     description: { description: "Short label.", type: "string" },
     amount_cents: { description: "Integer cents.", type: "integer", required: true },
     flag_for_section_179: {
@@ -256,23 +341,44 @@ Categorized business expenses. `flag_for_section_179` marks candidates for §179
 
 ### `retirement_contribution`
 
-Gated by `profile.uses_retirement`. SEP / Solo 401(k) / Roth contributions.
+Gated by `profile.uses_retirement`. SEP / Solo 401(k) / Roth contributions. Informational
+in v1 — they're stored and surfaced in the dashboard but don't yet flow into the deduction.
 
 <TypeTable
   type={{
     date: { description: "Contribution date.", type: "date", required: true },
     account: { description: "sep | solo_401k | roth_ira | trad_ira", type: "enum", required: true },
     amount_cents: { description: "Integer cents.", type: "integer", required: true },
+    notes: { description: "Free-form.", type: "string" },
   }}
 />
 
 ## Import modes
 
-- **overwrite** — snapshot current state into history, truncate tables, load CSV.
-- **append** — insert; on PK conflict, append a history entry recording the conflict and skip.
-- **restore** — alias for overwrite with confirmation copy emphasizing the snapshot.
+When you upload a CSV to fiscode you pick one of three modes:
+
+- **overwrite** — snapshot the current DB state into history, truncate all data tables, load the
+  CSV. Use this when the CSV is the source of truth (typical CSV-first workflow).
+- **append** — keep existing rows; merge new ones by ID. Collisions are reported and existing
+  rows win. Use this when adding a batch (e.g. a month of receipts exported from a bank).
+- **restore** — alias for overwrite, with confirmation copy emphasizing the snapshot. Use this
+  when reverting to a known-good backup.
+
+Every import — regardless of mode — appends a `__import_snapshot` history entry containing the
+full pre-import bundle, so you can revert.
+
+## Validation
+
+The importer surfaces errors per-row rather than crashing on the first bad cell. Common rejections:
+
+- **Unknown `record_type`** — typo or new record type the running app doesn't recognize.
+- **Non-integer numeric cells** — e.g., `amount_cents: 12.50`. Use integer cents.
+- **Missing `se_start_date` on `profile`** — required; the tax engine uses it to gate which rows
+  count toward the year.
+- **Bad boolean values** — `1`, `0`, or empty only. `true` / `yes` / `TRUE` all reject.
 
 ## Round-trip guarantee
 
-Snapshot → export full CSV → wipe → import → export full CSV is byte-stable across data rows. The
-header line containing the timestamp is masked during equality checks.
+`Export full CSV → wipe → Import → Export full CSV` is byte-stable across data rows. The
+provenance timestamp on line 4 is the only thing that changes. This invariant is enforced by
+a vitest test in `packages/csv/src/round-trip.test.ts`.

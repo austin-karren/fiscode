@@ -3,6 +3,20 @@ title: Expenses
 description: Categorized business expenses with optional §179 flag.
 ---
 
-Edit at `/expenses`. Categories follow Schedule C line items. The §179 candidate checkbox flags
-purchases (e.g. computers, equipment) that may qualify for §179 expensing — your accountant makes
-the final call at filing time.
+Edit at `/expenses`. Categories follow Schedule C line items. Every expense in v1 is fully
+deducted in the year it's incurred — there's no depreciation schedule. The §179 candidate
+checkbox is therefore informational: it marks rows your accountant should see at filing time
+when they decide whether to formally elect §179 vs ordinary expensing for a capital purchase.
+
+## Categories
+
+`health_insurance`, `phone_internet`, `software_subs`, `professional_services`, `meals`,
+`equipment`, `home_office`, `vehicle`, `supplies`, `travel`, `advertising`, `other`.
+
+The `meals` category isn't auto-halved in v1 — enter the _deductible_ portion (typically 50% of
+the receipt). The year config carries the deductible fraction for future automation.
+
+## CSV
+
+CSV `record_type` = `expense`. See the [CSV format reference](/docs/csv-format#expense). The
+`flag_for_section_179` column accepts `1` / `0` / empty.
