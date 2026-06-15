@@ -36,11 +36,12 @@ RUN bun install --frozen-lockfile --ignore-scripts
 FROM oven/bun:1.3.14-alpine AS build
 WORKDIR /repo
 
-# Reuse installed node_modules from the deps stage.
-COPY --from=deps /repo/node_modules ./node_modules
-COPY --from=deps /repo/apps/web/node_modules ./apps/web/node_modules
+# Reuse the entire installed tree from the deps stage (root + every
+# packages/*/node_modules — bun puts workspace-local deps under each package).
+COPY --from=deps /repo /repo
 
-# Now bring in the source tree. .dockerignore excludes dist/, .turbo/, etc.
+# Overlay the source tree. .dockerignore excludes dist/, .turbo/, and
+# node_modules, so this won't clobber what we just copied.
 COPY . .
 
 # Allow the docs site URL to be configured at build time (baked into the bundle).
