@@ -14,7 +14,11 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 
 const DIST = "./dist";
+// Railway / Dokploy / Fly etc. inject PORT — bind to whatever they give us.
+// Bind to 0.0.0.0 always so the container is reachable from the host.
+// (Avoid reading HOSTNAME — Docker sets it to the container ID.)
 const PORT = Number(process.env.PORT ?? 80);
+const HOSTNAME = "0.0.0.0";
 
 const ISOLATION_HEADERS = {
   "Cross-Origin-Opener-Policy": "same-origin",
@@ -55,7 +59,10 @@ app.use("/*", serveStatic({ root: DIST }));
 // so client-side routes (TanStack Router) work on direct visits and reloads.
 app.get("/*", serveStatic({ path: `${DIST}/index.html` }));
 
+console.log(`[fiscode-web] listening on http://${HOSTNAME}:${PORT}`);
+
 export default {
   port: PORT,
+  hostname: HOSTNAME,
   fetch: app.fetch,
 };
