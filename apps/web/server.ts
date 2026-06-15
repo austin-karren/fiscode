@@ -40,16 +40,10 @@ app.use("/assets/*", async (c, next) => {
   await next();
   c.header("Cache-Control", "public, max-age=31536000, immutable");
 });
-app.use(
-  "/index.html",
-  "/sw.js",
-  "/registerSW.js",
-  "/manifest.webmanifest",
-  async (c, next) => {
-    await next();
-    c.header("Cache-Control", "no-store");
-  },
-);
+app.use("/index.html", "/sw.js", "/registerSW.js", "/manifest.webmanifest", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "no-store");
+});
 
 // Orchestrator health probe.
 app.get("/healthz", (c) => c.text("ok"));
