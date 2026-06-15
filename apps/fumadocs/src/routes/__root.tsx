@@ -23,9 +23,9 @@ export const Route = createRootRoute({
           "Documentation for fiscode — a local-only tax estimator and time tracker for self-employed work. Not tax advice — use at your own risk.",
       },
       { property: "og:type", content: "website" },
-      { property: "og:url", content: "https://docs.fiscode.austink.dev" },
+      { property: "og:url", content: "https://docs.fiscode.app" },
       { property: "og:site_name", content: "fiscode docs" },
-      { property: "og:image", content: "https://docs.fiscode.austink.dev/icon.svg" },
+      { property: "og:image", content: "https://docs.fiscode.app/icon.svg" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:title", content: "fiscode docs" },
       {
@@ -33,7 +33,7 @@ export const Route = createRootRoute({
         content:
           "Documentation for fiscode — a local-only tax estimator and time tracker for self-employed work. Not tax advice — use at your own risk.",
       },
-      { name: "twitter:image", content: "https://docs.fiscode.austink.dev/icon.svg" },
+      { name: "twitter:image", content: "https://docs.fiscode.app/icon.svg" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/icon.svg" },

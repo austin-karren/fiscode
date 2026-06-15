@@ -6,7 +6,7 @@ export type Provenance = {
   year?: number;
 };
 
-export const SOURCE_URL = "https://fiscode.austink.dev";
+export const SOURCE_URL = "https://fiscode.app";
 
 /**
  * Build the `#`-prefixed provenance header lines that precede CSV data.
