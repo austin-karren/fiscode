@@ -4,12 +4,9 @@
 #
 #   stage 1 (deps):   bun install of the whole monorepo (workspaces)
 #   stage 2 (build):  vite build → apps/web/dist
-#   stage 3 (serve):  bun runs a tiny Hono static server that serves dist
-#                     with SPA fallback + COOP/COEP/CORP headers on every
-#                     response (required by sqlite-wasm OPFS). nginx and
-#                     Caddy both silently dropped those headers for some
-#                     paths; setting them in middleware is the only way to
-#                     be sure they're on every response.
+#   stage 3 (serve):  bun runs a Hono static server (apps/web/server.ts).
+#                     SPA fallback + COOP/COEP/CORP on every response so the
+#                     sqlite-wasm OPFS worker can be instantiated.
 #
 # Build context MUST be the repo root (NOT apps/web/), so the build has access
 # to the workspaces. Dokploy: set "Build context" to the repo root and
@@ -69,12 +66,12 @@ FROM oven/bun:1.3.14-alpine AS serve
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=80
+ENV PORT=3001
 
 # Just the static bundle + the bundled server. No node_modules, no source.
 COPY --from=build /repo/apps/web/server.js ./server.js
 COPY --from=build /repo/apps/web/dist ./dist
 
-EXPOSE 80
+EXPOSE 3001
 
 CMD ["bun", "run", "server.js"]

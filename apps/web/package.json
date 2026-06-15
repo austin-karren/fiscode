@@ -45,7 +45,6 @@
     "jsdom": "catalog:",
     "typescript": "catalog:",
     "vite": "^8.0.8",
-    "vite-plugin-pwa": "^1.0.3",
     "vitest": "catalog:"
   }
 }
