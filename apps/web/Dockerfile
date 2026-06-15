@@ -28,7 +28,9 @@ COPY packages/db/package.json packages/db/
 COPY packages/ui/package.json packages/ui/
 COPY packages/config/package.json packages/config/
 
-RUN bun install --frozen-lockfile
+# --ignore-scripts skips better-sqlite3's native gyp build (used only in tests
+# via @fiscode/db/test). The web bundle uses sqlite-wasm at runtime.
+RUN bun install --frozen-lockfile --ignore-scripts
 
 # ----- build ---------------------------------------------------------------
 FROM oven/bun:1.3.14-alpine AS build
