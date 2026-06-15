@@ -23,7 +23,24 @@ export type RecordType = z.infer<typeof recordTypeSchema>;
 
 const optStr = z.string().optional();
 const optBool = z.union([z.literal("0"), z.literal("1"), z.literal("")]).optional();
-const optInt = z.string().optional();
+
+// Numeric cells: empty → undefined; non-empty → must parse to a finite integer.
+// We accept the raw string here (no transform) and validate strictly in
+// rowToBundle once we know which record_type expects which integer columns.
+// Storing the validated string keeps the column-level error message tied
+// to the column name in zod's issue path, then the row-mapper consumes via
+// `parseInt` knowing the value is well-formed.
+const optInt = z
+  .string()
+  .optional()
+  .refine(
+    (s) => {
+      if (s === undefined || s === "") return true;
+      const n = Number(s.trim());
+      return Number.isFinite(n) && Number.isInteger(n);
+    },
+    { message: "Expected an integer" },
+  );
 
 // One zod object for the row shape. Per-record validation happens after parse.
 export const csvRowSchema = z.object({

@@ -17,6 +17,7 @@ import {
   Briefcase,
   Car,
   Clock,
+  CloudDownload,
   Coins,
   FileSpreadsheet,
   Gauge,
@@ -55,6 +56,10 @@ const NAV_GROUPS = [
       { to: "/year-end", label: "Year-end", icon: FileSpreadsheet },
       { to: "/history", label: "History", icon: History },
     ],
+  },
+  {
+    label: "Settings",
+    items: [{ to: "/tax-data", label: "Tax data", icon: CloudDownload }],
   },
 ] as const;
 

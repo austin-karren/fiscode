@@ -3,6 +3,7 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
+import { positiveIntegerString } from "@fiscode/core";
 import { mileageRepo, profileRepo, vehicleRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Car } from "lucide-react";
@@ -22,7 +23,8 @@ import { GLOSSARY } from "../lib/tax-glossary";
 
 const mileageSchema = z.object({
   date: z.date({ message: "Pick a date" }),
-  miles: z.string().refine((v) => Number(v) > 0, "Enter business miles"),
+  // positiveIntegerString rejects NaN, blanks, decimals, and zero/negative.
+  miles: positiveIntegerString,
   vehicleId: z.string(),
   purpose: z.string(),
 });
@@ -50,10 +52,14 @@ function MileagePage() {
     },
     validators: { onSubmit: mileageSchema },
     onSubmit: async ({ value, formApi }) => {
+      // `value.miles` is parsed by positiveIntegerString → typed number.
+      // No Math.round/Number coercion needed; the schema already guarantees
+      // a positive integer.
+      const parsed = mileageSchema.parse(value);
       await mileageRepo.create({
         date: dateToIso(value.date!),
         vehicleId: value.vehicleId || null,
-        businessMiles: Math.round(Number(value.miles)),
+        businessMiles: parsed.miles,
         purpose: value.purpose || null,
         notes: null,
         deletedAt: null,

@@ -11,6 +11,7 @@ import {
   FieldLabel,
   FieldTitle,
 } from "@fiscode/ui/components/field";
+import { optionalNonNegativeIntegerString } from "@fiscode/core";
 import { homeOfficeRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Home } from "lucide-react";
@@ -33,12 +34,14 @@ const METHOD_OPTIONS = [
 ];
 
 // Per-field schemas (onBlur). Form-level adds the cross-field "ack required"
-// refine and runs on submit.
+// refine and runs on submit. sqft inputs are optional non-negative integers —
+// blank stays blank (no deduction unless user fills it in), non-numeric is
+// rejected up front (previously silently coerced to NaN → null).
 const fs = {
   startDate: z.date({ message: "Pick a start date" }),
   method: z.enum(["simplified", "actual"], { message: "Pick a method" }),
-  officeSqft: z.string(),
-  homeSqft: z.string(),
+  officeSqft: optionalNonNegativeIntegerString,
+  homeSqft: optionalNonNegativeIntegerString,
   regularExclusiveAck: z.boolean().refine((v) => v === true, "Acknowledge regular & exclusive use"),
 };
 const homeOfficeSchema = z.object(fs);
@@ -62,16 +65,17 @@ function HomeOfficePage() {
     },
     validators: { onSubmit: homeOfficeSchema },
     onSubmit: async ({ value, formApi }) => {
+      const parsed = homeOfficeSchema.parse(value);
       await homeOfficeRepo.create({
         startDate: dateToIso(value.startDate!),
         endDate: null,
-        method: value.method,
-        officeSqft: value.officeSqft ? Number(value.officeSqft) : null,
-        homeSqft: value.homeSqft ? Number(value.homeSqft) : null,
+        method: parsed.method,
+        officeSqft: parsed.officeSqft,
+        homeSqft: parsed.homeSqft,
         monthlyRentMortgageCents: null,
         monthlyUtilitiesCents: null,
         monthlyInsuranceCents: null,
-        regularExclusiveAck: value.regularExclusiveAck,
+        regularExclusiveAck: parsed.regularExclusiveAck,
         notes: null,
         deletedAt: null,
       });

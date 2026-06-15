@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as YearEndRouteImport } from './routes/year-end'
 import { Route as VehiclesRouteImport } from './routes/vehicles'
 import { Route as TimeRouteImport } from './routes/time'
+import { Route as TaxDataRouteImport } from './routes/tax-data'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as MileageRouteImport } from './routes/mileage'
@@ -35,6 +36,11 @@ const VehiclesRoute = VehiclesRouteImport.update({
 const TimeRoute = TimeRouteImport.update({
   id: '/time',
   path: '/time',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TaxDataRoute = TaxDataRouteImport.update({
+  id: '/tax-data',
+  path: '/tax-data',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SetupRoute = SetupRouteImport.update({
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/mileage': typeof MileageRoute
   '/profile': typeof ProfileRoute
   '/setup': typeof SetupRoute
+  '/tax-data': typeof TaxDataRoute
   '/time': typeof TimeRoute
   '/vehicles': typeof VehiclesRoute
   '/year-end': typeof YearEndRoute
@@ -107,6 +114,7 @@ export interface FileRoutesByTo {
   '/mileage': typeof MileageRoute
   '/profile': typeof ProfileRoute
   '/setup': typeof SetupRoute
+  '/tax-data': typeof TaxDataRoute
   '/time': typeof TimeRoute
   '/vehicles': typeof VehiclesRoute
   '/year-end': typeof YearEndRoute
@@ -122,6 +130,7 @@ export interface FileRoutesById {
   '/mileage': typeof MileageRoute
   '/profile': typeof ProfileRoute
   '/setup': typeof SetupRoute
+  '/tax-data': typeof TaxDataRoute
   '/time': typeof TimeRoute
   '/vehicles': typeof VehiclesRoute
   '/year-end': typeof YearEndRoute
@@ -138,6 +147,7 @@ export interface FileRouteTypes {
     | '/mileage'
     | '/profile'
     | '/setup'
+    | '/tax-data'
     | '/time'
     | '/vehicles'
     | '/year-end'
@@ -152,6 +162,7 @@ export interface FileRouteTypes {
     | '/mileage'
     | '/profile'
     | '/setup'
+    | '/tax-data'
     | '/time'
     | '/vehicles'
     | '/year-end'
@@ -166,6 +177,7 @@ export interface FileRouteTypes {
     | '/mileage'
     | '/profile'
     | '/setup'
+    | '/tax-data'
     | '/time'
     | '/vehicles'
     | '/year-end'
@@ -181,6 +193,7 @@ export interface RootRouteChildren {
   MileageRoute: typeof MileageRoute
   ProfileRoute: typeof ProfileRoute
   SetupRoute: typeof SetupRoute
+  TaxDataRoute: typeof TaxDataRoute
   TimeRoute: typeof TimeRoute
   VehiclesRoute: typeof VehiclesRoute
   YearEndRoute: typeof YearEndRoute
@@ -207,6 +220,13 @@ declare module '@tanstack/react-router' {
       path: '/time'
       fullPath: '/time'
       preLoaderRoute: typeof TimeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tax-data': {
+      id: '/tax-data'
+      path: '/tax-data'
+      fullPath: '/tax-data'
+      preLoaderRoute: typeof TaxDataRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/setup': {
@@ -285,6 +305,7 @@ const rootRouteChildren: RootRouteChildren = {
   MileageRoute: MileageRoute,
   ProfileRoute: ProfileRoute,
   SetupRoute: SetupRoute,
+  TaxDataRoute: TaxDataRoute,
   TimeRoute: TimeRoute,
   VehiclesRoute: VehiclesRoute,
   YearEndRoute: YearEndRoute,

@@ -40,7 +40,8 @@
     "check-types": "turbo check-types",
     "check": "oxlint && oxfmt --check",
     "format": "oxfmt --write",
-    "db:generate": "turbo -F @fiscode/db db:generate"
+    "db:generate": "turbo -F @fiscode/db db:generate",
+    "smoke:tax-fetch": "bun packages/tax/scripts/smoke-fetch.ts"
   },
   "devDependencies": {
     "@fiscode/config": "workspace:*",

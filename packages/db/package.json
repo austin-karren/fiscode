@@ -9,7 +9,8 @@
     "./boot": "./src/boot.ts",
     "./schema": "./src/schema/index.ts",
     "./repo": "./src/repo/index.ts",
-    "./bundle": "./src/bundle.ts"
+    "./bundle": "./src/bundle.ts",
+    "./test": "./src/test/setup-db.ts"
   },
   "scripts": {
     "check-types": "tsc --noEmit",
@@ -25,6 +26,9 @@
   },
   "devDependencies": {
     "@fiscode/config": "workspace:*",
+    "@fiscode/csv": "workspace:*",
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^12.10.1",
     "drizzle-kit": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
