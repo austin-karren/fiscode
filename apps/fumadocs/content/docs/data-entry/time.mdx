@@ -4,4 +4,13 @@ description: Time-tracking sessions.
 ---
 
 Edit at `/time`. Time entries are independent of income — useful for hourly clients and for
-quantifying effort by client/project at year end. Not consumed by the tax engine.
+quantifying effort by client/project at year end. **Not consumed by the tax engine.**
+
+The estimate runs entirely off income entries. Time is here so you don't need a separate tool;
+if you bill hourly, the year-end packet will summarize hours-per-client alongside the income
+totals for cross-checking.
+
+## CSV
+
+CSV `record_type` = `time_entry`. See the [CSV format reference](/docs/csv-format#time_entry).
+Duration is stored as `minutes` (integer).

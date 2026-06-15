@@ -5,3 +5,18 @@ description: 1099 and W-2 entries, per payment.
 
 Edit at `/income`. `source_type` is `1099` or `w2`. Amounts are stored in integer cents. Entries
 are dated so the quarterly engine can bucket them correctly.
+
+## What counts toward the tax estimate
+
+Only `1099` rows. `w2` rows are stored for record-keeping (and they show up in the year-end
+packet), but the tax engine treats W-2 income on a `spouse` span — not on the individual income
+rows — because the personal W-2 case is out of scope for v1.
+
+## Kinds
+
+The `kind` column is a sub-categorization for your own organization: `recurring`, `bonus`,
+`consulting`, `other`. The estimate doesn't differentiate.
+
+## CSV
+
+CSV `record_type` = `income`. See the [CSV format reference](/docs/csv-format#income).

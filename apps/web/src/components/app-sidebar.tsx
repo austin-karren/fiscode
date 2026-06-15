@@ -14,6 +14,7 @@ import {
 } from "@fiscode/ui/components/sidebar";
 import { Link, useLocation } from "@tanstack/react-router";
 import {
+  BookOpen,
   Briefcase,
   Car,
   Clock,
@@ -21,11 +22,17 @@ import {
   Coins,
   FileSpreadsheet,
   Gauge,
+  Github,
   History,
   Home,
   Receipt,
   UserCircle2,
 } from "lucide-react";
+
+const EXTERNAL_LINKS = [
+  { href: "https://docs.fiscode.austink.dev", label: "Docs", icon: BookOpen },
+  { href: "https://github.com/austin-karren/fiscode", label: "GitHub", icon: Github },
+] as const;
 
 const NAV_GROUPS = [
   {
@@ -123,16 +130,35 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      {/* Footer text mirrors the wordmark's asymmetric cross-fade so the
-          collapse hides the text quickly (avoiding the awkward wrap inside
-          the shrinking rail) and the expand brings it back only after the
-          rail has finished growing. whitespace-nowrap + overflow-hidden on
-          the SidebarFooter clip any in-flight overflow during the rail's
-          width transition; max-h collapses the row height in icon mode so
-          the rail bottom doesn't show an empty pad. */}
-      <SidebarFooter className="overflow-hidden whitespace-nowrap transition-[max-height] duration-150 delay-300 max-h-12 group-data-[collapsible=icon]:max-h-0 group-data-[collapsible=icon]:duration-75 group-data-[collapsible=icon]:delay-0">
-        <div className="px-2 py-1 text-xs text-muted-foreground opacity-100 transition-discrete duration-150 delay-300 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:duration-75 group-data-[collapsible=icon]:delay-0">
-          local-only · CSV is source of truth
+      {/* Footer: external links group + tagline. Both collapse cleanly in
+          icon mode — the links shrink to icon-only via SidebarMenuButton's
+          collapsible behavior; the tagline fades out with the wordmark's
+          asymmetric timing (out fast on collapse, in late on expand). */}
+      <SidebarFooter className="gap-0">
+        <SidebarGroup className="py-1">
+          <SidebarGroupLabel>Reference</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {EXTERNAL_LINKS.map((link) => (
+                <SidebarMenuItem key={link.href}>
+                  <SidebarMenuButton
+                    tooltip={link.label}
+                    render={
+                      <a href={link.href} target="_blank" rel="noopener noreferrer">
+                        <link.icon />
+                        <span>{link.label}</span>
+                      </a>
+                    }
+                  />
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <div className="overflow-hidden whitespace-nowrap transition-[max-height] duration-150 delay-300 max-h-8 group-data-[collapsible=icon]:max-h-0 group-data-[collapsible=icon]:duration-75 group-data-[collapsible=icon]:delay-0">
+          <div className="px-2 py-1 text-xs text-muted-foreground opacity-100 transition-discrete duration-150 delay-300 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:duration-75 group-data-[collapsible=icon]:delay-0">
+            local-only · CSV is source of truth
+          </div>
         </div>
       </SidebarFooter>
       <SidebarRail />

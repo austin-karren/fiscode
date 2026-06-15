@@ -41,7 +41,8 @@
     "check": "oxlint && oxfmt --check",
     "format": "oxfmt --write",
     "db:generate": "turbo -F @fiscode/db db:generate",
-    "smoke:tax-fetch": "bun packages/tax/scripts/smoke-fetch.ts"
+    "smoke:tax-fetch": "bun packages/tax/scripts/smoke-fetch.ts",
+    "example:csv": "bun packages/csv/scripts/generate-example.ts"
   },
   "devDependencies": {
     "@fiscode/config": "workspace:*",
