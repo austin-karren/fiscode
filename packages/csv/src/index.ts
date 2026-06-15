@@ -4,3 +4,4 @@ export * from "./export.ts";
 export * from "./import.ts";
 export * from "./bundle-types.ts";
 export * from "./apply-import.ts";
+export * from "./example.ts";
