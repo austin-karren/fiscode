@@ -9,7 +9,8 @@
     "./boot": "./src/boot.ts",
     "./schema": "./src/schema/index.ts",
     "./repo": "./src/repo/index.ts",
-    "./bundle": "./src/bundle.ts"
+    "./bundle": "./src/bundle.ts",
+    "./test": "./src/test/setup-db.ts"
   },
   "scripts": {
     "check-types": "tsc --noEmit",

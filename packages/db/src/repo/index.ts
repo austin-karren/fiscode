@@ -39,6 +39,7 @@ import { and, asc, eq } from "drizzle-orm";
 
 export { profileRepo };
 export { importBundle, type ImportReason } from "./import.ts";
+export { taxYearCacheRepo } from "./tax-year-cache.ts";
 
 export const clientRepo = makeCrudRepo<ClientInsert, ClientRow>(client, "client", {
   orderBy: "name",

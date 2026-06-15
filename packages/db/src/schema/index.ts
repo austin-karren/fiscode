@@ -8,6 +8,7 @@ export * from "./home-office.ts";
 export * from "./expenses.ts";
 export * from "./retirement.ts";
 export * from "./history.ts";
+export * from "./tax-year-cache.ts";
 
 import { profile } from "./profile.ts";
 import { entity, spouse } from "./entity.ts";
@@ -19,6 +20,7 @@ import { homeOffice } from "./home-office.ts";
 import { expense } from "./expenses.ts";
 import { retirementContribution } from "./retirement.ts";
 import { history } from "./history.ts";
+import { taxYearCache } from "./tax-year-cache.ts";
 
 export const tables = {
   profile,
@@ -33,4 +35,5 @@ export const tables = {
   expense,
   retirementContribution,
   history,
+  taxYearCache,
 } as const;
