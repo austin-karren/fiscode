@@ -223,7 +223,7 @@ export const yearConfigToWire = (
 });
 
 /** Default mirror base URL. The app reads `VITE_TAX_DATA_BASE_URL` to override. */
-export const DEFAULT_TAX_DATA_BASE_URL = "https://fiscode.austink.dev/tax-data";
+export const DEFAULT_TAX_DATA_BASE_URL = "https://fiscode.app/tax-data";
 
 /** URL convention: ${base}/v1/{year}.json. */
 export const taxYearDataUrl = (year: number, base = DEFAULT_TAX_DATA_BASE_URL): string =>

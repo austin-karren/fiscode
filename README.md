@@ -1,8 +1,8 @@
 # fiscode
 
 A fast, **local-only** tax estimator and time tracker for 1099 /
-self-employed work. Hosted at <https://fiscode.austink.dev> and installable as
-a PWA.
+self-employed work. Hosted at <https://fiscode.app> (docs at
+<https://docs.fiscode.app>) and installable as a PWA.
 
 **fiscode is not a tax filing tool.** It is an estimator and organizer that
 gets you most of the way to a quarterly estimate and a year-end packet. A tax
@@ -51,18 +51,61 @@ sync, docs site, native desktop).
 A full docs site lives in `apps/fumadocs` (TanStack Start + Nitro + fumadocs-mdx/ui).
 
 - Local: `bun run dev:fumadocs` → <http://localhost:4000>
-- Deployed: <https://docs.fiscode.austink.dev> via Dokploy (self-hosted Docker PaaS). Nitro's `node-server` preset produces `apps/fumadocs/.output/server/index.mjs`; the container runs `node ./server/index.mjs`. Dockerfile + DNS are a follow-up.
-- Highlights: [/docs/csv-format](https://docs.fiscode.austink.dev/docs/csv-format) ·
-  [/docs/tax-engine](https://docs.fiscode.austink.dev/docs/tax-engine) ·
-  [/docs/year-end-packet](https://docs.fiscode.austink.dev/docs/year-end-packet)
+- Deployed: <https://docs.fiscode.app> via Dokploy. Nitro's `node-server` preset produces `apps/fumadocs/.output/server/index.mjs`; the container runs `node ./server/index.mjs`. See [Deploy](#deploy) for the Docker setup.
+- Highlights: [/docs/csv-format](https://docs.fiscode.app/docs/csv-format) ·
+  [/docs/tax-engine](https://docs.fiscode.app/docs/tax-engine) ·
+  [/docs/year-end-packet](https://docs.fiscode.app/docs/year-end-packet)
 
 ## Deploy
 
-Both apps target **Dokploy** (self-hosted Docker PaaS on my own infrastructure). Not Vercel, not Cloudflare.
+Both apps target **Dokploy** (self-hosted Docker PaaS). Not Vercel, not Cloudflare.
 
-- **apps/web** — Vite SPA, fully client-side. The "deploy" is just shipping `dist/` to a static host inside a small container. Bun (`bun serve` style) and any static-file server work identically here. Dockerfile is a follow-up.
-- **apps/fumadocs** — Nitro `node-server` output; runs as `node ./server/index.mjs` in a Node container. Handles prerendered HTML + `/api/search`.
-- **Future, Part 3 (Electrobun desktop)** — runs Bun as the desktop shell process. That's where `bun:sqlite` becomes the obvious swap-in for `sqlite-wasm` (same SQLite file on disk, native bindings, no WASM overhead). The browser PWA stays on `sqlite-wasm + OPFS` because there is no Bun runtime in a browser tab.
+Each app has a multi-stage `Dockerfile` next to its source. **The build context must be the repo root** — both Dockerfiles install the workspace graph (`bun install --frozen-lockfile`) and then build their app from inside it.
+
+### apps/web — `fiscode.app`
+
+Vite SPA → static `dist/` served by nginx. Image: `nginx:1.29-alpine` with the SPA fallback and the COOP/COEP headers OPFS needs.
+
+| Dokploy field         | Value                                                              |
+| --------------------- | ------------------------------------------------------------------ |
+| Build context         | repo root                                                          |
+| Dockerfile            | `apps/web/Dockerfile`                                              |
+| Port                  | `80`                                                               |
+| Domain                | `fiscode.app`                                                      |
+| Health check          | `/healthz`                                                         |
+| Build args (optional) | `VITE_TAX_DATA_BASE_URL=https://…` to override the tax-data mirror |
+
+Local smoke test from the repo root:
+
+```sh
+docker build -f apps/web/Dockerfile -t fiscode-web .
+docker run --rm -p 8080:80 fiscode-web
+# open http://localhost:8080
+```
+
+### apps/fumadocs — `docs.fiscode.app`
+
+TanStack Start + Nitro `node-server` build → `node ./server/index.mjs` in a `node:22-slim` container.
+
+| Dokploy field  | Value                                       |
+| -------------- | ------------------------------------------- |
+| Build context  | repo root                                   |
+| Dockerfile     | `apps/fumadocs/Dockerfile`                  |
+| Port           | `3000`                                      |
+| Domain         | `docs.fiscode.app`                          |
+| Env (optional) | `PORT`, `HOST` (default `3000` / `0.0.0.0`) |
+
+Local smoke test from the repo root:
+
+```sh
+docker build -f apps/fumadocs/Dockerfile -t fiscode-docs .
+docker run --rm -p 3000:3000 fiscode-docs
+# open http://localhost:3000
+```
+
+### Part 3 — Electrobun desktop
+
+Runs Bun as the desktop shell process. That's where `bun:sqlite` becomes the obvious swap-in for `sqlite-wasm` (same SQLite file on disk, native bindings, no WASM overhead). The browser PWA stays on `sqlite-wasm + OPFS` because there is no Bun runtime in a browser tab. No Dockerfile — it ships as a native installer.
 
 ## Layout
 

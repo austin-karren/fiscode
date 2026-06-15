@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 
 const EXTERNAL_LINKS = [
-  { href: "https://docs.fiscode.austink.dev", label: "Docs", icon: BookOpen },
+  { href: "https://docs.fiscode.app", label: "Docs", icon: BookOpen },
   { href: "https://github.com/austin-karren/fiscode", label: "GitHub", icon: Github },
 ] as const;
 

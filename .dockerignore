@@ -1,0 +1,33 @@
+# Don't ship local-only state into the build context.
+**/node_modules
+**/.turbo
+**/.output
+**/dist
+**/.next
+
+# Editor + OS
+.DS_Store
+**/.DS_Store
+.vscode
+.zed
+.idea
+*.log
+
+# Local-only tooling state
+.claude
+**/.claude
+.wrangler
+**/.wrangler
+
+# Tests & coverage are not needed for production builds.
+**/coverage
+**/__snapshots__
+
+# VCS — Dokploy clones the repo; we don't need .git inside the image.
+.git
+.gitignore
+.gitattributes
+
+# Existing root-level artifacts not needed by builds.
+HANDOFF.md
+PLAN.md
