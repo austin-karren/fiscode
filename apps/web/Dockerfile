@@ -4,10 +4,12 @@
 #
 #   stage 1 (deps):   bun install of the whole monorepo (workspaces)
 #   stage 2 (build):  vite build → apps/web/dist
-#   stage 3 (serve):  caddy:alpine serves dist with SPA fallback + COOP/COEP
-#                     headers (required by sqlite-wasm OPFS). Caddy's global
-#                     `header` directive applies to every response, including
-#                     bundled workers — nginx's add_header doesn't cascade.
+#   stage 3 (serve):  bun runs a tiny Hono static server that serves dist
+#                     with SPA fallback + COOP/COEP/CORP headers on every
+#                     response (required by sqlite-wasm OPFS). nginx and
+#                     Caddy both silently dropped those headers for some
+#                     paths; setting them in middleware is the only way to
+#                     be sure they're on every response.
 #
 # Build context MUST be the repo root (NOT apps/web/), so the build has access
 # to the workspaces. Dokploy: set "Build context" to the repo root and
@@ -56,13 +58,23 @@ ENV VITE_TAX_DATA_BASE_URL=${VITE_TAX_DATA_BASE_URL}
 
 RUN cd apps/web && bun run build
 
-# ----- serve ---------------------------------------------------------------
-FROM caddy:2.10-alpine AS serve
+# Bundle the static server into a single file so the serve stage doesn't
+# need to carry node_modules around. Hono is the only dep and it's tiny.
+RUN cd apps/web && bun build server.ts --target=bun --outfile=server.js
 
-# COOP/COEP headers + SPA fallback config.
-COPY apps/web/Caddyfile /etc/caddy/Caddyfile
-COPY --from=build /repo/apps/web/dist /usr/share/caddy
+# ----- serve ---------------------------------------------------------------
+# oven/bun:alpine is small (~95 MB) and gives us a single runtime for the
+# server + the same Bun used at build time. Hono is the only runtime dep.
+FROM oven/bun:1.3.14-alpine AS serve
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=80
+
+# Just the static bundle + the bundled server. No node_modules, no source.
+COPY --from=build /repo/apps/web/server.js ./server.js
+COPY --from=build /repo/apps/web/dist ./dist
 
 EXPOSE 80
 
-# caddy:alpine's default CMD runs the Caddyfile at /etc/caddy/Caddyfile.
+CMD ["bun", "run", "server.js"]
