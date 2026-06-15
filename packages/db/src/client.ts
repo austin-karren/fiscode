@@ -35,4 +35,15 @@ export const __resetDbForTests = () => {
   _sqlocal = undefined;
 };
 
+/**
+ * For tests: inject a Drizzle handle (typically built on better-sqlite3) so the
+ * repo layer can be exercised in Node. The injected handle bypasses the
+ * SQLocal/OPFS path entirely; callers must apply migrations themselves before
+ * issuing queries. Pass `undefined` to clear.
+ */
+export const __setDbForTests = (db: ReturnType<typeof makeDb> | undefined) => {
+  _db = db;
+  _sqlocal = undefined;
+};
+
 export type Db = ReturnType<typeof getDb>;

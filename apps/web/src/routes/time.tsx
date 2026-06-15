@@ -3,6 +3,7 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
+import { positiveNumericString } from "@fiscode/core";
 import { clientRepo, profileRepo, timeRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Clock } from "lucide-react";
@@ -20,7 +21,8 @@ import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 
 const timeSchema = z.object({
   date: z.date({ message: "Pick a date" }),
-  hours: z.string().refine((v) => Number(v) > 0, "Enter hours worked"),
+  // Hours: positive finite number (0.25 step). NaN, blanks, negatives rejected.
+  hours: positiveNumericString,
   clientId: z.string(),
   description: z.string(),
 });
@@ -54,10 +56,11 @@ function TimePage() {
     },
     validators: { onSubmit: timeSchema },
     onSubmit: async ({ value, formApi }) => {
+      const parsed = timeSchema.parse(value);
       await timeRepo.create({
         date: dateToIso(value.date!),
         clientId: value.clientId || null,
-        minutes: Math.round(Number(value.hours) * 60),
+        minutes: Math.round(parsed.hours * 60),
         description: value.description || null,
         notes: null,
         deletedAt: null,

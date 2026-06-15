@@ -58,26 +58,65 @@ export const importBundle = async (bundle: Bundle, reason: ImportReason): Promis
     await db.delete(homeOffice);
     await db.delete(expense);
     await db.delete(retirementContribution);
+    await insertAllRows(bundle, "strict");
+    return;
   }
 
-  await insertAllRows(bundle);
+  // Append: applyImport returns the FULL merged bundle (existing ∪ new),
+  // including rows already in the DB. We can't blindly re-insert those —
+  // it would trip the PK UNIQUE constraint. Use INSERT OR IGNORE so existing
+  // rows survive untouched and only genuinely new rows land.
+  await insertAllRows(bundle, "ignore-on-conflict");
 };
 
-const insertAllRows = async (bundle: Bundle): Promise<void> => {
+const insertAllRows = async (
+  bundle: Bundle,
+  conflictMode: "strict" | "ignore-on-conflict",
+): Promise<void> => {
   const db = getDb();
+  const ignore = conflictMode === "ignore-on-conflict";
   if (bundle.profile) {
-    await db.insert(profile).values(bundle.profile);
+    const q = db.insert(profile).values(bundle.profile);
+    await (ignore ? q.onConflictDoNothing() : q);
   }
-  for (const row of bundle.entities) await db.insert(entity).values(row);
-  for (const row of bundle.spouses) await db.insert(spouse).values(row);
-  for (const row of bundle.clients) await db.insert(client).values(row);
-  for (const row of bundle.income) await db.insert(income).values(row);
-  for (const row of bundle.timeEntries) await db.insert(timeEntry).values(row);
-  for (const row of bundle.vehicles) await db.insert(vehicle).values(row);
-  for (const row of bundle.mileage) await db.insert(mileage).values(row);
-  for (const row of bundle.homeOffice) await db.insert(homeOffice).values(row);
-  for (const row of bundle.expenses) await db.insert(expense).values(row);
+  for (const row of bundle.entities) {
+    const q = db.insert(entity).values(row);
+    await (ignore ? q.onConflictDoNothing() : q);
+  }
+  for (const row of bundle.spouses) {
+    const q = db.insert(spouse).values(row);
+    await (ignore ? q.onConflictDoNothing() : q);
+  }
+  for (const row of bundle.clients) {
+    const q = db.insert(client).values(row);
+    await (ignore ? q.onConflictDoNothing() : q);
+  }
+  for (const row of bundle.income) {
+    const q = db.insert(income).values(row);
+    await (ignore ? q.onConflictDoNothing() : q);
+  }
+  for (const row of bundle.timeEntries) {
+    const q = db.insert(timeEntry).values(row);
+    await (ignore ? q.onConflictDoNothing() : q);
+  }
+  for (const row of bundle.vehicles) {
+    const q = db.insert(vehicle).values(row);
+    await (ignore ? q.onConflictDoNothing() : q);
+  }
+  for (const row of bundle.mileage) {
+    const q = db.insert(mileage).values(row);
+    await (ignore ? q.onConflictDoNothing() : q);
+  }
+  for (const row of bundle.homeOffice) {
+    const q = db.insert(homeOffice).values(row);
+    await (ignore ? q.onConflictDoNothing() : q);
+  }
+  for (const row of bundle.expenses) {
+    const q = db.insert(expense).values(row);
+    await (ignore ? q.onConflictDoNothing() : q);
+  }
   for (const row of bundle.retirementContributions) {
-    await db.insert(retirementContribution).values(row);
+    const q = db.insert(retirementContribution).values(row);
+    await (ignore ? q.onConflictDoNothing() : q);
   }
 };

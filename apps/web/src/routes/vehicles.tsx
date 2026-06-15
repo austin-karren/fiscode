@@ -3,6 +3,7 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
+import { optionalIntegerString, optionalNonNegativeIntegerString } from "@fiscode/core";
 import { vehicleRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Car } from "lucide-react";
@@ -20,8 +21,9 @@ import { GLOSSARY } from "../lib/tax-glossary";
 const vehicleSchema = z.object({
   make: z.string().min(1, "Make is required"),
   model: z.string().min(1, "Model is required"),
-  year: z.string(),
-  mpg: z.string(),
+  // year is integer; mpg is non-negative integer. Both optional (blank → null).
+  year: optionalIntegerString,
+  mpg: optionalNonNegativeIntegerString,
 });
 const fs = vehicleSchema.shape;
 
@@ -38,11 +40,12 @@ function VehiclesPage() {
     defaultValues: { make: "", model: "", year: "", mpg: "" },
     validators: { onSubmit: vehicleSchema },
     onSubmit: async ({ value, formApi }) => {
+      const parsed = vehicleSchema.parse(value);
       await vehicleRepo.create({
-        make: value.make.trim(),
-        model: value.model.trim(),
-        year: value.year ? Number(value.year) : null,
-        mpg: value.mpg ? Number(value.mpg) : null,
+        make: parsed.make.trim(),
+        model: parsed.model.trim(),
+        year: parsed.year,
+        mpg: parsed.mpg,
         method: "standard_mileage",
         inServiceDate: null,
         notes: null,

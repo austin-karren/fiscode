@@ -25,6 +25,9 @@
   },
   "devDependencies": {
     "@fiscode/config": "workspace:*",
+    "@fiscode/csv": "workspace:*",
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^12.10.1",
     "drizzle-kit": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

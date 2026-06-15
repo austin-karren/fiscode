@@ -6,7 +6,12 @@ import { Checkbox } from "@fiscode/ui/components/checkbox";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
-import { cents, parseUSD } from "@fiscode/core";
+import {
+  cents,
+  nonNegativeIntegerString,
+  optionalUsdString,
+  positiveIntegerString,
+} from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -48,11 +53,13 @@ const profileSchema = z.object({
   }),
   state: z.string().min(2, "Pick a state").max(2, "Pick a state"),
   seStartDate: z.date({ message: "Pick a start date" }),
-  dependents: z.string(),
+  // Dependents: non-negative integer. Blank input rejected; "0" accepted.
+  dependents: nonNegativeIntegerString,
   quarterlyMethod: z.enum(["annualized", "even"], {
     message: "Pick a quarterly method",
   }),
-  prepLeadDays: z.string(),
+  // Prep lead days: must be ≥ 1 (otherwise no lead time at all).
+  prepLeadDays: positiveIntegerString,
   tracksRoth: z.boolean(),
   usesRetirement: z.boolean(),
 });
@@ -67,9 +74,11 @@ const efs = entitySchema.shape;
 const spouseSchema = z.object({
   startDate: z.date({ message: "Pick a start date" }),
   endDate: z.date().optional(),
-  wages: z.string(),
-  fedWH: z.string(),
-  stateWH: z.string(),
+  // Spouse $ inputs: blank → 0; otherwise must parse as USD. Catches typos
+  // that previously silently became $0 of withholding.
+  wages: optionalUsdString,
+  fedWH: optionalUsdString,
+  stateWH: optionalUsdString,
 });
 const sfs = spouseSchema.shape;
 
@@ -125,15 +134,19 @@ function ProfileFormPanel({
     // exactOptional handling.
     validators: { onSubmit: profileSchema as never },
     onSubmit: async ({ value }) => {
+      // Re-parse through profileSchema to get typed numerics
+      // (dependents: number, prepLeadDays: number). Validation already ran
+      // via the form-level onSubmit validator; this is just the type narrow.
+      const parsed = profileSchema.parse(value);
       await profileRepo.upsert({
-        filingStatus: value.filingStatus,
-        state: value.state,
+        filingStatus: parsed.filingStatus,
+        state: parsed.state,
         seStartDate: dateToIso(value.seStartDate!),
-        dependents: Number(value.dependents) || 0,
-        tracksRoth: value.tracksRoth,
-        usesRetirement: value.usesRetirement,
-        quarterlyMethod: value.quarterlyMethod,
-        prepLeadDays: Number(value.prepLeadDays) || 14,
+        dependents: parsed.dependents,
+        tracksRoth: parsed.tracksRoth,
+        usesRetirement: parsed.usesRetirement,
+        quarterlyMethod: parsed.quarterlyMethod,
+        prepLeadDays: parsed.prepLeadDays,
       });
       toast.success("Profile updated.");
       router.invalidate();
@@ -203,12 +216,14 @@ function ProfileFormPanel({
     // line up exactly with TanStack Form's stricter exactOptional handling.
     validators: { onSubmit: spouseSchema as never },
     onSubmit: async ({ value, formApi }) => {
+      const parsed = spouseSchema.parse(value);
       await spouseRepo.create({
         startDate: dateToIso(value.startDate!),
         endDate: value.endDate ? dateToIso(value.endDate) : null,
-        annualW2WagesCents: parseUSD(value.wages) ?? cents(0),
-        annualFederalWithholdingCents: parseUSD(value.fedWH) ?? cents(0),
-        annualStateWithholdingCents: parseUSD(value.stateWH) ?? cents(0),
+        // optionalUsdString returns number | null; null = blank input → $0.
+        annualW2WagesCents: parsed.wages ?? cents(0),
+        annualFederalWithholdingCents: parsed.fedWH ?? cents(0),
+        annualStateWithholdingCents: parsed.stateWH ?? cents(0),
         notes: null,
         deletedAt: null,
       });

@@ -8,7 +8,8 @@
     "./money": "./src/money.ts",
     "./date": "./src/date.ts",
     "./id": "./src/id.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./zod-helpers": "./src/zod-helpers.ts"
   },
   "scripts": {
     "check-types": "tsc --noEmit",

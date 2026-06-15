@@ -17,16 +17,20 @@ import {
 import { csvRowSchema, type CsvRow } from "./schema.ts";
 import { parseProvenance, type Provenance } from "./provenance.ts";
 
+// The schema (csvRowSchema in schema.ts) has already validated that numeric
+// columns are either empty/undefined OR parse to a finite integer. So by the
+// time we reach these helpers we don't need defensive fallbacks — a non-empty
+// value is guaranteed numeric. We still keep the `fallback` for `num` because
+// some columns are conceptually required-but-defaulted (e.g., dependents=0
+// when blank); the `numOrNull` form is used for genuinely-optional columns.
 const num = (v: string | undefined, fallback = 0): number => {
   if (v === undefined || v === "") return fallback;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
+  return Number(v.trim());
 };
 
 const numOrNull = (v: string | undefined): number | null => {
   if (v === undefined || v === "") return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+  return Number(v.trim());
 };
 
 const strOrNull = (v: string | undefined): string | null =>
