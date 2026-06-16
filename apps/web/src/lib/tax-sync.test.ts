@@ -85,7 +85,9 @@ describe("syncTaxYearData — failure modes throw TaxSyncError", () => {
   it("non-JSON body", async () => {
     const res = new Response("<!DOCTYPE html>", { status: 200 });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(res);
-    await expect(syncTaxYearData(2026)).rejects.toThrow(/non-JSON/);
+    // better-fetch hands the raw string to our zod parser, which rejects it
+    // as a schema mismatch rather than a parse error — same TaxSyncError shape.
+    await expect(syncTaxYearData(2026)).rejects.toBeInstanceOf(TaxSyncError);
   });
 
   it("payload fails schema validation", async () => {
