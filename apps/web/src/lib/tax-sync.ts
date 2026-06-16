@@ -1,3 +1,4 @@
+import { betterFetch } from "@better-fetch/fetch";
 import {
   DEFAULT_TAX_DATA_BASE_URL,
   HARDCODED_CONFIG_YEARS,
@@ -81,18 +82,6 @@ export const hydrateOverlayFromCache = async (): Promise<{
   return { loaded, skipped };
 };
 
-const withTimeout = async <T>(p: Promise<T>, ms: number): Promise<T> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`fetch timeout after ${ms}ms`)), ms);
-  });
-  try {
-    return await Promise.race([p, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-};
-
 export class TaxSyncError extends Error {
   constructor(
     message: string,
@@ -110,44 +99,52 @@ export class TaxSyncError extends Error {
  */
 export const syncTaxYearData = async (year: number): Promise<TaxYearCacheRow> => {
   const url = taxYearDataUrl(year, baseUrl());
-  let response: Response;
+  let etag: string | null = null;
+  // We do JSON parsing + zod validation ourselves so we can give callers
+  // distinct error messages for each failure mode (network / non-2xx / non-JSON
+  // / schema). better-fetch handles transport, timeout, and ETag capture.
+  let raw: unknown;
   try {
-    response = await withTimeout(
-      fetch(url, { headers: { accept: "application/json" } }),
-      FETCH_TIMEOUT_MS,
-    );
+    const { data, error } = await betterFetch<unknown>(url, {
+      headers: { accept: "application/json" },
+      timeout: FETCH_TIMEOUT_MS,
+      onResponse: (ctx) => {
+        etag = ctx.response.headers.get("etag");
+      },
+    });
+    if (error) {
+      if (error.status) {
+        throw new TaxSyncError(`Mirror returned ${error.status} for ${url}`, error);
+      }
+      // status 0 → likely a JSON parse error inside better-fetch's auto-parse.
+      throw new TaxSyncError(`Mirror returned non-JSON for ${url}`, error);
+    }
+    raw = data;
   } catch (e) {
+    if (e instanceof TaxSyncError) throw e;
     throw new TaxSyncError(`Network error fetching ${url}`, e);
   }
-  if (!response.ok) {
-    throw new TaxSyncError(`Mirror returned ${response.status} for ${url}`);
-  }
-  let json: unknown;
-  try {
-    json = await response.json();
-  } catch (e) {
-    throw new TaxSyncError(`Mirror returned non-JSON for ${url}`, e);
-  }
-  const parsed = taxYearWireSchema.safeParse(json);
+  const parsed = taxYearWireSchema.safeParse(raw);
   if (!parsed.success) {
     throw new TaxSyncError(
       `Mirror payload failed schema validation: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
     );
   }
-  if (parsed.data.year !== year) {
-    throw new TaxSyncError(`Mirror returned year ${parsed.data.year} but we requested ${year}`);
+  const data = parsed.data;
+  if (data.year !== year) {
+    throw new TaxSyncError(`Mirror returned year ${data.year} but we requested ${year}`);
   }
   const row = await taxYearCacheRepo.upsert({
     year,
-    json: JSON.stringify(parsed.data),
-    schemaVersion: parsed.data.schemaVersion,
-    source: parsed.data.source,
+    json: JSON.stringify(data),
+    schemaVersion: data.schemaVersion,
+    source: data.source,
     sourceUrl: url,
     fetchedAt: new Date().toISOString(),
-    etag: response.headers.get("etag") ?? null,
+    etag,
   });
   // Update the in-session overlay so the UI sees fresh numbers without reload.
-  registerOverlayYearConfig(wireToYearConfig(parsed.data), {
+  registerOverlayYearConfig(wireToYearConfig(data), {
     fetchedAt: row.fetchedAt,
     source: row.source,
     sourceUrl: row.sourceUrl,
@@ -166,7 +163,6 @@ export const syncTaxYearDataSilently = async (years: number[]): Promise<void> =>
       try {
         await syncTaxYearData(year);
       } catch (e) {
-        // eslint-disable-next-line no-console
         console.debug(`[fiscode/tax-sync] silent sync failed for ${year}:`, e);
       }
     }),
