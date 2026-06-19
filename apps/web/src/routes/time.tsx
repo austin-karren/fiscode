@@ -18,6 +18,7 @@ import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
+import { EditTimeDialog } from "../components/edit-time-dialog";
 
 const timeSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -216,9 +217,16 @@ function TimePage() {
                   <DataTable.Cell>{t.description ?? "—"}</DataTable.Cell>
                   <DataTable.Cell align="right">{formatMinutes(t.minutes)}</DataTable.Cell>
                   <DataTable.Cell align="right">
-                    <Button variant="ghost" size="sm" onClick={() => remove(t.id)}>
-                      Delete
-                    </Button>
+                    <div className="inline-flex gap-1">
+                      <EditTimeDialog
+                        entry={t}
+                        clients={clients}
+                        onSaved={() => router.invalidate()}
+                      />
+                      <Button variant="ghost" size="sm" onClick={() => remove(t.id)}>
+                        Delete
+                      </Button>
+                    </div>
                   </DataTable.Cell>
                 </DataTable.Row>
               ))}

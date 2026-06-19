@@ -26,6 +26,7 @@ import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
+import { EditHomeOfficeDialog } from "../components/edit-home-office-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
 
 const METHOD_OPTIONS = [
@@ -230,6 +231,7 @@ function HomeOfficePage() {
               <DataTable.HeaderCell>Method</DataTable.HeaderCell>
               <DataTable.HeaderCell align="right">Office sqft</DataTable.HeaderCell>
               <DataTable.HeaderCell align="right">Home sqft</DataTable.HeaderCell>
+              <DataTable.HeaderCell />
             </DataTable.Row>
           </DataTable.Head>
           <DataTable.Body>
@@ -244,6 +246,9 @@ function HomeOfficePage() {
                 <DataTable.Cell>{r.method}</DataTable.Cell>
                 <DataTable.Cell align="right">{r.officeSqft ?? "—"}</DataTable.Cell>
                 <DataTable.Cell align="right">{r.homeSqft ?? "—"}</DataTable.Cell>
+                <DataTable.Cell align="right">
+                  <EditHomeOfficeDialog row={r} onSaved={() => router.invalidate()} />
+                </DataTable.Cell>
               </DataTable.Row>
             ))}
           </DataTable.Body>

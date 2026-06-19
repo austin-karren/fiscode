@@ -15,6 +15,7 @@ import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
+import { EditClientDialog } from "../components/edit-client-dialog";
 
 const clientSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -161,9 +162,12 @@ function ClientsPage() {
                   {c.defaultRateCents !== null ? formatUSD(cents(c.defaultRateCents)) : "—"}
                 </DataTable.Cell>
                 <DataTable.Cell align="right">
-                  <Button variant="ghost" size="sm" onClick={() => remove(c.id)}>
-                    Archive
-                  </Button>
+                  <div className="inline-flex gap-1">
+                    <EditClientDialog client={c} onSaved={() => router.invalidate()} />
+                    <Button variant="ghost" size="sm" onClick={() => remove(c.id)}>
+                      Archive
+                    </Button>
+                  </div>
                 </DataTable.Cell>
               </DataTable.Row>
             ))}
