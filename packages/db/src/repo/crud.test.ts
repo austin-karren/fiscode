@@ -214,6 +214,7 @@ describe("repo — cross-table soft-delete + history isolation", () => {
       reason: null,
       notes: null,
       flagForSection179: false,
+      startupExpense: false,
       deletedAt: null,
     });
     await mileageRepo.create({

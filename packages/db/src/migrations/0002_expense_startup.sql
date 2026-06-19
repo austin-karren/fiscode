@@ -1,0 +1,1 @@
+ALTER TABLE expense ADD COLUMN startup_expense INTEGER NOT NULL DEFAULT 0

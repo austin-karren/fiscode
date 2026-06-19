@@ -27,6 +27,7 @@ import { LabelWithTooltip } from "../components/forms/labeled";
 import { InfoTooltip } from "../components/info-tooltip";
 import { SetupRequiredEmpty } from "../components/empty-states/setup-required";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
+import { EditEntityDialog } from "../components/edit-entity-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
 
 const FILING_OPTIONS = [
@@ -252,7 +253,7 @@ function ProfileFormPanel({
               Profile
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 pb-2 @md:grid-cols-2">
+          <CardContent className="grid items-start gap-4 pb-2 @md:grid-cols-2">
             <TSFormField form={profileForm} name="filingStatus">
               {(field) => (
                 <FormItem>
@@ -425,20 +426,23 @@ function ProfileFormPanel({
                     {e.startDate} – {e.endDate ?? "open"}
                   </span>
                   <span>{e.type}</span>
-                  {e.endDate ? null : (
-                    <ConfirmDialog
-                      trigger={
-                        <Button type="button" variant="ghost" size="sm" className="ms-auto">
-                          End today
-                        </Button>
-                      }
-                      title="End this entity period today?"
-                      description={`This ${e.type} period (started ${e.startDate}) will close at today's date. You can edit the end date later from your data.`}
-                      confirmLabel="End it"
-                      confirmVariant="destructive"
-                      onConfirm={() => void endEntityNow(e.id)}
-                    />
-                  )}
+                  <div className="ms-auto inline-flex gap-1">
+                    <EditEntityDialog entity={e} onSaved={() => router.invalidate()} />
+                    {e.endDate ? null : (
+                      <ConfirmDialog
+                        trigger={
+                          <Button type="button" variant="ghost" size="sm">
+                            End today
+                          </Button>
+                        }
+                        title="End this entity period today?"
+                        description={`This ${e.type} period (started ${e.startDate}) will close at today's date. You can edit the end date later from your data.`}
+                        confirmLabel="End it"
+                        confirmVariant="destructive"
+                        onConfirm={() => void endEntityNow(e.id)}
+                      />
+                    )}
+                  </div>
                 </li>
               ))}
               {entities.length === 0 ? (
@@ -446,7 +450,7 @@ function ProfileFormPanel({
               ) : null}
             </ul>
           </CardContent>
-          <CardContent className="grid gap-3 pb-2 @sm:grid-cols-3 @sm:items-end">
+          <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-3">
             <TSFormField form={entityForm} name="type" validators={{ onBlur: efs.type }}>
               {(field) => (
                 <FormItem>
@@ -526,7 +530,7 @@ function ProfileFormPanel({
               <InfoTooltip text={GLOSSARY.spouseBlock} />
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 pb-2 @sm:grid-cols-2 @lg:grid-cols-3 @xl:grid-cols-[1fr_1fr_1fr_1fr_1fr] @xl:items-end">
+          <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @lg:grid-cols-3 @xl:grid-cols-[1fr_1fr_1fr_1fr_1fr]">
             <TSFormField form={spouseForm} name="startDate" validators={{ onBlur: sfs.startDate }}>
               {(field) => (
                 <FormItem>

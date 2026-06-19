@@ -66,6 +66,7 @@ const expense = (id: string, date: string, amount: number) => ({
   reason: null,
   notes: null,
   flagForSection179: false,
+  startupExpense: false,
   createdAt: FIXED,
   updatedAt: FIXED,
   deletedAt: null,

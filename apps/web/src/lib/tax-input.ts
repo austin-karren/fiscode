@@ -30,6 +30,30 @@ const sumWithinYear = (
     .filter((r) => r.deletedAt === null && inSeRange(r.date, seStartDate, year))
     .reduce((sum, r) => addCents(sum, cents(r.amountCents)), cents(0));
 
+// Expenses-specific aggregator: in addition to the in-SE-range rows, also
+// includes startup expenses (Section 195) dated in the calendar year but
+// before the SE start. Items bought in anticipation of beginning 1099 work
+// are deductible once the business becomes active, so they should land in
+// the year's totals — they were only excluded under the date-only filter.
+const sumExpensesWithinYear = (
+  rows: Array<{
+    date: string;
+    amountCents: number;
+    deletedAt: string | null;
+    startupExpense?: boolean;
+  }>,
+  year: number,
+  seStartDate: string,
+): Cents =>
+  rows
+    .filter(
+      (r) =>
+        r.deletedAt === null &&
+        (inSeRange(r.date, seStartDate, year) ||
+          (r.startupExpense === true && yearOf(r.date as never) === year)),
+    )
+    .reduce((sum, r) => addCents(sum, cents(r.amountCents)), cents(0));
+
 const sumMileageDeductionWithinYear = (
   bundle: Bundle,
   year: number,
@@ -152,7 +176,9 @@ const countExcludedBeforeSeStart = (
     income: bundle.income.filter(
       (i) => i.deletedAt === null && i.sourceType === "1099" && isExcluded(i.date),
     ).length,
-    expense: bundle.expenses.filter((e) => e.deletedAt === null && isExcluded(e.date)).length,
+    expense: bundle.expenses.filter(
+      (e) => e.deletedAt === null && isExcluded(e.date) && e.startupExpense !== true,
+    ).length,
     mileage: bundle.mileage.filter((m) => m.deletedAt === null && isExcluded(m.date)).length,
   };
 };
@@ -178,7 +204,7 @@ export const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
     year,
     seStartDate,
   );
-  const directExpenses = sumWithinYear(bundle.expenses, year, seStartDate);
+  const directExpenses = sumExpensesWithinYear(bundle.expenses, year, seStartDate);
   const mileageDeduction = sumMileageDeductionWithinYear(bundle, year, seStartDate);
   const homeOfficeDeduction = sumHomeOfficeWithinYear(bundle, year, seStartDate);
   const total = addCents(directExpenses, mileageDeduction, homeOfficeDeduction);
@@ -233,7 +259,12 @@ export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedIn
       (r) => r.deletedAt === null && r.sourceType === "1099" && r.date >= lower && r.date <= cutoff,
     );
     const expRows = bundle.expenses.filter(
-      (r) => r.deletedAt === null && r.date >= lower && r.date <= cutoff,
+      (r) =>
+        r.deletedAt === null &&
+        r.date <= cutoff &&
+        // In-SE-range OR a startup expense within the calendar year. Startup
+        // rows land in the first cumulative window that contains their date.
+        (r.date >= lower || (r.startupExpense === true && r.date >= `${year}-01-01`)),
     );
     const cumGross = incomeRows.reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0));
     const cumExp = expRows.reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0));

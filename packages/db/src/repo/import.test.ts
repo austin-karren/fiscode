@@ -174,6 +174,7 @@ describe("importBundle → buildBundle — full round-trip parity", () => {
           reason: null,
           notes: null,
           flagForSection179: false,
+          startupExpense: false,
           createdAt: FIXED,
           updatedAt: FIXED,
           deletedAt: null,
@@ -188,6 +189,7 @@ describe("importBundle → buildBundle — full round-trip parity", () => {
           reason: "Home office setup stipend",
           notes: null,
           flagForSection179: true,
+          startupExpense: false,
           createdAt: FIXED,
           updatedAt: FIXED,
           deletedAt: null,
@@ -212,6 +214,7 @@ describe("importBundle → buildBundle — full round-trip parity", () => {
       reason: null,
       notes: null,
       flagForSection179: false,
+      startupExpense: false,
       deletedAt: null,
     });
     const round = await buildBundle();

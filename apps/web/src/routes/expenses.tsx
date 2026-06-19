@@ -28,6 +28,7 @@ import { LabelWithTooltip } from "../components/forms/labeled";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
+import { EditExpenseDialog } from "../components/edit-expense-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@fiscode/ui/components/tooltip";
 import { GLOSSARY } from "../lib/tax-glossary";
 
@@ -54,6 +55,7 @@ const expenseFormSchema = z.object({
   category: z.string(),
   description: z.string(),
   flagForSection179: z.boolean(),
+  startupExpense: z.boolean(),
 });
 // Per-field schemas (onBlur). Form-level schema (onSubmit) re-runs them all.
 const fs = expenseFormSchema.shape;
@@ -77,6 +79,7 @@ function ExpensesPage() {
       category: "software_subs",
       description: "",
       flagForSection179: false,
+      startupExpense: false,
     },
     validators: { onSubmit: expenseFormSchema },
     onSubmit: async ({ value, formApi }) => {
@@ -90,6 +93,7 @@ function ExpensesPage() {
         reason: null,
         notes: null,
         flagForSection179: value.flagForSection179,
+        startupExpense: value.startupExpense,
         deletedAt: null,
       });
       toast.success("Expense added.");
@@ -120,7 +124,7 @@ function ExpensesPage() {
               Add expense
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1fr_1.5fr_2fr_auto] @4xl:items-end">
+          <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1fr_1.5fr_2fr_auto]">
             <TSFormField form={form} name="date" validators={{ onBlur: fs.date }}>
               {(field) => (
                 <FormItem>
@@ -212,6 +216,31 @@ function ExpensesPage() {
                 </FormItem>
               )}
             </TSFormField>
+            <TSFormField form={form} name="startupExpense">
+              {(field) => (
+                <FormItem className="@sm:col-span-2 @4xl:col-span-5">
+                  <FieldLabel htmlFor="flag-startup-expense">
+                    <Field orientation="horizontal">
+                      <FormControl>
+                        <Checkbox
+                          id="flag-startup-expense"
+                          checked={field.state.value}
+                          onCheckedChange={(v) => field.handleChange(v === true)}
+                        />
+                      </FormControl>
+                      <FieldContent>
+                        <FieldTitle>Startup expense (Section 195)</FieldTitle>
+                        <FieldDescription>
+                          Bought in anticipation of 1099 work — count it in the year even if dated
+                          before your SE start date.
+                        </FieldDescription>
+                      </FieldContent>
+                    </Field>
+                  </FieldLabel>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
           </CardContent>
           <CardFooter className="justify-end">
             <form.Subscribe
@@ -256,7 +285,11 @@ function ExpensesPage() {
                   <DataTable.Cell>
                     <span className="inline-flex items-center gap-1.5">
                       <span className="font-mono">{x.date}</span>
-                      <PreSeStartBadge rowDate={x.date} seStartDate={profile?.seStartDate} />
+                      {x.startupExpense ? (
+                        <Badge variant="secondary">Startup §195</Badge>
+                      ) : (
+                        <PreSeStartBadge rowDate={x.date} seStartDate={profile?.seStartDate} />
+                      )}
                     </span>
                   </DataTable.Cell>
                   <DataTable.Cell>
@@ -279,9 +312,16 @@ function ExpensesPage() {
                   <DataTable.Cell>{x.description ?? "—"}</DataTable.Cell>
                   <DataTable.Cell align="right">{formatUSD(cents(x.amountCents))}</DataTable.Cell>
                   <DataTable.Cell align="right">
-                    <Button variant="ghost" size="sm" onClick={() => remove(x.id)}>
-                      Delete
-                    </Button>
+                    <div className="inline-flex gap-1">
+                      <EditExpenseDialog
+                        expense={x}
+                        categories={CATEGORIES}
+                        onSaved={() => router.invalidate()}
+                      />
+                      <Button variant="ghost" size="sm" onClick={() => remove(x.id)}>
+                        Delete
+                      </Button>
+                    </div>
                   </DataTable.Cell>
                 </DataTable.Row>
               ))}
