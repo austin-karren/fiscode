@@ -19,6 +19,7 @@ import { LabelWithTooltip } from "../components/forms/labeled";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
+import { EditMileageDialog } from "../components/edit-mileage-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
 
 const mileageSchema = z.object({
@@ -219,9 +220,16 @@ function MileagePage() {
                   <DataTable.Cell>{m.purpose ?? "—"}</DataTable.Cell>
                   <DataTable.Cell align="right">{m.businessMiles}</DataTable.Cell>
                   <DataTable.Cell align="right">
-                    <Button variant="ghost" size="sm" onClick={() => remove(m.id)}>
-                      Delete
-                    </Button>
+                    <div className="inline-flex gap-1">
+                      <EditMileageDialog
+                        mileage={m}
+                        vehicles={vehicles}
+                        onSaved={() => router.invalidate()}
+                      />
+                      <Button variant="ghost" size="sm" onClick={() => remove(m.id)}>
+                        Delete
+                      </Button>
+                    </div>
                   </DataTable.Cell>
                 </DataTable.Row>
               ))}

@@ -18,6 +18,7 @@ import { DatePicker, dateToIso } from "../components/forms/date-picker";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
+import { EditIncomeDialog } from "../components/edit-income-dialog";
 
 const KIND_OPTIONS = [
   { value: "recurring", label: "Recurring" },
@@ -235,9 +236,16 @@ function IncomePage() {
                   <DataTable.Cell>{i.description ?? "—"}</DataTable.Cell>
                   <DataTable.Cell align="right">{formatUSD(cents(i.amountCents))}</DataTable.Cell>
                   <DataTable.Cell align="right">
-                    <Button variant="ghost" size="sm" onClick={() => remove(i.id)}>
-                      Delete
-                    </Button>
+                    <div className="inline-flex gap-1">
+                      <EditIncomeDialog
+                        income={i}
+                        clients={clients}
+                        onSaved={() => router.invalidate()}
+                      />
+                      <Button variant="ghost" size="sm" onClick={() => remove(i.id)}>
+                        Delete
+                      </Button>
+                    </div>
                   </DataTable.Cell>
                 </DataTable.Row>
               ))}

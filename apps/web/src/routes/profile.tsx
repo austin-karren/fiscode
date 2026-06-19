@@ -28,6 +28,7 @@ import { InfoTooltip } from "../components/info-tooltip";
 import { SetupRequiredEmpty } from "../components/empty-states/setup-required";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditEntityDialog } from "../components/edit-entity-dialog";
+import { EditSpouseDialog } from "../components/edit-spouse-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
 
 const FILING_OPTIONS = [
@@ -612,9 +613,14 @@ function ProfileFormPanel({
           <CardContent>
             <ul className="space-y-1 text-sm">
               {spouses.map((s) => (
-                <li key={s.id} className="font-mono">
-                  {s.startDate} – {s.endDate ?? "open"} · $
-                  {(s.annualW2WagesCents / 100).toLocaleString()}
+                <li key={s.id} className="flex items-center gap-3">
+                  <span className="font-mono">
+                    {s.startDate} – {s.endDate ?? "open"} · $
+                    {(s.annualW2WagesCents / 100).toLocaleString()}
+                  </span>
+                  <div className="ms-auto inline-flex gap-1">
+                    <EditSpouseDialog spouse={s} onSaved={() => router.invalidate()} />
+                  </div>
                 </li>
               ))}
               {spouses.length === 0 ? (
