@@ -15,6 +15,7 @@ import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
+import { EditVehicleDialog } from "../components/edit-vehicle-dialog";
 import { InfoTooltip } from "../components/info-tooltip";
 import { GLOSSARY } from "../lib/tax-glossary";
 
@@ -79,7 +80,7 @@ function VehiclesPage() {
               Add vehicle
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.5fr_1.5fr_1fr_1fr] @4xl:items-end">
+          <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.5fr_1.5fr_1fr_1fr]">
             <TSFormField form={form} name="make" validators={{ onBlur: fs.make }}>
               {(field) => (
                 <FormItem>
@@ -192,9 +193,12 @@ function VehiclesPage() {
                 <DataTable.Cell>{v.mpg ?? "—"}</DataTable.Cell>
                 <DataTable.Cell>{v.method}</DataTable.Cell>
                 <DataTable.Cell align="right">
-                  <Button variant="ghost" size="sm" onClick={() => remove(v.id)}>
-                    Archive
-                  </Button>
+                  <div className="inline-flex gap-1">
+                    <EditVehicleDialog vehicle={v} onSaved={() => router.invalidate()} />
+                    <Button variant="ghost" size="sm" onClick={() => remove(v.id)}>
+                      Archive
+                    </Button>
+                  </div>
                 </DataTable.Cell>
               </DataTable.Row>
             ))}

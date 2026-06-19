@@ -88,6 +88,7 @@ export const csvRowSchema = z.object({
   category: optStr,
   reason: optStr,
   flag_for_section_179: optBool,
+  startup_expense: optBool,
 
   // time
   minutes: optInt,
@@ -153,6 +154,7 @@ export const CSV_COLUMNS: ReadonlyArray<keyof CsvRow> = [
   "category",
   "reason",
   "flag_for_section_179",
+  "startup_expense",
   "minutes",
   "make",
   "model",

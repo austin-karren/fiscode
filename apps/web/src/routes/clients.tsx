@@ -70,7 +70,7 @@ function ClientsPage() {
               Add client
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[2fr_1fr_1fr] @4xl:items-end">
+          <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[2fr_1fr_1fr]">
             <TSFormField form={form} name="name" validators={{ onBlur: fs.name }}>
               {(field) => (
                 <FormItem>

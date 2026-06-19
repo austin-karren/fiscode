@@ -181,6 +181,7 @@ const rowToBundle = (rows: CsvRow[]): Bundle => {
           reason: strOrNull(r.reason),
           notes: strOrNull(r.notes),
           flagForSection179: bool(r.flag_for_section_179),
+          startupExpense: bool(r.startup_expense),
           createdAt: r.created_at ?? "",
           updatedAt: r.updated_at ?? "",
           deletedAt: strOrNull(r.deleted_at),

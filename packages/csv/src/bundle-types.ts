@@ -108,6 +108,7 @@ export type ExpenseRow = Dated & {
   reason: string | null;
   notes: string | null;
   flagForSection179: boolean;
+  startupExpense: boolean;
 };
 
 export type RetirementContributionRow = Dated & {

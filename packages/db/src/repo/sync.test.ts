@@ -120,6 +120,7 @@ const bundle: DbBundle = {
       reason: "WFH stipend purchase",
       notes: null,
       flagForSection179: true,
+      startupExpense: false,
       createdAt: FIXED,
       updatedAt: FIXED,
       deletedAt: null,

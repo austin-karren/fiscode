@@ -167,6 +167,7 @@ const fullBundle = (): Bundle => ({
       reason: "PM tooling",
       notes: null,
       flagForSection179: false,
+      startupExpense: false,
       createdAt: FIXED_TIMESTAMP,
       updatedAt: FIXED_TIMESTAMP,
       deletedAt: null,
