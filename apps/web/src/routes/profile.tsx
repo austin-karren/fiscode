@@ -20,7 +20,7 @@ import { ConfirmDialog } from "@fiscode/ui/components/confirm-dialog";
 
 import { Page } from "../components/page";
 import { TSFormField } from "../components/forms/ts-form-field";
-import { DatePicker, dateToIso } from "../components/forms/date-picker";
+import { DatePicker, dateToIso, isoToDate } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { StateCombobox } from "../components/forms/state-combobox";
 import { LabelWithTooltip } from "../components/forms/labeled";
@@ -123,9 +123,9 @@ function ProfileFormPanel({
     defaultValues: {
       filingStatus: profile.filingStatus,
       state: profile.state,
-      seStartDate: profile.seStartDate
-        ? new Date(profile.seStartDate)
-        : (undefined as Date | undefined),
+      // `isoToDate`, not `new Date(iso)`: a date-only string parses as
+      // midnight UTC, which is the previous day west of UTC.
+      seStartDate: profile.seStartDate ? isoToDate(profile.seStartDate) : undefined,
       dependents: String(profile.dependents),
       quarterlyMethod: profile.quarterlyMethod,
       prepLeadDays: String(profile.prepLeadDays),
