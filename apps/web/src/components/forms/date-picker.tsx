@@ -5,6 +5,8 @@ import { cn } from "@fiscode/ui/lib/utils";
 import { CalendarIcon } from "lucide-react";
 import { useState } from "react";
 
+import type { FieldControlProps } from "./field-control-props";
+
 // Calendar-driven date picker. Takes/returns a JS `Date | undefined` so it
 // works directly with `z.date()` field validators. Form `onSubmit` handlers
 // convert Date → ISO string at save time via `dateToIso` below.
@@ -27,6 +29,10 @@ export function DatePicker({
   disabled,
   disableFuture = true,
   className,
+  id,
+  onBlur,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
 }: {
   value: Date | undefined;
   onValueChange: (date: Date | undefined) => void;
@@ -34,7 +40,7 @@ export function DatePicker({
   disabled?: boolean;
   disableFuture?: boolean;
   className?: string;
-}) {
+} & FieldControlProps) {
   const [open, setOpen] = useState(false);
   // `endOfToday` so today itself remains pickable; only strictly-after-today
   // is gated. Computed per render; the cost is one Date construction and
@@ -54,13 +60,27 @@ export function DatePicker({
             type="button"
             variant="outline"
             disabled={disabled}
+            id={id}
+            // A button named by `<label for>` loses its own text, which here
+            // is the picked date. Name it by the FormLabel (`<id>-label`)
+            // and by its own text so both are announced.
+            aria-labelledby={id ? `${id}-label ${id}-value` : undefined}
+            aria-invalid={ariaInvalid}
+            aria-describedby={ariaDescribedBy}
+            // Focus moves into the calendar while it is open; that is not
+            // the user leaving the field.
+            onBlur={() => {
+              if (!open) onBlur?.();
+            }}
             className={cn(
               "w-full justify-between font-normal",
               !value && "text-muted-foreground",
               className,
             )}
           >
-            {value ? displayFormat(value) : placeholder}
+            <span id={id ? `${id}-value` : undefined}>
+              {value ? displayFormat(value) : placeholder}
+            </span>
             <CalendarIcon className="ml-2 size-4 text-muted-foreground" />
           </Button>
         }
@@ -76,6 +96,7 @@ export function DatePicker({
           captionLayout="dropdown"
           onSelect={(d) => {
             onValueChange(d ?? undefined);
+            onBlur?.();
             if (d) setOpen(false);
           }}
           autoFocus

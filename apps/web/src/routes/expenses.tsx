@@ -3,7 +3,7 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { Badge } from "@fiscode/ui/components/badge";
-import { Checkbox } from "@fiscode/ui/components/checkbox";
+import { FieldCheckbox } from "../components/forms/field-checkbox";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import {
   Field,
@@ -25,6 +25,7 @@ import { TSFormField } from "../components/forms/ts-form-field";
 import { DatePicker, dateToIso } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { LabelWithTooltip } from "../components/forms/labeled";
+import { InfoTooltip } from "../components/info-tooltip";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
@@ -132,6 +133,7 @@ function ExpensesPage() {
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
                     />
                   </FormControl>
@@ -162,6 +164,7 @@ function ExpensesPage() {
                   <FormControl>
                     <SelectWithLabels
                       value={field.state.value}
+                      onBlur={field.handleBlur}
                       onValueChange={(v) => field.handleChange(v)}
                       items={CATEGORIES.map(([c, l]) => ({
                         value: c,
@@ -190,22 +193,25 @@ function ExpensesPage() {
             </TSFormField>
             <TSFormField form={form} name="flagForSection179">
               {(field) => (
-                <FormItem className="@sm:col-span-2 @4xl:col-span-5">
-                  <FieldLabel htmlFor="flag-section-179">
+                <FormItem className="relative @sm:col-span-2 @4xl:col-span-5">
+                  {/* The card is one <label>, so its text names the checkbox.
+                      The info button stays outside it to keep that name clean. */}
+                  <InfoTooltip
+                    text={GLOSSARY.section179}
+                    ariaLabel="More info about §179 candidate"
+                    className="absolute top-3 right-3 z-10"
+                  />
+                  <FieldLabel>
                     <Field orientation="horizontal">
                       <FormControl>
-                        <Checkbox
-                          id="flag-section-179"
+                        <FieldCheckbox
                           checked={field.state.value}
-                          onCheckedChange={(v) => field.handleChange(v === true)}
+                          onCheckedChange={(v) => field.handleChange(v)}
+                          onBlur={field.handleBlur}
                         />
                       </FormControl>
                       <FieldContent>
-                        <FieldTitle>
-                          <LabelWithTooltip tooltip={GLOSSARY.section179}>
-                            §179 candidate
-                          </LabelWithTooltip>
-                        </FieldTitle>
+                        <FieldTitle>§179 candidate</FieldTitle>
                         <FieldDescription>
                           Equipment you'd like to fully expense this year rather than depreciate.
                         </FieldDescription>
@@ -219,13 +225,13 @@ function ExpensesPage() {
             <TSFormField form={form} name="startupExpense">
               {(field) => (
                 <FormItem className="@sm:col-span-2 @4xl:col-span-5">
-                  <FieldLabel htmlFor="flag-startup-expense">
+                  <FieldLabel>
                     <Field orientation="horizontal">
                       <FormControl>
-                        <Checkbox
-                          id="flag-startup-expense"
+                        <FieldCheckbox
                           checked={field.state.value}
-                          onCheckedChange={(v) => field.handleChange(v === true)}
+                          onCheckedChange={(v) => field.handleChange(v)}
+                          onBlur={field.handleBlur}
                         />
                       </FormControl>
                       <FieldContent>

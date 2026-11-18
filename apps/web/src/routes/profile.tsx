@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
-import { Checkbox } from "@fiscode/ui/components/checkbox";
+import { FieldCheckbox } from "../components/forms/field-checkbox";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
@@ -262,6 +262,7 @@ function ProfileFormPanel({
                   <FormControl>
                     <SelectWithLabels
                       value={field.state.value}
+                      onBlur={field.handleBlur}
                       onValueChange={(v) => field.handleChange(v)}
                       items={FILING_OPTIONS}
                     />
@@ -277,6 +278,7 @@ function ProfileFormPanel({
                   <FormControl>
                     <StateCombobox
                       value={field.state.value}
+                      onBlur={field.handleBlur}
                       onValueChange={(code) => field.handleChange(code)}
                     />
                   </FormControl>
@@ -293,6 +295,7 @@ function ProfileFormPanel({
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
                     />
                   </FormControl>
@@ -326,6 +329,7 @@ function ProfileFormPanel({
                   <FormControl>
                     <SelectWithLabels
                       value={field.state.value}
+                      onBlur={field.handleBlur}
                       onValueChange={(v) => field.handleChange(v)}
                       items={QUARTERLY_OPTIONS}
                     />
@@ -358,9 +362,10 @@ function ProfileFormPanel({
                 {(field) => (
                   <FormItem className="flex flex-row items-center gap-2">
                     <FormControl>
-                      <Checkbox
+                      <FieldCheckbox
                         checked={field.state.value}
-                        onCheckedChange={(v) => field.handleChange(v === true)}
+                        onCheckedChange={(v) => field.handleChange(v)}
+                        onBlur={field.handleBlur}
                       />
                     </FormControl>
                     <LabelWithTooltip tooltip={GLOSSARY.tracksRoth} className="text-sm font-normal">
@@ -373,9 +378,10 @@ function ProfileFormPanel({
                 {(field) => (
                   <FormItem className="flex flex-row items-center gap-2">
                     <FormControl>
-                      <Checkbox
+                      <FieldCheckbox
                         checked={field.state.value}
-                        onCheckedChange={(v) => field.handleChange(v === true)}
+                        onCheckedChange={(v) => field.handleChange(v)}
+                        onBlur={field.handleBlur}
                       />
                     </FormControl>
                     <LabelWithTooltip
@@ -459,6 +465,7 @@ function ProfileFormPanel({
                   <FormControl>
                     <SelectWithLabels
                       value={field.state.value}
+                      onBlur={field.handleBlur}
                       onValueChange={(v) =>
                         field.handleChange(v as "" | "sole_prop" | "single_member_llc")
                       }
@@ -478,6 +485,7 @@ function ProfileFormPanel({
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
                     />
                   </FormControl>
@@ -492,6 +500,7 @@ function ProfileFormPanel({
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
                       disableFuture={false}
                     />
@@ -539,6 +548,7 @@ function ProfileFormPanel({
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
                     />
                   </FormControl>
@@ -553,6 +563,7 @@ function ProfileFormPanel({
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
                       disableFuture={false}
                     />

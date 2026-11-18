@@ -82,6 +82,7 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
                   <FormControl>
                     <SelectWithLabels
                       value={field.state.value}
+                      onBlur={field.handleBlur}
                       onValueChange={(v) =>
                         field.handleChange(v as "sole_prop" | "single_member_llc")
                       }
@@ -99,6 +100,7 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d ?? new Date())}
                     />
                   </FormControl>
@@ -113,6 +115,7 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
                       disableFuture={false}
                     />

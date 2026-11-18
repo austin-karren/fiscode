@@ -2,7 +2,7 @@ import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-route
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
-import { Checkbox } from "@fiscode/ui/components/checkbox";
+import { FieldCheckbox } from "../components/forms/field-checkbox";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import {
   Field,
@@ -24,6 +24,7 @@ import { TSFormField } from "../components/forms/ts-form-field";
 import { DatePicker, dateToIso } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { LabelWithTooltip } from "../components/forms/labeled";
+import { InfoTooltip } from "../components/info-tooltip";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditHomeOfficeDialog } from "../components/edit-home-office-dialog";
@@ -111,6 +112,7 @@ function HomeOfficePage() {
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
                     />
                   </FormControl>
@@ -125,6 +127,7 @@ function HomeOfficePage() {
                   <FormControl>
                     <SelectWithLabels
                       value={field.state.value}
+                      onBlur={field.handleBlur}
                       onValueChange={(v) => field.handleChange(v)}
                       items={METHOD_OPTIONS}
                     />
@@ -171,22 +174,25 @@ function HomeOfficePage() {
               validators={{ onBlur: fs.regularExclusiveAck }}
             >
               {(field) => (
-                <FormItem className="@sm:col-span-2 @4xl:col-span-4">
-                  <FieldLabel htmlFor="regular-exclusive-ack">
+                <FormItem className="relative @sm:col-span-2 @4xl:col-span-4">
+                  {/* The card is one <label>, so its text names the checkbox.
+                      The info button stays outside it to keep that name clean. */}
+                  <InfoTooltip
+                    text={GLOSSARY.regularExclusive}
+                    ariaLabel="More info about Regular & exclusive use"
+                    className="absolute top-3 right-3 z-10"
+                  />
+                  <FieldLabel>
                     <Field orientation="horizontal">
                       <FormControl>
-                        <Checkbox
-                          id="regular-exclusive-ack"
+                        <FieldCheckbox
                           checked={field.state.value}
-                          onCheckedChange={(v) => field.handleChange(v === true)}
+                          onCheckedChange={(v) => field.handleChange(v)}
+                          onBlur={field.handleBlur}
                         />
                       </FormControl>
                       <FieldContent>
-                        <FieldTitle>
-                          <LabelWithTooltip tooltip={GLOSSARY.regularExclusive}>
-                            Regular &amp; exclusive use
-                          </LabelWithTooltip>
-                        </FieldTitle>
+                        <FieldTitle>Regular &amp; exclusive use</FieldTitle>
                         <FieldDescription>
                           I acknowledge the home office is used regularly and exclusively for
                           business.
