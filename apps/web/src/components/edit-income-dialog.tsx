@@ -22,6 +22,7 @@ import { TSFormField } from "./forms/ts-form-field";
 import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
+import { archivedSuffix, pickableParents } from "./parent-name";
 
 const KIND_OPTIONS = [
   { value: "recurring", label: "Recurring" },
@@ -135,7 +136,10 @@ export function EditIncomeDialog({
                       onValueChange={(v) => field.handleChange(v === "__none__" ? "" : v)}
                       items={[
                         { value: "__none__", label: "—" },
-                        ...clients.map((c) => ({ value: c.id, label: c.name })),
+                        ...pickableParents(clients, income.clientId).map((c) => ({
+                          value: c.id,
+                          label: `${c.name}${archivedSuffix(c)}`,
+                        })),
                       ]}
                     />
                   </FormControl>

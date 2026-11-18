@@ -20,6 +20,8 @@ import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditMileageDialog } from "../components/edit-mileage-dialog";
+import { ParentName } from "../components/parent-name";
+import { softDeleteWithUndo } from "../lib/soft-delete";
 import { GLOSSARY } from "../lib/tax-glossary";
 
 const mileageSchema = z.object({
@@ -34,15 +36,18 @@ const fs = mileageSchema.shape;
 export const Route = createFileRoute("/mileage")({
   loader: async () => ({
     mileage: await mileageRepo.list(),
-    vehicles: await vehicleRepo.list(),
+    // Archived vehicles too: old rows keep showing their vehicle's name.
+    vehicles: await vehicleRepo.listIncludingDeleted(),
     profile: await profileRepo.get(),
   }),
   component: MileagePage,
 });
 
 function MileagePage() {
-  const { mileage, vehicles, profile } = useLoaderData({ from: "/mileage" });
+  const { mileage, vehicles: allVehicles, profile } = useLoaderData({ from: "/mileage" });
   const router = useRouter();
+  // Only live vehicles can be picked for a new entry.
+  const vehicles = allVehicles.filter((v) => !v.deletedAt);
 
   const form = useForm({
     defaultValues: {
@@ -71,15 +76,20 @@ function MileagePage() {
     },
   });
 
-  const remove = async (id: string) => {
-    await mileageRepo.softDelete(id);
-    router.invalidate();
-  };
+  const remove = (row: (typeof mileage)[number]) =>
+    softDeleteWithUndo({
+      repo: mileageRepo,
+      row,
+      message: "Mileage entry deleted.",
+      undoneMessage: "Mileage entry restored.",
+      onChange: () => router.invalidate(),
+    });
 
-  const vehicleName = (id: string | null) => {
-    if (!id) return "—";
-    const v = vehicles.find((vv) => vv.id === id);
-    return v ? `${v.year ?? ""} ${v.make} ${v.model}`.trim() : "—";
+  const vehicleParent = (id: string | null) => {
+    const v = allVehicles.find((vv) => vv.id === id);
+    return v
+      ? { name: `${v.year ?? ""} ${v.make} ${v.model}`.trim(), deletedAt: v.deletedAt }
+      : undefined;
   };
 
   return (
@@ -218,17 +228,19 @@ function MileagePage() {
                       <PreSeStartBadge rowDate={m.date} seStartDate={profile?.seStartDate} />
                     </span>
                   </DataTable.Cell>
-                  <DataTable.Cell>{vehicleName(m.vehicleId)}</DataTable.Cell>
+                  <DataTable.Cell>
+                    <ParentName parent={vehicleParent(m.vehicleId)} />
+                  </DataTable.Cell>
                   <DataTable.Cell>{m.purpose ?? "—"}</DataTable.Cell>
                   <DataTable.Cell align="right">{m.businessMiles}</DataTable.Cell>
                   <DataTable.Cell align="right">
                     <div className="inline-flex gap-1">
                       <EditMileageDialog
                         mileage={m}
-                        vehicles={vehicles}
+                        vehicles={allVehicles}
                         onSaved={() => router.invalidate()}
                       />
-                      <Button variant="ghost" size="sm" onClick={() => remove(m.id)}>
+                      <Button variant="ghost" size="sm" onClick={() => remove(m)}>
                         Delete
                       </Button>
                     </div>
