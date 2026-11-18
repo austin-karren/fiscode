@@ -1,11 +1,15 @@
 import { FormLabel } from "@fiscode/ui/components/form";
-import { cn } from "@fiscode/ui/lib/utils";
 import type { ReactNode } from "react";
 
 import { InfoTooltip } from "../info-tooltip";
 
 // shadcn FormLabel with an inline info tooltip beside the text. Use anywhere
 // a label benefits from a one-sentence explanation of the underlying term.
+//
+// The tooltip button sits beside the <label>, not inside it: a label's
+// content becomes the control's accessible name, and a button inside would
+// turn "Entity type" into "Entity type More info". `className` styles the
+// label text.
 export function LabelWithTooltip({
   children,
   tooltip,
@@ -16,9 +20,9 @@ export function LabelWithTooltip({
   className?: string;
 }) {
   return (
-    <FormLabel className={cn("inline-flex items-center gap-1.5", className)}>
-      {children}
+    <span className="inline-flex items-center gap-1.5">
+      <FormLabel className={className}>{children}</FormLabel>
       <InfoTooltip text={tooltip} />
-    </FormLabel>
+    </span>
   );
 }

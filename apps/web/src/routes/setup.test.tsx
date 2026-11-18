@@ -28,9 +28,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// "Entity type" also labels its info-tooltip button; the field is the
-// labelled element that carries the form wiring.
-const field = (label: string) => screen.getByLabelText(label, { selector: "[aria-invalid]" });
+const field = (label: string) => screen.getByLabelText(label);
 
 const submitButton = () => screen.getByRole("button", { name: "Save and continue" });
 
@@ -60,6 +58,12 @@ const fillEveryField = async () => {
 };
 
 describe("setup form", () => {
+  it("names a field with an info tooltip by its label alone", () => {
+    render(<SetupPage />);
+    expect(screen.getByRole("combobox", { name: "Entity type" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "More info" })).toBeInTheDocument();
+  });
+
   it("marks every field invalid after an empty submit", async () => {
     render(<SetupPage />);
     fireEvent.click(submitButton());

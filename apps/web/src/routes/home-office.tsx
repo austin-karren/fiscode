@@ -174,11 +174,10 @@ function HomeOfficePage() {
             >
               {(field) => (
                 <FormItem className="@sm:col-span-2 @4xl:col-span-4">
-                  <FieldLabel htmlFor="regular-exclusive-ack">
+                  <FieldLabel>
                     <Field orientation="horizontal">
                       <FormControl>
                         <FieldCheckbox
-                          id="regular-exclusive-ack"
                           checked={field.state.value}
                           onCheckedChange={(v) => field.handleChange(v)}
                           onBlur={field.handleBlur}

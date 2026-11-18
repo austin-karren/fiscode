@@ -193,11 +193,10 @@ function ExpensesPage() {
             <TSFormField form={form} name="flagForSection179">
               {(field) => (
                 <FormItem className="@sm:col-span-2 @4xl:col-span-5">
-                  <FieldLabel htmlFor="flag-section-179">
+                  <FieldLabel>
                     <Field orientation="horizontal">
                       <FormControl>
                         <FieldCheckbox
-                          id="flag-section-179"
                           checked={field.state.value}
                           onCheckedChange={(v) => field.handleChange(v)}
                           onBlur={field.handleBlur}
@@ -222,11 +221,10 @@ function ExpensesPage() {
             <TSFormField form={form} name="startupExpense">
               {(field) => (
                 <FormItem className="@sm:col-span-2 @4xl:col-span-5">
-                  <FieldLabel htmlFor="flag-startup-expense">
+                  <FieldLabel>
                     <Field orientation="horizontal">
                       <FormControl>
                         <FieldCheckbox
-                          id="flag-startup-expense"
                           checked={field.state.value}
                           onCheckedChange={(v) => field.handleChange(v)}
                           onBlur={field.handleBlur}

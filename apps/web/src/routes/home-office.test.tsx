@@ -32,6 +32,16 @@ const ackBox = () => screen.getByRole("checkbox");
 const ackError = "Acknowledge regular & exclusive use";
 
 describe("home office form", () => {
+  it("ticks the acknowledgement when its label is clicked", () => {
+    render(<HomeOfficePage />);
+    const label = screen.getByText("Regular & exclusive use");
+    expect(label.tagName).toBe("LABEL");
+    expect(document.getElementById(label.getAttribute("for")!)).not.toBeNull();
+
+    fireEvent.click(label);
+    expect(ackBox()).toBeChecked();
+  });
+
   it("marks the acknowledgement invalid when submitted without it", async () => {
     render(<HomeOfficePage />);
     fireEvent.click(saveButton());
