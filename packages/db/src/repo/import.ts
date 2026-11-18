@@ -27,23 +27,37 @@ export type ImportReason = "import-overwrite" | "import-restore" | "import-appen
  * resolved id collisions, so we just insert rows that aren't present.
  *
  * History is preserved across imports; the snapshot row records the full
- * pre-import bundle so a future revert UI can restore it.
+ * pre-import bundle so a future revert UI can restore it. The bundle's own
+ * history entries are added to the log.
  */
 export const importBundle = async (bundle: Bundle, reason: ImportReason): Promise<void> => {
   const db = getDb();
-  const before = await buildBundle();
-  const snapshotId = newId();
-  const nowIso = new Date().toISOString();
+  // The snapshot holds everything the overwrite below removes, deleted rows too.
+  const before = await buildBundle({ includeDeleted: true });
+  const hadHistory = (await db.select({ id: historyTable.id }).from(historyTable).limit(1)).length;
 
-  await db.insert(historyTable).values({
-    id: snapshotId,
-    entity: "__import_snapshot",
-    entityId: reason,
-    op: "revert",
-    beforeJson: JSON.stringify(before),
-    afterJson: JSON.stringify(bundle),
-    at: nowIso,
-  });
+  // A database that holds nothing has no prior state to snapshot. Skipping the
+  // snapshot there is what makes a restore exact: export -> restore into an
+  // empty database -> export gives the same bytes, history included. Any
+  // other import adds one snapshot entry, so it can be reverted.
+  if (!isEmptyBundle(before) || hadHistory > 0) {
+    await db.insert(historyTable).values({
+      id: newId(),
+      entity: "__import_snapshot",
+      entityId: reason,
+      op: "revert",
+      // Without the logs: see `buildBundle` on why a snapshot never nests history.
+      beforeJson: JSON.stringify({ ...before, history: [] }),
+      afterJson: JSON.stringify({ ...bundle, history: [] }),
+      at: new Date().toISOString(),
+    });
+  }
+
+  // History is append-only in every mode: entries the file brings are added,
+  // entries already here are kept, and the same entry is never doubled.
+  for (const row of bundle.history) {
+    await db.insert(historyTable).values(row).onConflictDoNothing();
+  }
 
   if (reason !== "import-append") {
     // Overwrite / restore: purge all data tables. History is intact.
@@ -68,6 +82,21 @@ export const importBundle = async (bundle: Bundle, reason: ImportReason): Promis
   // rows survive untouched and only genuinely new rows land.
   await insertAllRows(bundle, "ignore-on-conflict");
 };
+
+const isEmptyBundle = (b: Bundle): boolean =>
+  b.profile === undefined &&
+  [
+    b.entities,
+    b.spouses,
+    b.clients,
+    b.income,
+    b.timeEntries,
+    b.vehicles,
+    b.mileage,
+    b.homeOffice,
+    b.expenses,
+    b.retirementContributions,
+  ].every((rows) => rows.length === 0);
 
 const insertAllRows = async (
   bundle: Bundle,

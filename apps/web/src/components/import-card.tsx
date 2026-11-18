@@ -14,6 +14,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@fiscode/ui/co
 import { useRouter } from "@tanstack/react-router";
 import {
   applyImport,
+  describeImportErrors,
   parseCsv,
   type ImportMode,
   type AppliedImport,
@@ -56,11 +57,25 @@ export function ImportCard() {
     const text = await file.text();
     const { bundle, validationErrors } = parseCsv(text);
     if (validationErrors.length > 0) {
-      toast.error(`${validationErrors.length} row(s) failed validation.`);
+      // Name the rows on screen: the person fixing the file is looking at a
+      // spreadsheet, not at the console.
+      toast.error(`Nothing was imported. ${validationErrors.length} row(s) need fixing.`, {
+        description: (
+          <ul className="list-disc space-y-1 pl-4">
+            {describeImportErrors(validationErrors).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        ),
+        duration: Infinity,
+        closeButton: true,
+      });
       console.error(validationErrors);
       return;
     }
-    const existing = await buildBundle();
+    // Deleted rows count as existing: they are restored as deleted, and an
+    // appended row must not collide with one.
+    const existing = await buildBundle({ includeDeleted: true });
     const applied = applyImport(existing, bundle, mode);
     setPending({ file, applied });
   };

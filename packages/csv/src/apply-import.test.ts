@@ -125,7 +125,7 @@ describe("applyImport", () => {
       profile: profile(),
       income: [incomeRow("in_1", "2026-01-15", 1_000_00), incomeRow("in_2", "2026-07-10", 350_000)],
     };
-    const csv = exportBundle(original, { scope: "full", exportedAt: FIXED });
+    const csv = exportBundle(original, { scope: "full" });
     const { bundle: parsed } = parseCsv(csv);
     const r = applyImport(emptyBundle(), parsed, "overwrite");
     expect(r.next).toEqual(original);
@@ -137,7 +137,7 @@ describe("applyImport", () => {
       profile: profile(),
       income: [incomeRow("in_1", "2026-01-15", 1_000_00)],
     };
-    const csv = exportBundle(original, { scope: "full", exportedAt: FIXED });
+    const csv = exportBundle(original, { scope: "full" });
     const { bundle: parsed } = parseCsv(csv);
     const r = applyImport(emptyBundle(), parsed, "append");
     expect(r.next).toEqual(original);

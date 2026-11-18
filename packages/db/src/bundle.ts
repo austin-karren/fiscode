@@ -2,6 +2,7 @@ import type {
   ClientRow,
   EntityRow,
   ExpenseRow,
+  HistoryRow,
   HomeOfficeRow,
   IncomeRow,
   MileageRow,
@@ -17,7 +18,10 @@ import type {
  * on this. Producing a Bundle is the @fiscode/db's contract with the rest of
  * the app; consuming a Bundle is everyone else's.
  *
- * History is not part of the Bundle by design: CSV does not carry edit history.
+ * A Bundle built for a screen or an estimate holds live rows and no history.
+ * A Bundle built for a full export holds everything: soft-deleted rows and
+ * the edit history too (see `buildBundle`). tax_year_cache is never in it: it
+ * is a cache of downloaded tax figures.
  */
 export type Bundle = {
   profile: ProfileRow | undefined;
@@ -31,6 +35,7 @@ export type Bundle = {
   homeOffice: HomeOfficeRow[];
   expenses: ExpenseRow[];
   retirementContributions: RetirementContributionRow[];
+  history: HistoryRow[];
 };
 
 export const emptyBundle = (): Bundle => ({
@@ -45,4 +50,5 @@ export const emptyBundle = (): Bundle => ({
   homeOffice: [],
   expenses: [],
   retirementContributions: [],
+  history: [],
 });

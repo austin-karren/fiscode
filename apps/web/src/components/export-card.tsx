@@ -1,9 +1,10 @@
 import { Button } from "@fiscode/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { buildBundle } from "@fiscode/db";
-import { exportBundle } from "@fiscode/csv";
+import { exportBundle, exportFileName, type ExportOptions } from "@fiscode/csv";
 import { todayIso, yearOf } from "@fiscode/core";
 import { useState } from "react";
+import { toast } from "sonner";
 
 const downloadCsv = (filename: string, csv: string) => {
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -19,19 +20,32 @@ export function ExportCard() {
   const [busy, setBusy] = useState(false);
   const year = yearOf(todayIso());
 
-  const exportFull = async () => {
+  const run = async (options: ExportOptions) => {
     setBusy(true);
-    const bundle = await buildBundle();
-    downloadCsv(`fiscode-${todayIso()}.csv`, exportBundle(bundle, { scope: "full" }));
-    setBusy(false);
+    try {
+      // The file is the whole state: deleted rows always, and for the full
+      // backup the edit history too.
+      const bundle = await buildBundle({
+        includeDeleted: true,
+        includeHistory: options.scope === "full",
+      });
+      downloadCsv(exportFileName(options, todayIso()), exportBundle(bundle, options));
+    } catch (err) {
+      // The export refuses to write a value it could not read back, and the
+      // message names the row to fix.
+      console.error(err);
+      toast.error("Export failed.", {
+        description: err instanceof Error ? err.message : String(err),
+        duration: Infinity,
+        closeButton: true,
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const exportYearly = async () => {
-    setBusy(true);
-    const bundle = await buildBundle();
-    downloadCsv(`fiscode-${year}.csv`, exportBundle(bundle, { scope: "yearly", year }));
-    setBusy(false);
-  };
+  const exportFull = () => run({ scope: "full" });
+  const exportYearly = () => run({ scope: "yearly", year });
 
   return (
     <Card>

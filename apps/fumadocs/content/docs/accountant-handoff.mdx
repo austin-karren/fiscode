@@ -9,11 +9,20 @@ year-end packet) to a tax pro, then import any amendments they send back.
 
 ## Export the year
 
-From `/year-end`, click **Download year-end packet**. You get:
+From `/year-end`, click **Download &lt;year&gt; CSV**. You get:
 
-- `fiscode-<year>-yearly.csv` — every record dated within the year, plus the active profile,
-  entity, spouse, and home-office spans clipped to the year boundaries.
-- A printable summary view (open in a new tab, then print to PDF).
+- `fiscode-<year>-tax-year.csv` — every record dated within the year, plus the profile and the
+  entity, spouse, and home-office spans that overlap the year. Rows you deleted in the app are
+  left out, so the amounts in the file add up to what the app shows.
+- A printable summary view (print the page to PDF).
+
+The file opens in Excel, Google Sheets and Numbers as one small table per record type: income,
+expenses, mileage and so on. Money is in dollars, dates are `YYYY-MM-DD`, and each code has a
+label column beside it (`software_subs` next to `Software & subscriptions`). Ids and timestamps
+sit in the last columns of each table. See [CSV format](/docs/csv-format) for every column.
+
+If the accountant edits the file, ask them to keep dates as `YYYY-MM-DD`. A spreadsheet that
+rewrites a date as `1/15/2026` makes the importer reject that row instead of guessing.
 
 ## Import an amended CSV
 

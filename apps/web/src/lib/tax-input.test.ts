@@ -37,6 +37,7 @@ const makeBundle = (overrides: Partial<Bundle> = {}): Bundle => ({
   vehicles: [],
   mileage: [],
   homeOffice: [],
+  history: [],
   expenses: [],
   retirementContributions: [],
   ...overrides,

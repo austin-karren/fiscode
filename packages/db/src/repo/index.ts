@@ -94,8 +94,25 @@ export const historyRepo = {
 import type { Bundle } from "../bundle.ts";
 import { emptyBundle } from "../bundle.ts";
 
-/** Materialize the full Bundle from current DB state. */
-export const buildBundle = async (): Promise<Bundle> => {
+/**
+ * Materialize the Bundle from current DB state.
+ *
+ * By default only live rows, which is what the screens and the tax estimate
+ * want. Pass `includeDeleted` for anything that must carry the whole state:
+ * an export or a pre-import snapshot. Leaving soft-deleted rows out of an
+ * export would turn a delete into a permanent one after the next restore.
+ *
+ * Pass `includeHistory` as well for a full export, so a restore brings back
+ * the edit log. A pre-import snapshot leaves history out: the snapshot is
+ * itself stored as a history entry, and nesting the log inside each of its
+ * own entries would grow it without bound.
+ */
+export const buildBundle = async (
+  options: { includeDeleted?: boolean; includeHistory?: boolean } = {},
+): Promise<Bundle> => {
+  const rows = <T>(repo: { list(): Promise<T[]>; listIncludingDeleted(): Promise<T[]> }) =>
+    options.includeDeleted ? repo.listIncludingDeleted() : repo.list();
+  const history = options.includeHistory ? await historyRepo.listAll() : [];
   const [
     profileRow,
     entities,
@@ -110,16 +127,16 @@ export const buildBundle = async (): Promise<Bundle> => {
     retirementRows,
   ] = await Promise.all([
     profileRepo.get(),
-    entityRepo.list(),
-    spouseRepo.list(),
-    clientRepo.list(),
-    incomeRepo.list(),
-    timeRepo.list(),
-    vehicleRepo.list(),
-    mileageRepo.list(),
-    homeOfficeRepo.list(),
-    expenseRepo.list(),
-    retirementRepo.list(),
+    rows(entityRepo),
+    rows(spouseRepo),
+    rows(clientRepo),
+    rows(incomeRepo),
+    rows(timeRepo),
+    rows(vehicleRepo),
+    rows(mileageRepo),
+    rows(homeOfficeRepo),
+    rows(expenseRepo),
+    rows(retirementRepo),
   ]);
   return {
     ...emptyBundle(),
@@ -134,5 +151,6 @@ export const buildBundle = async (): Promise<Bundle> => {
     homeOffice: homeOfficeRows,
     expenses,
     retirementContributions: retirementRows,
+    history,
   };
 };

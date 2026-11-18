@@ -5,6 +5,7 @@ import {
   type ClientRow,
   type EntityRow,
   type ExpenseRow,
+  type HistoryRow,
   type HomeOfficeRow,
   type IncomeRow,
   type MileageRow,
@@ -14,8 +15,9 @@ import {
   type TimeEntryRow,
   type VehicleRow,
 } from "./bundle-types.ts";
-import { csvRowSchema, type CsvRow } from "./schema.ts";
-import { parseProvenance, type Provenance } from "./provenance.ts";
+import { csvRowSchema, READABLE_SCHEMA_VERSIONS, type CsvRow } from "./schema.ts";
+import { BOM, parseProvenanceLines, type Provenance } from "./provenance.ts";
+import { decodeCell, HEADER_LOOKUP } from "./sections.ts";
 
 // The schema (csvRowSchema in schema.ts) has already validated that numeric
 // columns are either empty/undefined OR parse to a finite integer. So by the
@@ -199,6 +201,17 @@ const rowToBundle = (rows: CsvRow[]): Bundle => {
           deletedAt: strOrNull(r.deleted_at),
         } satisfies RetirementContributionRow);
         break;
+      case "history":
+        b.history.push({
+          id: r.id,
+          entity: r.entity ?? "",
+          entityId: r.entity_id ?? "",
+          op: r.op ?? "",
+          beforeJson: strOrNull(r.before_json),
+          afterJson: strOrNull(r.after_json),
+          at: r.at ?? "",
+        } satisfies HistoryRow);
+        break;
     }
   }
   return b;
@@ -207,31 +220,213 @@ const rowToBundle = (rows: CsvRow[]): Bundle => {
 export type ImportResult = {
   bundle: Bundle;
   provenance: Partial<Provenance>;
-  validationErrors: Array<{ rowIndex: number; message: string }>;
+  validationErrors: ImportError[];
 };
 
+export type ImportError = {
+  /** Position among the data rows, from 0. -1 for an error about the whole file. */
+  rowIndex: number;
+  /**
+   * The row as a spreadsheet numbers it, from 1: comment lines, blank lines
+   * and headers all count, and a cell with line breaks is still one row.
+   * 0 when the error is not about one row.
+   */
+  line: number;
+  /** The row's first cell, e.g. `expense`. Empty when there is none. */
+  recordType: string;
+  message: string;
+};
+
+/** One error as a sentence a person can act on: `Row 50 (expense): amount: …`. */
+export const describeImportError = (e: ImportError): string => {
+  if (e.line === 0) return e.message;
+  return `Row ${e.line}${e.recordType ? ` (${e.recordType})` : ""}: ${e.message}`;
+};
+
+/** The first few errors as sentences, plus a count of the rest. */
+export const describeImportErrors = (errors: readonly ImportError[], limit = 5): string[] => {
+  const shown = errors.slice(0, limit).map(describeImportError);
+  const rest = errors.length - shown.length;
+  return rest > 0 ? [...shown, `…and ${rest} more.`] : shown;
+};
+
+/**
+ * Turn every record break (CRLF, LF or a lone CR) into LF, leaving line breaks
+ * inside quoted cells exactly as written. Papa picks one line ending per file
+ * from its first lines, so a file with mixed endings (an LF line typed above a
+ * CRLF export) would otherwise keep a stray CR on the last cell of each row.
+ * A quote opens a cell only at the start of a cell, as in Papa.
+ *
+ * Also drops a byte-order mark at the start of a record (the file's first, or
+ * a later one when two exports were joined). A mark inside a quoted cell is
+ * the user's text and stays.
+ */
+const normalizeRecordBreaks = (text: string): string => {
+  let out = "";
+  let inQuotes = false;
+  let atCellStart = true;
+  let atRecordStart = true;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (atRecordStart && ch === BOM) continue;
+    atRecordStart = !inQuotes && (ch === "\r" || ch === "\n");
+    if (inQuotes) {
+      out += ch;
+      if (ch === '"') {
+        if (text[i + 1] === '"') out += text[++i];
+        else inQuotes = false;
+      }
+      continue;
+    }
+    if (ch === "\r" || ch === "\n") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      out += "\n";
+      atCellStart = true;
+      continue;
+    }
+    if (ch === '"' && atCellStart) inQuotes = true;
+    atCellStart = ch === ",";
+    out += ch;
+  }
+  return out;
+};
+
+const isJson = (text: string): boolean => {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const isBlank = (row: readonly string[]): boolean => row.every((cell) => cell.trim() === "");
+const isComment = (row: readonly string[]): boolean => (row[0] ?? "").startsWith("#");
+
+/**
+ * Parse a fiscode CSV, old layout or new, with one set of rules:
+ *
+ * - A row whose first cell starts with `#` is a comment. The comments above
+ *   the first table carry provenance; later ones are section titles.
+ * - A row whose first cell is `record_type` is a header. It names the columns
+ *   of the rows below it, until the next header.
+ * - Any other non-blank row is data, read through the header above it.
+ *
+ * A v1 file is one header with every column and money in `*_cents` columns.
+ * A v2 file has a header per record type and money in dollar columns. The
+ * column name says which, so no version switch is needed to read amounts.
+ * The `# schema:` marker matters for one thing only: see `unguard` below.
+ */
 export const parseCsv = (raw: string): ImportResult => {
-  const { body, provenance } = parseProvenance(raw);
-  const parsed = Papa.parse<Record<string, string>>(body, {
-    header: true,
-    skipEmptyLines: true,
-    // Belt-and-suspenders in case provenance was already stripped externally
-    // or the file is from a future schema with `#` data lines.
-    comments: "#",
-  });
+  // Comments are dropped after parsing, not by Papa's `comments` option, so a
+  // `#` at the start of a line inside a quoted multi-line note is kept, and a
+  // comment line a spreadsheet has quoted or padded with commas still counts.
+  const text = normalizeRecordBreaks(raw);
+  // One entry per spreadsheet row, so index + 1 is the row number a person sees.
+  const all = Papa.parse<string[]>(text, { header: false, newline: "\n" }).data;
+  const firstBody = all.findIndex((row) => !isBlank(row) && !isComment(row));
+  const provenance = parseProvenanceLines(
+    all
+      .slice(0, firstBody === -1 ? all.length : firstBody)
+      .filter(isComment)
+      .map((row) => row[0]!),
+  );
+  if (provenance.schema !== undefined && !READABLE_SCHEMA_VERSIONS.includes(provenance.schema)) {
+    // A newer format may reuse a column name with a new meaning. Reading it
+    // with today's rules could import wrong values without any error.
+    return {
+      bundle: emptyBundle(),
+      provenance,
+      validationErrors: [
+        {
+          rowIndex: -1,
+          line: 0,
+          recordType: "",
+          message: `This file is marked schema ${provenance.schema}, which this version of fiscode cannot read. It was written by a newer fiscode: update the app, then import again.`,
+        },
+      ],
+    };
+  }
+  // v1 exports never wrote the `'` formula guard, so a leading `'=` in a file
+  // marked v1 is the user's own text. Anything else (v2, or a hand-written
+  // file with no marker) has the guard stripped.
+  const unguard = provenance.schema !== "v1";
+
   const validationErrors: ImportResult["validationErrors"] = [];
   const validated: CsvRow[] = [];
-  for (let i = 0; i < parsed.data.length; i++) {
-    const result = csvRowSchema.safeParse(parsed.data[i]);
+  let header: string[] | undefined;
+  let rowIndex = -1;
+  let profileLine = 0;
+  all.forEach((row, index) => {
+    if (isBlank(row) || isComment(row)) return;
+    // Header names are matched without regard to case or outer spaces.
+    if (row[0]!.trim().toLowerCase() === "record_type") {
+      header = row.map((name) => name.trim().toLowerCase());
+      return;
+    }
+    rowIndex++;
+    const where = { rowIndex, line: index + 1, recordType: row[0]!.trim() };
+    if (!header) {
+      validationErrors.push({
+        ...where,
+        message: "Row found before a header row (a header row starts with record_type)",
+      });
+      return;
+    }
+    const flat: Record<string, string> = {};
+    const filledBy: Record<string, string> = {};
+    const problems: string[] = [];
+    header.forEach((name, i) => {
+      const column = HEADER_LOOKUP.get(name);
+      if (!column) return; // label column or a column we don't know
+      const decoded = decodeCell(column.kind, row[i] ?? "", unguard);
+      if (!decoded.ok) {
+        problems.push(`${name}: ${decoded.message}`);
+        return;
+      }
+      // Two headers can fill one field, e.g. `amount` and `amount_cents`.
+      // An empty one gives way; two filled ones must agree.
+      const earlier = filledBy[column.key];
+      if (decoded.value === "") {
+        flat[column.key] ??= "";
+      } else if (earlier !== undefined && flat[column.key] !== decoded.value) {
+        problems.push(`${name}: disagrees with ${earlier} in the same row. Keep one of them`);
+      } else {
+        flat[column.key] = decoded.value;
+        filledBy[column.key] = name;
+      }
+    });
+    if (problems.length > 0) {
+      validationErrors.push({ ...where, message: problems.join("; ") });
+      return;
+    }
+    if (flat.record_type === "history") {
+      // A spreadsheet caps a cell at about 32,000 characters and cuts the rest
+      // without a word. A cut-off JSON cell would import "fine" and leave a
+      // history entry nothing can read, so check it parses.
+      for (const name of ["before_json", "after_json"] as const) {
+        if (flat[name] && !isJson(flat[name])) {
+          problems.push(
+            `${name}: This is not complete JSON. A spreadsheet probably cut the cell short when the file was saved. Import the original download instead`,
+          );
+        }
+      }
+      if (problems.length > 0) {
+        validationErrors.push({ ...where, message: problems.join("; ") });
+        return;
+      }
+    }
+    const result = csvRowSchema.safeParse(flat);
     if (result.success) {
+      if (result.data.record_type === "profile") profileLine = index + 1;
       validated.push(result.data);
     } else {
       validationErrors.push({
-        rowIndex: i,
+        ...where,
         message: result.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`).join("; "),
       });
     }
-  }
+  });
   const bundle = rowToBundle(validated);
   // Post-pass invariants. se_start_date is required by the DB schema and
   // by the tax-engine SE-range filter; an empty value silently disables
@@ -240,6 +435,8 @@ export const parseCsv = (raw: string): ImportResult => {
   if (bundle.profile && !bundle.profile.seStartDate) {
     validationErrors.push({
       rowIndex: -1,
+      line: profileLine,
+      recordType: "profile",
       message: "profile.se_start_date is required but missing or empty",
     });
   }
