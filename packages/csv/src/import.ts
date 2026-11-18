@@ -15,7 +15,8 @@ import {
   type VehicleRow,
 } from "./bundle-types.ts";
 import { csvRowSchema, type CsvRow } from "./schema.ts";
-import { parseProvenance, type Provenance } from "./provenance.ts";
+import { parseProvenanceLines, type Provenance } from "./provenance.ts";
+import { decodeCell, HEADER_LOOKUP } from "./sections.ts";
 
 // The schema (csvRowSchema in schema.ts) has already validated that numeric
 // columns are either empty/undefined OR parse to a finite integer. So by the
@@ -210,24 +211,115 @@ export type ImportResult = {
   validationErrors: Array<{ rowIndex: number; message: string }>;
 };
 
+/**
+ * Turn every record break (CRLF, LF or a lone CR) into LF, leaving line breaks
+ * inside quoted cells exactly as written. Papa picks one line ending per file
+ * from its first lines, so a file with mixed endings (an LF line typed above a
+ * CRLF export) would otherwise keep a stray CR on the last cell of each row.
+ * A quote opens a cell only at the start of a cell, as in Papa.
+ */
+const normalizeRecordBreaks = (text: string): string => {
+  let out = "";
+  let inQuotes = false;
+  let atCellStart = true;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (inQuotes) {
+      out += ch;
+      if (ch === '"') {
+        if (text[i + 1] === '"') out += text[++i];
+        else inQuotes = false;
+      }
+      continue;
+    }
+    if (ch === "\r" || ch === "\n") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      out += "\n";
+      atCellStart = true;
+      continue;
+    }
+    if (ch === '"' && atCellStart) inQuotes = true;
+    atCellStart = ch === ",";
+    out += ch;
+  }
+  return out;
+};
+
+const isBlank = (row: readonly string[]): boolean => row.every((cell) => cell.trim() === "");
+const isComment = (row: readonly string[]): boolean => (row[0] ?? "").startsWith("#");
+
+/**
+ * Parse a fiscode CSV, old layout or new, with one set of rules:
+ *
+ * - A row whose first cell starts with `#` is a comment. The comments above
+ *   the first table carry provenance; later ones are section titles.
+ * - A row whose first cell is `record_type` is a header. It names the columns
+ *   of the rows below it, until the next header.
+ * - Any other non-blank row is data, read through the header above it.
+ *
+ * A v1 file is one header with every column and money in `*_cents` columns.
+ * A v2 file has a header per record type and money in dollar columns. The
+ * column name says which, so no version switch is needed to read amounts.
+ * The `# schema:` marker matters for one thing only: see `unguard` below.
+ */
 export const parseCsv = (raw: string): ImportResult => {
-  const { body, provenance } = parseProvenance(raw);
-  const parsed = Papa.parse<Record<string, string>>(body, {
-    header: true,
-    skipEmptyLines: true,
-    // Belt-and-suspenders in case provenance was already stripped externally
-    // or the file is from a future schema with `#` data lines.
-    comments: "#",
-  });
+  // Comments are dropped after parsing, not by Papa's `comments` option, so a
+  // `#` at the start of a line inside a quoted multi-line note is kept, and a
+  // comment line a spreadsheet has quoted or padded with commas still counts.
+  // The byte-order mark is dropped at the start of any line, not only the
+  // first: joining two exports, or pasting a line above one, leaves it inside.
+  const text = normalizeRecordBreaks(raw.replace(/^﻿/gm, ""));
+  const all = Papa.parse<string[]>(text, { header: false, newline: "\n" }).data;
+  const rows = all.filter((row) => !isBlank(row));
+  const firstBody = rows.findIndex((row) => !isComment(row));
+  const provenance = parseProvenanceLines(
+    rows.slice(0, firstBody === -1 ? rows.length : firstBody).map((row) => row[0]!),
+  );
+  // v1 exports never wrote the `'` formula guard, so a leading `'=` in a file
+  // marked v1 is the user's own text. Anything else (v2, or a hand-written
+  // file with no marker) has the guard stripped.
+  const unguard = provenance.schema !== "v1";
+
   const validationErrors: ImportResult["validationErrors"] = [];
   const validated: CsvRow[] = [];
-  for (let i = 0; i < parsed.data.length; i++) {
-    const result = csvRowSchema.safeParse(parsed.data[i]);
+  let header: string[] | undefined;
+  let rowIndex = -1;
+  for (const row of rows) {
+    if (isComment(row)) continue;
+    if (row[0]!.trim() === "record_type") {
+      header = row.map((name) => name.trim());
+      continue;
+    }
+    rowIndex++;
+    if (!header) {
+      validationErrors.push({
+        rowIndex,
+        message: "Row found before a header row (a header row starts with record_type)",
+      });
+      continue;
+    }
+    const flat: Record<string, string> = {};
+    const problems: string[] = [];
+    header.forEach((name, i) => {
+      const column = HEADER_LOOKUP.get(name);
+      if (!column) return; // label column or a column we don't know
+      const decoded = decodeCell(column.kind, row[i] ?? "", unguard);
+      if (!decoded.ok) problems.push(`${name}: ${decoded.message}`);
+      // `amount` and `amount_cents` in one header: the filled one wins.
+      else if (decoded.value !== "" || flat[column.key] === undefined) {
+        flat[column.key] = decoded.value;
+      }
+    });
+    if (problems.length > 0) {
+      validationErrors.push({ rowIndex, message: problems.join("; ") });
+      continue;
+    }
+    const result = csvRowSchema.safeParse(flat);
     if (result.success) {
       validated.push(result.data);
     } else {
       validationErrors.push({
-        rowIndex: i,
+        rowIndex,
         message: result.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`).join("; "),
       });
     }

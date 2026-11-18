@@ -1,7 +1,7 @@
 import { Button } from "@fiscode/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { buildBundle } from "@fiscode/db";
-import { exportBundle } from "@fiscode/csv";
+import { exportBundle, exportFileName } from "@fiscode/csv";
 import { todayIso, yearOf } from "@fiscode/core";
 import { useState } from "react";
 
@@ -22,14 +22,16 @@ export function ExportCard() {
   const exportFull = async () => {
     setBusy(true);
     const bundle = await buildBundle();
-    downloadCsv(`fiscode-${todayIso()}.csv`, exportBundle(bundle, { scope: "full" }));
+    const options = { scope: "full" } as const;
+    downloadCsv(exportFileName(options, todayIso()), exportBundle(bundle, options));
     setBusy(false);
   };
 
   const exportYearly = async () => {
     setBusy(true);
     const bundle = await buildBundle();
-    downloadCsv(`fiscode-${year}.csv`, exportBundle(bundle, { scope: "yearly", year }));
+    const options = { scope: "yearly", year } as const;
+    downloadCsv(exportFileName(options, todayIso()), exportBundle(bundle, options));
     setBusy(false);
   };
 

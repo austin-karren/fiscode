@@ -1,7 +1,12 @@
 import Papa from "papaparse";
 import type { Bundle } from "./bundle-types.ts";
 import { CSV_COLUMNS, type CsvRow, type RecordType } from "./schema.ts";
-import { buildProvenance, type Provenance } from "./provenance.ts";
+import { buildProvenance, EOL, type Provenance } from "./provenance.ts";
+import { encodeCell, guardText, isStored, SECTIONS, type Lookup } from "./sections.ts";
+
+// Excel reads a CSV without a byte-order mark in the local code page, which
+// turns é or § into mojibake. Sheets and Numbers accept the mark too.
+const BOM = "﻿";
 
 const bool = (v: boolean | null | undefined): string => (v === true ? "1" : v === false ? "0" : "");
 const num = (v: number | null | undefined): string =>
@@ -235,15 +240,44 @@ export const exportBundle = (bundle: Bundle, options: ExportOptions): string => 
     year: options.year,
     exportedAt: options.exportedAt ?? new Date().toISOString(),
   };
-  const header = buildProvenance(provenance);
-  const csv = Papa.unparse(
-    {
-      fields: CSV_COLUMNS as unknown as string[],
-      data: rows,
-    },
-    { quotes: false, header: true, newline: "\n" },
-  );
-  return header + csv + "\n";
+  const lookup: Lookup = {
+    clientNames: new Map(filtered.clients.map((c) => [c.id, c.name])),
+    vehicleNames: new Map(
+      filtered.vehicles.map((v) => [
+        v.id,
+        [v.year === null ? "" : String(v.year), v.make, v.model].filter(Boolean).join(" "),
+      ]),
+    ),
+  };
+  let out = BOM + buildProvenance(provenance);
+  for (const section of SECTIONS) {
+    const sectionRows = rows.filter((r) => r.record_type === section.recordType);
+    if (sectionRows.length === 0) continue;
+    const table = [
+      section.columns.map((c) => c.name),
+      ...sectionRows.map((row) =>
+        section.columns.map((c) =>
+          isStored(c) ? encodeCell(c, row[c.key] ?? "") : guardText(c.derive(row, lookup)),
+        ),
+      ),
+    ];
+    // Papa quotes any cell holding a comma, a quote, a line break or outer
+    // spaces, and doubles inner quotes (RFC 4180).
+    out += EOL + `# ${section.title}` + EOL + Papa.unparse(table, { newline: EOL }) + EOL;
+  }
+  return out;
 };
+
+/**
+ * The download name for an export. The yearly file is the one handed to an
+ * accountant; the full file is a dated backup. `today` is ISO `YYYY-MM-DD`.
+ */
+export const exportFileName = (
+  options: Pick<ExportOptions, "scope" | "year">,
+  today: string,
+): string =>
+  options.scope === "yearly" && options.year !== undefined
+    ? `fiscode-${options.year}-tax-year.csv`
+    : `fiscode-full-backup-${today}.csv`;
 
 export { bundleToRows };

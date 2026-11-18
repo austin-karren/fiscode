@@ -3,7 +3,7 @@ import { Card } from "@fiscode/ui/components/card";
 import { Button } from "@fiscode/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
 import { buildBundle } from "@fiscode/db";
-import { exportBundle } from "@fiscode/csv";
+import { exportBundle, exportFileName } from "@fiscode/csv";
 import { estimateYear, getYearConfig } from "@fiscode/tax";
 import { cents, formatUSD, todayIso, yearOf } from "@fiscode/core";
 import { CircleAlert, FileSpreadsheet } from "lucide-react";
@@ -71,12 +71,13 @@ function YearEndPage() {
   }
 
   const download = () => {
-    const csv = exportBundle(bundle, { scope: "yearly", year });
+    const options = { scope: "yearly", year } as const;
+    const csv = exportBundle(bundle, options);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `fiscode-${year}.csv`;
+    a.download = exportFileName(options, todayIso());
     a.click();
     URL.revokeObjectURL(url);
   };

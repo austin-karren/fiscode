@@ -1,10 +1,15 @@
 import { z } from "zod";
 
-// Single flat column set for the entire export. Every row carries
-// `record_type` and `id`; empty fields are serialized as empty strings.
-// Adding new fields = new optional columns; existing exports still parse.
+// The flat row: every stored field of every record type, keyed by its v1
+// column name. Every row carries `record_type` and `id`; empty fields are
+// empty strings. Adding new fields = new optional columns; existing exports
+// still parse.
+//
+// v1 files wrote this row as is, one 50-column table. v2 files (sections.ts)
+// lay the same fields out as one table per record type, with money in
+// dollars. The importer maps both back to this flat row before validating.
 
-export const CSV_SCHEMA_VERSION = "v1" as const;
+export const CSV_SCHEMA_VERSION = "v2" as const;
 
 export const recordTypeSchema = z.enum([
   "profile",
@@ -119,8 +124,9 @@ export const csvRowSchema = z.object({
 });
 export type CsvRow = z.infer<typeof csvRowSchema>;
 
-// The canonical column order for exports. New columns are appended at the end
-// to preserve diff stability across versions.
+// Every flat-row key, in the v1 column order. v1 exports used this as their
+// one header; the importer still accepts each name. The v2 column order per
+// record type lives in sections.ts.
 export const CSV_COLUMNS: ReadonlyArray<keyof CsvRow> = [
   "record_type",
   "id",
