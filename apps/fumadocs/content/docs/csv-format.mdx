@@ -37,24 +37,39 @@ Within a table the readable columns come first (date, name, amount, category) an
 timestamps come last. Rows are in date order, then id order. A record type with no rows is left
 out of the file.
 
-The file holds **every row, including deleted ones**. Deleting in fiscode is a soft delete: the
-row stays and gets a `deleted_at` time. A deleted row is exported with that time filled in and
-comes back deleted on import, so a restore never turns a delete into a permanent one. If you are
-reading the file as an accountant, skip any row with a value in `deleted_at`.
+The **full export holds every row, including deleted ones**. Deleting in fiscode is a soft delete:
+the row stays and gets a `deleted_at` time. Deleted rows are written in a table of their own,
+right after the live table of the same record type, with a title that says so:
+
+```
+# Expenses
+record_type,date,category,…
+expense,2026-01-20,equipment,…
+
+# Expenses (deleted - not part of your books)
+record_type,date,category,…
+expense,2026-02-02,supplies,…,2026-08-01T09:30:00.000Z
+```
+
+They come back deleted on import, so a restore never turns a delete into a permanent one. Do not
+add them to your totals.
+
+The **yearly export leaves deleted rows out**. It is the file for your accountant, so the amounts
+in it add up to what the app shows.
 
 The file holds **nothing that depends on when or where it was exported**. Two exports of the same
 data are the same bytes. The export date is in the file name instead.
 
 ### What is in the file, and what is not
 
-| In fiscode                                    | Full export | Yearly export           |
-| --------------------------------------------- | ----------- | ----------------------- |
-| Profile, clients, vehicles                    | yes         | yes                     |
-| Income, expenses, mileage, time, retirement   | yes         | rows dated in that year |
-| Entity, spouse and home-office spans          | yes         | spans that overlap it   |
-| Deleted rows                                  | yes         | yes, by the same rules  |
-| Edit history (the log behind `/history`)      | yes         | no                      |
-| Downloaded tax figures (the `/tax-data` page) | no          | no                      |
+| In fiscode                                    | Full export              | Yearly export           |
+| --------------------------------------------- | ------------------------ | ----------------------- |
+| Profile, clients, vehicles                    | yes                      | yes                     |
+| Income, expenses, mileage, time, retirement   | yes                      | rows dated in that year |
+| Entity, spouse and home-office spans          | yes                      | spans that overlap it   |
+| Deleted rows                                  | yes, in their own tables | no                      |
+| Edit history (the log behind `/history`)      | yes                      | no                      |
+| Downloaded tax figures (the `/tax-data` page) | no                       | no                      |
 
 The downloaded tax figures are a cache. fiscode fetches them again by itself, so they are never
 exported.
@@ -64,6 +79,12 @@ The **History** table is the last one in a full export. Each row is one change: 
 text. It is there so a restore brings the log back; it is not meant for reading. An import also
 logs itself as one history row that holds the whole state from before the import, so a file from
 an app that has imported before can be much larger than its data.
+
+**Keep the original download of a full backup.** Spreadsheets cap a cell at about 32,000
+characters and cut off the rest when they save. A full backup that has been opened and saved in a
+spreadsheet may hold a cut-off history cell. The importer checks each history cell and rejects the
+file, naming the row, rather than restore a broken log. The yearly file has no history and is safe
+to edit and save.
 
 ## Two workflows
 
@@ -477,6 +498,8 @@ Common rejections:
   count toward the year.
 - **Bad yes / no values** — `yes`, `no`, `1`, `0` or empty only.
 - **A row before any header row.**
+- **A history cell that is not complete JSON** — a spreadsheet cut it short. Import the original
+  download.
 
 ## Round-trip guarantee
 

@@ -3,7 +3,15 @@ import type Database from "better-sqlite3";
 import { applyImport, emptyBundle as emptyCsvBundle, exportBundle, parseCsv } from "@fiscode/csv";
 import { setupTestDb, teardownTestDb } from "../test/setup-db.ts";
 import type { Bundle as DbBundle } from "../bundle.ts";
-import { buildBundle, clientRepo, expenseRepo, historyRepo, importBundle } from "./index.ts";
+import {
+  buildBundle,
+  clientRepo,
+  expenseRepo,
+  historyRepo,
+  importBundle,
+  mileageRepo,
+  vehicleRepo,
+} from "./index.ts";
 
 const FIXED = "2026-06-04T12:00:00.000Z";
 
@@ -366,15 +374,106 @@ describe("the export is the whole state, and the same bytes every time", () => {
     expect(JSON.parse(snapshot.beforeJson!).expenses).toHaveLength(1);
   });
 
-  it("the yearly file carries deleted rows but no history", async () => {
+  it("the full file keeps a deleted row in a table of its own, after the live rows", async () => {
+    await importBundle(bundle, "import-overwrite");
+    const live = await expenseRepo.create({
+      date: "2026-03-06",
+      amountCents: 8950,
+      category: "supplies",
+      clientId: null,
+      description: "Still here",
+      reason: null,
+      notes: null,
+      flagForSection179: false,
+      startupExpense: false,
+      deletedAt: null,
+    });
+    await expenseRepo.softDelete("ex_1");
+    const lines = (await exportAll()).split("\r\n");
+    const at = (needle: string) => lines.findIndex((l) => l.includes(needle));
+    expect(at("# Expenses")).toBeGreaterThan(0);
+    expect(at(live.id)).toBeGreaterThan(at("# Expenses"));
+    expect(at("# Expenses (deleted - not part of your books)")).toBeGreaterThan(at(live.id));
+    expect(at("ex_1")).toBeGreaterThan(at("# Expenses (deleted - not part of your books)"));
+  });
+
+  it("an archived client and vehicle keep their live income and mileage rows through a restore", async () => {
+    await importBundle(bundle, "import-overwrite");
+    const car = await vehicleRepo.create({
+      make: "Toyota",
+      model: "RAV4",
+      year: 2022,
+      mpg: 28,
+      method: "standard_mileage",
+      inServiceDate: "2026-01-01",
+      notes: null,
+      deletedAt: null,
+    });
+    const trip = await mileageRepo.create({
+      date: "2026-03-03",
+      vehicleId: car.id,
+      businessMiles: 31,
+      purpose: "Site visit",
+      notes: null,
+      deletedAt: null,
+    });
+    // Archive both parents. Their children stay live.
+    await clientRepo.softDelete("cl_1");
+    await vehicleRepo.softDelete(car.id);
+    const parents = async () => ({
+      client: (await clientRepo.listIncludingDeleted()).find((r) => r.id === "cl_1")!,
+      vehicle: (await vehicleRepo.listIncludingDeleted()).find((r) => r.id === car.id)!,
+    });
+    const before = await parents();
+    expect(before.client.deletedAt).not.toBeNull();
+    expect(before.vehicle.deletedAt).not.toBeNull();
+
+    // In the file a child row names its parent even though the parent is archived.
+    const childNames = (csv: string) => {
+      const line = (id: string) => csv.split("\r\n").find((l) => l.split(",").includes(id))!;
+      return { income: line("in_1").split(",")[2], mileage: line(trip.id).split(",")[2] };
+    };
+    const first = await exportAll();
+    expect(childNames(first)).toEqual({ income: "Acme", mileage: "2022 Toyota RAV4" });
+    // The archived parents sit in the deleted tables; the children are in the live ones.
+    const lines = first.split("\r\n");
+    const at = (needle: string) => lines.findIndex((l) => l.startsWith(needle));
+    expect(at("client,Acme")).toBeGreaterThan(at("# Clients (deleted"));
+    expect(at("vehicle,Toyota")).toBeGreaterThan(at("# Vehicles (deleted"));
+    expect(at("# Income (deleted")).toBe(-1);
+    expect(at("# Mileage (deleted")).toBe(-1);
+
+    // The yearly file leaves the archived parents out but still names them.
+    const yearly = exportBundle(await buildBundle({ includeDeleted: true }), {
+      scope: "yearly",
+      year: 2026,
+    });
+    expect(yearly).not.toContain("# Clients");
+    expect(yearly).not.toContain("# Vehicles");
+    expect(childNames(yearly)).toEqual({ income: "Acme", mileage: "2022 Toyota RAV4" });
+
+    await restoreIntoEmptyDb(first);
+    expect(await parents()).toEqual(before);
+    const live = await buildBundle();
+    expect(live.clients).toEqual([]);
+    expect(live.vehicles).toEqual([]);
+    expect(live.income.find((r) => r.id === "in_1")?.clientId).toBe("cl_1");
+    expect(live.mileage.find((r) => r.id === trip.id)?.vehicleId).toBe(car.id);
+    expect(await exportAll()).toBe(first);
+  });
+
+  it("the yearly file leaves out deleted rows and history", async () => {
     await importBundle(bundle, "import-overwrite");
     await expenseRepo.softDelete("ex_1");
     const yearly = exportBundle(await buildBundle({ includeDeleted: true, includeHistory: true }), {
       scope: "yearly",
       year: 2026,
     });
-    expect(yearly).toContain("ex_1");
+    // The accountant's view: what the app shows, nothing a sum would double count.
+    expect(yearly).not.toContain("ex_1");
+    expect(yearly).not.toContain("(deleted");
     expect(yearly).not.toContain("# History");
+    expect(yearly).toContain("in_1");
   });
 
   it("the default bundle still holds live rows only", async () => {

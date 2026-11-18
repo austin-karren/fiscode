@@ -2,7 +2,14 @@ import Papa from "papaparse";
 import type { Bundle } from "./bundle-types.ts";
 import { CSV_COLUMNS, type CsvRow, type RecordType } from "./schema.ts";
 import { BOM, buildProvenance, EOL } from "./provenance.ts";
-import { encodeCell, guardText, isStored, SECTIONS, type Lookup } from "./sections.ts";
+import {
+  encodeCell,
+  guardText,
+  isStored,
+  SECTIONS,
+  type Lookup,
+  type Section,
+} from "./sections.ts";
 
 const bool = (v: boolean | null | undefined): string => (v === true ? "1" : v === false ? "0" : "");
 const num = (v: number | null | undefined): string =>
@@ -239,17 +246,23 @@ const filterYearly = (bundle: Bundle, year: number): Bundle => {
     if (end !== null && end < yearStart) return false;
     return true;
   };
+  // The yearly file is for an accountant, not a backup. Someone who sums its
+  // amount column must get the same total the app shows, so deleted rows stay
+  // out, as does the edit log. The full export carries both.
+  const live = <T extends { deletedAt: string | null }>(rows: T[]): T[] =>
+    rows.filter((r) => r.deletedAt === null);
   return {
     ...bundle,
-    income: bundle.income.filter((r) => within(r.date)),
-    timeEntries: bundle.timeEntries.filter((r) => within(r.date)),
-    mileage: bundle.mileage.filter((r) => within(r.date)),
-    expenses: bundle.expenses.filter((r) => within(r.date)),
-    retirementContributions: bundle.retirementContributions.filter((r) => within(r.date)),
-    entities: bundle.entities.filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
-    spouses: bundle.spouses.filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
-    homeOffice: bundle.homeOffice.filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
-    // The yearly file is for an accountant, not a backup: no edit log.
+    clients: live(bundle.clients),
+    vehicles: live(bundle.vehicles),
+    income: live(bundle.income).filter((r) => within(r.date)),
+    timeEntries: live(bundle.timeEntries).filter((r) => within(r.date)),
+    mileage: live(bundle.mileage).filter((r) => within(r.date)),
+    expenses: live(bundle.expenses).filter((r) => within(r.date)),
+    retirementContributions: live(bundle.retirementContributions).filter((r) => within(r.date)),
+    entities: live(bundle.entities).filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
+    spouses: live(bundle.spouses).filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
+    homeOffice: live(bundle.homeOffice).filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
     history: [],
   };
 };
@@ -267,9 +280,11 @@ export const exportBundle = (bundle: Bundle, options: ExportOptions): string => 
       : bundle;
   const rows = bundleToRows(filtered);
   const lookup: Lookup = {
-    clientNames: new Map(filtered.clients.map((c) => [c.id, c.name])),
+    // Names come from the unfiltered bundle: a live income row still names
+    // its client when that client is deleted or left out of the yearly file.
+    clientNames: new Map(bundle.clients.map((c) => [c.id, c.name])),
     vehicleNames: new Map(
-      filtered.vehicles.map((v) => [
+      bundle.vehicles.map((v) => [
         v.id,
         [v.year === null ? "" : String(v.year), v.make, v.model].filter(Boolean).join(" "),
       ]),
@@ -278,26 +293,48 @@ export const exportBundle = (bundle: Bundle, options: ExportOptions): string => 
   let out = BOM + buildProvenance(options);
   for (const section of SECTIONS) {
     const sectionRows = rows.filter((r) => r.record_type === section.recordType).sort(byRowOrder);
-    if (sectionRows.length === 0) continue;
-    const table = [
-      section.columns.map((c) => c.name),
-      ...sectionRows.map((row) =>
-        section.columns.map((c) => {
-          try {
-            return isStored(c) ? encodeCell(c, row[c.key] ?? "") : guardText(c.derive(row, lookup));
-          } catch (cause) {
-            // Name the row so the user can find and fix it in the app.
-            const why = cause instanceof Error ? cause.message : String(cause);
-            throw new Error(`Cannot export ${section.recordType} row ${row.id}: ${why}`, { cause });
-          }
-        }),
-      ),
-    ];
-    // Papa quotes any cell holding a comma, a quote, a line break or outer
-    // spaces, and doubles inner quotes (RFC 4180).
-    out += EOL + `# ${section.title}` + EOL + Papa.unparse(table, { newline: EOL }) + EOL;
+    // Deleted rows get a table of their own, after the live one and titled so
+    // nobody adds them up. The importer reads it like any other table: the
+    // title is a comment and the rows carry their `deleted_at`.
+    const live = sectionRows.filter((r) => !r.deleted_at);
+    const deleted = sectionRows.filter((r) => r.deleted_at);
+    out += writeTable(section, section.title, live, lookup);
+    out += writeTable(section, `${section.title}${DELETED_TITLE_SUFFIX}`, deleted, lookup);
   }
   return out;
+};
+
+/**
+ * Appended to a section title for the table that holds its deleted rows. No
+ * comma: a title is one cell, and a comma would split it in two.
+ */
+export const DELETED_TITLE_SUFFIX = " (deleted - not part of your books)";
+
+/** One titled table as CSV text, or nothing when it has no rows. */
+const writeTable = (
+  section: Section,
+  title: string,
+  sectionRows: Record<string, string>[],
+  lookup: Lookup,
+): string => {
+  if (sectionRows.length === 0) return "";
+  const table = [
+    section.columns.map((c) => c.name),
+    ...sectionRows.map((row) =>
+      section.columns.map((c) => {
+        try {
+          return isStored(c) ? encodeCell(c, row[c.key] ?? "") : guardText(c.derive(row, lookup));
+        } catch (cause) {
+          // Name the row so the user can find and fix it in the app.
+          const why = cause instanceof Error ? cause.message : String(cause);
+          throw new Error(`Cannot export ${section.recordType} row ${row.id}: ${why}`, { cause });
+        }
+      }),
+    ),
+  ];
+  // Papa quotes any cell holding a comma, a quote, a line break or outer
+  // spaces, and doubles inner quotes (RFC 4180).
+  return EOL + `# ${title}` + EOL + Papa.unparse(table, { newline: EOL }) + EOL;
 };
 
 /**

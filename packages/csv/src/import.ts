@@ -291,6 +291,15 @@ const normalizeRecordBreaks = (text: string): string => {
   return out;
 };
 
+const isJson = (text: string): boolean => {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const isBlank = (row: readonly string[]): boolean => row.every((cell) => cell.trim() === "");
 const isComment = (row: readonly string[]): boolean => (row[0] ?? "").startsWith("#");
 
@@ -390,6 +399,22 @@ export const parseCsv = (raw: string): ImportResult => {
     if (problems.length > 0) {
       validationErrors.push({ ...where, message: problems.join("; ") });
       return;
+    }
+    if (flat.record_type === "history") {
+      // A spreadsheet caps a cell at about 32,000 characters and cuts the rest
+      // without a word. A cut-off JSON cell would import "fine" and leave a
+      // history entry nothing can read, so check it parses.
+      for (const name of ["before_json", "after_json"] as const) {
+        if (flat[name] && !isJson(flat[name])) {
+          problems.push(
+            `${name}: This is not complete JSON. A spreadsheet probably cut the cell short when the file was saved. Import the original download instead`,
+          );
+        }
+      }
+      if (problems.length > 0) {
+        validationErrors.push({ ...where, message: problems.join("; ") });
+        return;
+      }
     }
     const result = csvRowSchema.safeParse(flat);
     if (result.success) {

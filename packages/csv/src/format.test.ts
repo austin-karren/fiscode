@@ -5,7 +5,7 @@ import Papa from "papaparse";
 import { describe, expect, it, vi } from "vitest";
 import { emptyBundle, type Bundle, type ExpenseRow, type IncomeRow } from "./bundle-types.ts";
 import { EXAMPLE_FIXED_TIMESTAMP, exampleBundle } from "./example.ts";
-import { bundleToRows, exportBundle, exportFileName } from "./export.ts";
+import { bundleToRows, DELETED_TITLE_SUFFIX, exportBundle, exportFileName } from "./export.ts";
 import { describeImportError, describeImportErrors, parseCsv } from "./import.ts";
 import { BOM, stripBom } from "./provenance.ts";
 import { isStored, SECTIONS } from "./sections.ts";
@@ -27,6 +27,26 @@ const section = (csv: string, recordType: string): Array<Record<string, string>>
     if (row[0] === "record_type") header = row;
     else if (row[0] === recordType) {
       out.push(Object.fromEntries(header.map((h, i) => [h, row[i] ?? ""])));
+    }
+  }
+  return out;
+};
+
+// Every table of an export in file order: its `# Title` line and, per row,
+// the id and the deleted_at cell.
+const tables = (csv: string): Array<{ title: string; rows: Array<[string, string]> }> => {
+  const out: Array<{ title: string; rows: Array<[string, string]> }> = [];
+  let title = "";
+  let header: string[] = [];
+  for (const row of cells(csv)) {
+    const first = row[0] ?? "";
+    if (first.startsWith("#")) title = first;
+    else if (first === "record_type") {
+      header = row;
+      out.push({ title, rows: [] });
+    } else if (first !== "") {
+      const cell = (name: string) => row[header.indexOf(name)] ?? "";
+      out.at(-1)!.rows.push([cell("id"), cell("deleted_at")]);
     }
   }
   return out;
@@ -141,14 +161,89 @@ describe("round trip is byte-identical", () => {
       expense({ id: "ex_gone", amountCents: 2500, deletedAt }),
     );
     const first = exportFull(bundle);
-    expect(section(first, "expense").map((r) => [r.id, r.deleted_at])).toEqual([
-      ["ex_gone", deletedAt],
-      ["ex_live", ""],
+    // Its own table, after the live one, titled so nobody adds it up.
+    expect(tables(first)).toEqual([
+      { title: "# Expenses", rows: [["ex_live", ""]] },
+      { title: "# Expenses (deleted - not part of your books)", rows: [["ex_gone", deletedAt]] },
     ]);
+    // The title is one cell: nothing spills into column B.
+    expect(
+      cells(first)
+        .filter((r) => (r[0] ?? "").startsWith("# "))
+        .map((r) => r.length),
+    ).toEqual([1, 1, 1, 1]);
     const { bundle: round, validationErrors } = parseCsv(first);
     expect(validationErrors).toEqual([]);
     expect(round.expenses.find((r) => r.id === "ex_gone")?.deletedAt).toBe(deletedAt);
+    expect(round.expenses.find((r) => r.id === "ex_live")?.deletedAt).toBeNull();
     expect(exportFull(round)).toBe(first);
+  });
+
+  // A bundle with a live and a deleted row of every record type that can be deleted.
+  const halfDeleted = (): Bundle => {
+    const gone = "2026-09-09T09:09:09.000Z";
+    const b = exampleBundle();
+    const twin = <T extends { id: string; deletedAt: string | null }>(rows: T[]): T[] =>
+      rows.flatMap((r) => [r, { ...r, id: `${r.id}_gone`, deletedAt: gone }]);
+    return {
+      ...b,
+      entities: twin(b.entities),
+      spouses: twin(b.spouses),
+      clients: twin(b.clients),
+      income: twin(b.income),
+      timeEntries: twin(b.timeEntries),
+      vehicles: twin(b.vehicles),
+      mileage: twin(b.mileage),
+      homeOffice: twin(b.homeOffice),
+      expenses: twin(b.expenses),
+      retirementContributions: twin(b.retirementContributions),
+    };
+  };
+
+  it("no live table of the full file holds a deleted row, and every deleted row is kept", () => {
+    const bundle = halfDeleted();
+    const first = exportFull(bundle);
+    const all = tables(first);
+    const isDeletedTable = (t: { title: string }) => t.title.endsWith(DELETED_TITLE_SUFFIX);
+    expect(all.filter(isDeletedTable)).toHaveLength(10);
+    for (const table of all) {
+      for (const [, deletedAt] of table.rows) {
+        expect(deletedAt !== "", table.title).toBe(isDeletedTable(table));
+      }
+    }
+    // Each deleted table sits right after the live table of the same record type.
+    all.forEach((table, i) => {
+      if (isDeletedTable(table)) {
+        expect(all[i - 1]!.title + DELETED_TITLE_SUFFIX).toBe(table.title);
+      }
+    });
+    const { bundle: round, validationErrors } = parseCsv(first);
+    expect(validationErrors).toEqual([]);
+    expect(round.expenses.filter((r) => r.deletedAt !== null)).toHaveLength(3);
+    expect(round.income).toHaveLength(bundle.income.length);
+    expect(exportFull(round)).toBe(first);
+  });
+
+  it("the yearly file leaves deleted rows out, so its amounts add up to what the app shows", () => {
+    const bundle = halfDeleted();
+    const yearly = exportBundle(bundle, { scope: "yearly", year: 2026 });
+    expect(yearly).not.toContain(DELETED_TITLE_SUFFIX);
+    expect(yearly).not.toContain("_gone");
+    for (const table of tables(yearly)) {
+      expect(table.rows.every(([, deletedAt]) => deletedAt === "")).toBe(true);
+    }
+    const cents = (rows: Array<Record<string, string>>) =>
+      rows.reduce((sum, r) => sum + Math.round(Number(r.amount) * 100), 0);
+    expect(cents(section(yearly, "expense"))).toBe(89_999 + 12_000 + 25_000);
+    expect(cents(section(yearly, "income"))).toBe(1_000_000 + 350_000 + 625_000);
+  });
+
+  it("a live row in the yearly file still names a client that was deleted", () => {
+    const bundle = exampleBundle();
+    bundle.clients = bundle.clients.map((c) => ({ ...c, deletedAt: "2026-09-09T09:09:09.000Z" }));
+    const yearly = exportBundle(bundle, { scope: "yearly", year: 2026 });
+    expect(section(yearly, "client")).toEqual([]);
+    expect(section(yearly, "income")[0]!.client_name).toBe("Stable Commission Co");
   });
 
   it("holds for awkward text: commas, quotes, newlines, formula starts, non-ASCII, padding", () => {
@@ -875,6 +970,52 @@ describe("no stored field is left out", () => {
     expect(parseCsv(first).bundle.history).toEqual(bundle.history);
     const yearly = exportBundle(bundle, { scope: "yearly", year: 2026 });
     expect(yearly).not.toContain("# History");
+  });
+
+  it("rejects a history cell a spreadsheet has cut short, instead of storing broken JSON", () => {
+    // Spreadsheets cap a cell near 32,000 characters and drop the rest silently.
+    const long = JSON.stringify({ id: "ex_1", notes: "x".repeat(40_000) });
+    const entry = {
+      id: "h_1",
+      entity: "expense",
+      entityId: "ex_1",
+      op: "update",
+      beforeJson: long,
+      afterJson: '{"id":"ex_1"}',
+      at: "2026-06-04T12:00:00.000Z",
+    };
+    const whole = exportFull({ ...emptyBundle(), history: [entry] });
+    // Compared with === so a failure does not print 40,000 characters.
+    expect(parseCsv(whole).bundle.history[0]!.beforeJson === long).toBe(true);
+    const CUT_SHORT_MESSAGE =
+      "Row 6 (history): before_json: This is not complete JSON. A spreadsheet probably cut the cell short when the file was saved. Import the original download instead";
+
+    // The same file after a spreadsheet kept only the first 32,000 characters.
+    const cut = exportFull({
+      ...emptyBundle(),
+      history: [{ ...entry, beforeJson: long.slice(0, 32_000) }],
+    });
+    const { bundle, validationErrors } = parseCsv(cut);
+    expect(bundle.history.length).toBe(0);
+    expect(validationErrors.length).toBe(1);
+    expect(describeImportError(validationErrors[0]!) === CUT_SHORT_MESSAGE).toBe(true);
+  });
+
+  it("accepts a history row with one JSON cell empty", () => {
+    const entry = {
+      id: "h_1",
+      entity: "client",
+      entityId: "cl_1",
+      op: "insert",
+      beforeJson: null,
+      afterJson: '{"id":"cl_1"}',
+      at: "2026-06-04T12:00:00.000Z",
+    };
+    const { bundle, validationErrors } = parseCsv(
+      exportFull({ ...emptyBundle(), history: [entry] }),
+    );
+    expect(validationErrors).toEqual([]);
+    expect(bundle.history).toEqual([entry]);
   });
 
   it("an income row still names its client after the client is deleted", () => {
