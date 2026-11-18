@@ -97,6 +97,7 @@ export function EditHomeOfficeDialog({
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d ?? new Date())}
                     />
                   </FormControl>
@@ -111,6 +112,7 @@ export function EditHomeOfficeDialog({
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
                       disableFuture={false}
                     />
@@ -126,6 +128,7 @@ export function EditHomeOfficeDialog({
                   <FormControl>
                     <SelectWithLabels
                       value={field.state.value}
+                      onBlur={field.handleBlur}
                       onValueChange={(v) => field.handleChange(v as "simplified" | "actual")}
                       items={METHOD_OPTIONS}
                     />

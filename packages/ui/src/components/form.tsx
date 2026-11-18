@@ -87,6 +87,7 @@ export function FormLabel({ className, ...props }: React.ComponentProps<typeof L
   return (
     <Label
       data-slot="form-label"
+      id={`${formItemId}-label`}
       data-error={!!error}
       className={cn("data-[error=true]:text-destructive", className)}
       htmlFor={formItemId}

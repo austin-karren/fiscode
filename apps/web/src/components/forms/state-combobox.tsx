@@ -9,6 +9,7 @@ import {
 } from "@fiscode/ui/components/combobox";
 
 import { US_STATES, US_STATE_BY_CODE } from "../../lib/us-states";
+import type { FieldControlProps } from "./field-control-props";
 
 type StateOption = { code: string; name: string };
 
@@ -22,20 +23,34 @@ export function StateCombobox({
   value,
   onValueChange,
   placeholder = "Pick a state…",
+  id,
+  onBlur,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
 }: {
   value: string;
   onValueChange: (code: string) => void;
   placeholder?: string;
-}) {
+} & FieldControlProps) {
   return (
     <Combobox
       items={US_STATES}
       itemToStringLabel={(s: StateOption) => s.name}
       itemToStringValue={(s: StateOption) => s.code}
       value={value ? (US_STATES.find((s) => s.code === value) ?? null) : null}
-      onValueChange={(s) => onValueChange(s ? (s as StateOption).code : "")}
+      onValueChange={(s) => {
+        onValueChange(s ? (s as StateOption).code : "");
+        onBlur?.();
+      }}
     >
-      <ComboboxInput placeholder={placeholder} showClear={value !== ""} />
+      <ComboboxInput
+        id={id}
+        aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedBy}
+        onBlur={() => onBlur?.()}
+        placeholder={placeholder}
+        showClear={value !== ""}
+      />
       <ComboboxContent>
         <ComboboxList>
           <ComboboxEmpty>No matching state.</ComboboxEmpty>

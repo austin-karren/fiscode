@@ -10,7 +10,7 @@ import {
 } from "@fiscode/ui/components/dialog";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
-import { Checkbox } from "@fiscode/ui/components/checkbox";
+import { FieldCheckbox } from "./forms/field-checkbox";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { expenseRepo } from "@fiscode/db";
 import type { ExpenseRow } from "@fiscode/csv";
@@ -100,6 +100,7 @@ export function EditExpenseDialog({
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d ?? new Date())}
                     />
                   </FormControl>
@@ -130,6 +131,7 @@ export function EditExpenseDialog({
                   <FormControl>
                     <SelectWithLabels
                       value={field.state.value}
+                      onBlur={field.handleBlur}
                       onValueChange={(v) => field.handleChange(v)}
                       items={categories.map(([c, l]) => ({ value: c, label: l }))}
                     />
@@ -157,9 +159,10 @@ export function EditExpenseDialog({
               {(field) => (
                 <FormItem className="flex flex-row items-center gap-2">
                   <FormControl>
-                    <Checkbox
+                    <FieldCheckbox
                       checked={field.state.value}
-                      onCheckedChange={(v) => field.handleChange(v === true)}
+                      onCheckedChange={(v) => field.handleChange(v)}
+                      onBlur={field.handleBlur}
                     />
                   </FormControl>
                   <LabelWithTooltip tooltip={GLOSSARY.section179} className="text-sm font-normal">
@@ -172,9 +175,10 @@ export function EditExpenseDialog({
               {(field) => (
                 <FormItem className="flex flex-row items-start gap-2">
                   <FormControl>
-                    <Checkbox
+                    <FieldCheckbox
                       checked={field.state.value}
-                      onCheckedChange={(v) => field.handleChange(v === true)}
+                      onCheckedChange={(v) => field.handleChange(v)}
+                      onBlur={field.handleBlur}
                     />
                   </FormControl>
                   <div className="grid gap-0.5">

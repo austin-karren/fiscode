@@ -87,6 +87,7 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d ?? new Date())}
                     />
                   </FormControl>
@@ -101,6 +102,7 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
                       disableFuture={false}
                     />

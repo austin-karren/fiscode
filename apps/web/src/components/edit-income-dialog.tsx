@@ -100,6 +100,7 @@ export function EditIncomeDialog({
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d ?? new Date())}
                     />
                   </FormControl>
@@ -130,6 +131,7 @@ export function EditIncomeDialog({
                   <FormControl>
                     <SelectWithLabels
                       value={field.state.value || "__none__"}
+                      onBlur={field.handleBlur}
                       onValueChange={(v) => field.handleChange(v === "__none__" ? "" : v)}
                       items={[
                         { value: "__none__", label: "—" },
@@ -148,6 +150,7 @@ export function EditIncomeDialog({
                   <FormControl>
                     <SelectWithLabels
                       value={field.state.value}
+                      onBlur={field.handleBlur}
                       onValueChange={(v) =>
                         field.handleChange(v as "recurring" | "bonus" | "consulting" | "other")
                       }

@@ -123,6 +123,7 @@ function SetupPage() {
                     <SelectWithLabels
                       value={field.state.value}
                       onValueChange={(v) => field.handleChange(v)}
+                      onBlur={field.handleBlur}
                       items={FILING_OPTIONS}
                       placeholder="Pick a filing status…"
                     />
@@ -140,6 +141,7 @@ function SetupPage() {
                     <StateCombobox
                       value={field.state.value}
                       onValueChange={(code) => field.handleChange(code)}
+                      onBlur={field.handleBlur}
                     />
                   </FormControl>
                   <FormMessage />
@@ -159,6 +161,7 @@ function SetupPage() {
                     <DatePicker
                       value={field.state.value as Date | undefined}
                       onValueChange={(d) => field.handleChange(d)}
+                      onBlur={field.handleBlur}
                     />
                   </FormControl>
                   <FormMessage />
@@ -178,6 +181,7 @@ function SetupPage() {
                     <SelectWithLabels
                       value={field.state.value}
                       onValueChange={(v) => field.handleChange(v)}
+                      onBlur={field.handleBlur}
                       items={ENTITY_OPTIONS}
                       disabledValues={["s_corp"]}
                       placeholder="Pick an entity type…"

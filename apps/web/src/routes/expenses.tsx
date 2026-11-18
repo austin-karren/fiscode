@@ -3,7 +3,7 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { Badge } from "@fiscode/ui/components/badge";
-import { Checkbox } from "@fiscode/ui/components/checkbox";
+import { FieldCheckbox } from "../components/forms/field-checkbox";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import {
   Field,
@@ -132,6 +132,7 @@ function ExpensesPage() {
                   <FormControl>
                     <DatePicker
                       value={field.state.value as Date | undefined}
+                      onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
                     />
                   </FormControl>
@@ -162,6 +163,7 @@ function ExpensesPage() {
                   <FormControl>
                     <SelectWithLabels
                       value={field.state.value}
+                      onBlur={field.handleBlur}
                       onValueChange={(v) => field.handleChange(v)}
                       items={CATEGORIES.map(([c, l]) => ({
                         value: c,
@@ -194,10 +196,11 @@ function ExpensesPage() {
                   <FieldLabel htmlFor="flag-section-179">
                     <Field orientation="horizontal">
                       <FormControl>
-                        <Checkbox
+                        <FieldCheckbox
                           id="flag-section-179"
                           checked={field.state.value}
-                          onCheckedChange={(v) => field.handleChange(v === true)}
+                          onCheckedChange={(v) => field.handleChange(v)}
+                          onBlur={field.handleBlur}
                         />
                       </FormControl>
                       <FieldContent>
@@ -222,10 +225,11 @@ function ExpensesPage() {
                   <FieldLabel htmlFor="flag-startup-expense">
                     <Field orientation="horizontal">
                       <FormControl>
-                        <Checkbox
+                        <FieldCheckbox
                           id="flag-startup-expense"
                           checked={field.state.value}
-                          onCheckedChange={(v) => field.handleChange(v === true)}
+                          onCheckedChange={(v) => field.handleChange(v)}
+                          onBlur={field.handleBlur}
                         />
                       </FormControl>
                       <FieldContent>
