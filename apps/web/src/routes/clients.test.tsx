@@ -21,7 +21,9 @@ const archivedClient = {
 const pointsAt = (clientId: string, n: number) =>
   Array.from({ length: n }, (_, i) => ({ id: `${clientId}_${i}`, clientId }));
 
-const { softDelete, revertTo, invalidate } = vi.hoisted(() => ({
+const { softDelete, revertTo, invalidate, loaded } = vi.hoisted(() => ({
+  // A test sets `loaded.clients` to load something other than the default pair.
+  loaded: { clients: undefined as unknown[] | undefined },
   softDelete: vi.fn(async () => true),
   revertTo: vi.fn(async () => undefined),
   invalidate: vi.fn(),
@@ -46,7 +48,7 @@ vi.mock("@fiscode/db", () => ({
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useLoaderData: () => ({
-    clients: [liveClient, archivedClient],
+    clients: loaded.clients ?? [liveClient, archivedClient],
     income: [...pointsAt("c_live", 2), ...pointsAt("c_arch", 4)],
     timeEntries: pointsAt("c_live", 1),
     expenses: [],
@@ -71,6 +73,7 @@ const rowFor = (text: string) => screen.getByText(text).closest("tr")!;
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  loaded.clients = undefined;
 });
 
 describe("archiving a client", () => {
@@ -134,5 +137,13 @@ describe("archived clients", () => {
       expect(revertTo).toHaveBeenCalledWith("c_arch", { ...archivedClient, deletedAt: null }),
     );
     expect(await screen.findByText("Demo Archived Co un-archived.")).toBeInTheDocument();
+  });
+
+  it("says so when every client is archived, and points at Show archived", () => {
+    loaded.clients = [archivedClient];
+    renderPage();
+    expect(screen.getByText("No active clients")).toBeInTheDocument();
+    expect(screen.getByText(/Show archived/, { selector: "p, div" })).toBeInTheDocument();
+    expect(screen.queryByText("No clients yet")).not.toBeInTheDocument();
   });
 });

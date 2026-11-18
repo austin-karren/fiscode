@@ -202,8 +202,12 @@ function VehiclesPage() {
         {vehicles.length === 0 ? (
           <NoDataEmpty
             icon={Car}
-            title="No vehicles yet"
-            description="Add a vehicle so mileage entries can reference it."
+            title={archivedCount > 0 ? "No active vehicles" : "No vehicles yet"}
+            description={
+              archivedCount > 0
+                ? "Every vehicle is archived. Use “Show archived” above to see or un-archive them, or add a new vehicle."
+                : "Add a vehicle so mileage entries can reference it."
+            }
           />
         ) : (
           <DataTable>

@@ -21,7 +21,9 @@ const archivedVehicle = {
   deletedAt: "2026-02-01T00:00:00.000Z",
 };
 
-const { softDelete, revertTo, invalidate } = vi.hoisted(() => ({
+const { softDelete, revertTo, invalidate, loaded } = vi.hoisted(() => ({
+  // A test sets `loaded.vehicles` to load something other than the default pair.
+  loaded: { vehicles: undefined as unknown[] | undefined },
   softDelete: vi.fn(async () => true),
   revertTo: vi.fn(async () => undefined),
   invalidate: vi.fn(),
@@ -44,7 +46,7 @@ vi.mock("@fiscode/db", () => ({
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useLoaderData: () => ({
-    vehicles: [liveVehicle, archivedVehicle],
+    vehicles: loaded.vehicles ?? [liveVehicle, archivedVehicle],
     mileage: [
       { id: "m_1", vehicleId: "v_live" },
       { id: "m_2", vehicleId: "v_arch" },
@@ -68,6 +70,7 @@ const renderPage = () =>
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  loaded.vehicles = undefined;
 });
 
 describe("archiving a vehicle", () => {
@@ -97,5 +100,13 @@ describe("archiving a vehicle", () => {
     await waitFor(() =>
       expect(revertTo).toHaveBeenCalledWith("v_arch", { ...archivedVehicle, deletedAt: null }),
     );
+  });
+
+  it("says so when every vehicle is archived, and points at Show archived", () => {
+    loaded.vehicles = [archivedVehicle];
+    renderPage();
+    expect(screen.getByText("No active vehicles")).toBeInTheDocument();
+    expect(screen.getByText(/Show archived/, { selector: "p, div" })).toBeInTheDocument();
+    expect(screen.queryByText("No vehicles yet")).not.toBeInTheDocument();
   });
 });

@@ -201,8 +201,12 @@ function ClientsPage() {
         {clients.length === 0 ? (
           <NoDataEmpty
             icon={Briefcase}
-            title="No clients yet"
-            description="Add a client so income, time, and expense entries can reference them."
+            title={archivedCount > 0 ? "No active clients" : "No clients yet"}
+            description={
+              archivedCount > 0
+                ? "Every client is archived. Use “Show archived” above to see or un-archive them, or add a new client."
+                : "Add a client so income, time, and expense entries can reference them."
+            }
           />
         ) : (
           <DataTable>
