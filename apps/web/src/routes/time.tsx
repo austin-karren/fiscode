@@ -19,6 +19,8 @@ import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditTimeDialog } from "../components/edit-time-dialog";
+import { ParentName } from "../components/parent-name";
+import { softDeleteWithUndo } from "../lib/soft-delete";
 
 const timeSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -38,15 +40,18 @@ const formatMinutes = (m: number) => {
 export const Route = createFileRoute("/time")({
   loader: async () => ({
     entries: await timeRepo.list(),
-    clients: await clientRepo.list(),
+    // Archived clients too: old rows keep showing their client's name.
+    clients: await clientRepo.listIncludingDeleted(),
     profile: await profileRepo.get(),
   }),
   component: TimePage,
 });
 
 function TimePage() {
-  const { entries, clients, profile } = useLoaderData({ from: "/time" });
+  const { entries, clients: allClients, profile } = useLoaderData({ from: "/time" });
   const router = useRouter();
+  // Only live clients can be picked for a new entry.
+  const clients = allClients.filter((c) => !c.deletedAt);
 
   const form = useForm({
     defaultValues: {
@@ -72,13 +77,14 @@ function TimePage() {
     },
   });
 
-  const remove = async (id: string) => {
-    await timeRepo.softDelete(id);
-    router.invalidate();
-  };
-
-  const clientName = (id: string | null) =>
-    id ? (clients.find((c) => c.id === id)?.name ?? "—") : "—";
+  const remove = (row: (typeof entries)[number]) =>
+    softDeleteWithUndo({
+      repo: timeRepo,
+      row,
+      message: "Time entry deleted.",
+      undoneMessage: "Time entry restored.",
+      onChange: () => router.invalidate(),
+    });
 
   return (
     <Page
@@ -215,17 +221,19 @@ function TimePage() {
                       <PreSeStartBadge rowDate={t.date} seStartDate={profile?.seStartDate} />
                     </span>
                   </DataTable.Cell>
-                  <DataTable.Cell>{clientName(t.clientId)}</DataTable.Cell>
+                  <DataTable.Cell>
+                    <ParentName parent={allClients.find((c) => c.id === t.clientId)} />
+                  </DataTable.Cell>
                   <DataTable.Cell>{t.description ?? "—"}</DataTable.Cell>
                   <DataTable.Cell align="right">{formatMinutes(t.minutes)}</DataTable.Cell>
                   <DataTable.Cell align="right">
                     <div className="inline-flex gap-1">
                       <EditTimeDialog
                         entry={t}
-                        clients={clients}
+                        clients={allClients}
                         onSaved={() => router.invalidate()}
                       />
-                      <Button variant="ghost" size="sm" onClick={() => remove(t.id)}>
+                      <Button variant="ghost" size="sm" onClick={() => remove(t)}>
                         Delete
                       </Button>
                     </div>

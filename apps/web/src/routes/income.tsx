@@ -19,6 +19,8 @@ import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditIncomeDialog } from "../components/edit-income-dialog";
+import { ParentName } from "../components/parent-name";
+import { softDeleteWithUndo } from "../lib/soft-delete";
 
 const KIND_OPTIONS = [
   { value: "recurring", label: "Recurring" },
@@ -42,15 +44,18 @@ const incomeFormSchema = z.object(fieldSchemas);
 export const Route = createFileRoute("/income")({
   loader: async () => ({
     income: await incomeRepo.list(),
-    clients: await clientRepo.list(),
+    // Archived clients too: old rows keep showing their client's name.
+    clients: await clientRepo.listIncludingDeleted(),
     profile: await profileRepo.get(),
   }),
   component: IncomePage,
 });
 
 function IncomePage() {
-  const { income, clients, profile } = useLoaderData({ from: "/income" });
+  const { income, clients: allClients, profile } = useLoaderData({ from: "/income" });
   const router = useRouter();
+  // Only live clients can be picked for a new entry.
+  const clients = allClients.filter((c) => !c.deletedAt);
 
   const form = useForm({
     defaultValues: {
@@ -79,13 +84,14 @@ function IncomePage() {
     },
   });
 
-  const remove = async (id: string) => {
-    await incomeRepo.softDelete(id);
-    router.invalidate();
-  };
-
-  const clientName = (id: string | null) =>
-    id ? (clients.find((c) => c.id === id)?.name ?? "—") : "—";
+  const remove = (row: (typeof income)[number]) =>
+    softDeleteWithUndo({
+      repo: incomeRepo,
+      row,
+      message: "Income entry deleted.",
+      undoneMessage: "Income entry restored.",
+      onChange: () => router.invalidate(),
+    });
 
   return (
     <Page
@@ -234,7 +240,9 @@ function IncomePage() {
                       <PreSeStartBadge rowDate={i.date} seStartDate={profile?.seStartDate} />
                     </span>
                   </DataTable.Cell>
-                  <DataTable.Cell>{clientName(i.clientId)}</DataTable.Cell>
+                  <DataTable.Cell>
+                    <ParentName parent={allClients.find((c) => c.id === i.clientId)} />
+                  </DataTable.Cell>
                   <DataTable.Cell>{i.kind}</DataTable.Cell>
                   <DataTable.Cell>{i.description ?? "—"}</DataTable.Cell>
                   <DataTable.Cell align="right">{formatUSD(cents(i.amountCents))}</DataTable.Cell>
@@ -242,10 +250,10 @@ function IncomePage() {
                     <div className="inline-flex gap-1">
                       <EditIncomeDialog
                         income={i}
-                        clients={clients}
+                        clients={allClients}
                         onSaved={() => router.invalidate()}
                       />
-                      <Button variant="ghost" size="sm" onClick={() => remove(i.id)}>
+                      <Button variant="ghost" size="sm" onClick={() => remove(i)}>
                         Delete
                       </Button>
                     </div>

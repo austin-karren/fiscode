@@ -27,7 +27,8 @@ accountant (or you) finishes from there.
 - **Instant.** No spinners. Reads and writes are local and should feel
   synchronous.
 - **Non-destructive.** Every mutation appends to an on-device version
-  history. Deletes are soft and confirmed.
+  history. Deletes are soft: deleting a row shows an Undo, and archiving a
+  client or vehicle asks first.
 - **Self-healing.** Only the minimum profile is required (filing status,
   state, SE start date, entity type). Everything else degrades gracefully when
   missing.

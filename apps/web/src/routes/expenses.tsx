@@ -30,6 +30,7 @@ import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditExpenseDialog } from "../components/edit-expense-dialog";
+import { softDeleteWithUndo } from "../lib/soft-delete";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@fiscode/ui/components/tooltip";
 import { GLOSSARY } from "../lib/tax-glossary";
 
@@ -103,10 +104,14 @@ function ExpensesPage() {
     },
   });
 
-  const remove = async (id: string) => {
-    await expenseRepo.softDelete(id);
-    router.invalidate();
-  };
+  const remove = (row: (typeof expenses)[number]) =>
+    softDeleteWithUndo({
+      repo: expenseRepo,
+      row,
+      message: "Expense deleted.",
+      undoneMessage: "Expense restored.",
+      onChange: () => router.invalidate(),
+    });
 
   return (
     <Page
@@ -324,7 +329,7 @@ function ExpensesPage() {
                         categories={CATEGORIES}
                         onSaved={() => router.invalidate()}
                       />
-                      <Button variant="ghost" size="sm" onClick={() => remove(x.id)}>
+                      <Button variant="ghost" size="sm" onClick={() => remove(x)}>
                         Delete
                       </Button>
                     </div>

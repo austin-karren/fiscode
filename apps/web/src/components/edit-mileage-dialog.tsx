@@ -22,6 +22,7 @@ import { TSFormField } from "./forms/ts-form-field";
 import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
+import { archivedSuffix, pickableParents } from "./parent-name";
 
 const editSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -127,9 +128,9 @@ export function EditMileageDialog({
                       onValueChange={(v) => field.handleChange(v === "__none__" ? "" : v)}
                       items={[
                         { value: "__none__", label: "—" },
-                        ...vehicles.map((v) => ({
+                        ...pickableParents(vehicles, mileage.vehicleId).map((v) => ({
                           value: v.id,
-                          label: `${v.make} ${v.model}`,
+                          label: `${v.make} ${v.model}${archivedSuffix(v)}`,
                         })),
                       ]}
                     />
