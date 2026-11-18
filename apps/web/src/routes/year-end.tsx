@@ -7,6 +7,7 @@ import { exportBundle, exportFileName } from "@fiscode/csv";
 import { estimateYear, getYearConfig } from "@fiscode/tax";
 import { cents, formatUSD, todayIso, yearOf } from "@fiscode/core";
 import { CircleAlert, FileSpreadsheet } from "lucide-react";
+import { toast } from "sonner";
 
 import { Page } from "../components/page";
 import { buildAnnualizedInput, buildTaxInput, deriveYear } from "../lib/tax-input";
@@ -57,7 +58,7 @@ export const Route = createFileRoute("/year-end")({
 
 function YearEndPage() {
   const data = useLoaderData({ from: "/year-end" });
-  const { bundle, profile, year, result, derived, totalsByCategory } = data;
+  const { profile, year, result, derived, totalsByCategory } = data;
 
   // Profile missing → route still renders, but with SetupRequiredEmpty in
   // place of the packet. Avoids the dead-end of bouncing the user back to
@@ -70,9 +71,21 @@ function YearEndPage() {
     );
   }
 
-  const download = () => {
+  const download = async () => {
     const options = { scope: "yearly", year } as const;
-    const csv = exportBundle(bundle, options);
+    let csv: string;
+    try {
+      // The packet above shows live rows; the file carries deleted ones too.
+      csv = exportBundle(await buildBundle({ includeDeleted: true }), options);
+    } catch (err) {
+      console.error(err);
+      toast.error("Export failed.", {
+        description: err instanceof Error ? err.message : String(err),
+        duration: Infinity,
+        closeButton: true,
+      });
+      return;
+    }
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

@@ -1,3 +1,7 @@
+// The Bundle is the whole exportable state: every data row (soft-deleted ones
+// included) plus the edit history. tax_year_cache is not in it: that table is
+// a cache of downloaded tax figures and is rebuilt on its own.
+//
 // Mirror of @fiscode/db's Bundle shape, but redeclared here so this package
 // stays independent of @fiscode/db (no React, no DOM, no SQLocal).
 //
@@ -118,6 +122,20 @@ export type RetirementContributionRow = Dated & {
   notes: string | null;
 };
 
+/**
+ * One entry of the append-only edit log. `beforeJson` / `afterJson` are the
+ * row (or, for an import snapshot, the bundle) as JSON text, kept verbatim.
+ */
+export type HistoryRow = {
+  id: string;
+  entity: string;
+  entityId: string;
+  op: string;
+  beforeJson: string | null;
+  afterJson: string | null;
+  at: string;
+};
+
 export type Bundle = {
   profile: ProfileRow | undefined;
   entities: EntityRow[];
@@ -130,6 +148,8 @@ export type Bundle = {
   homeOffice: HomeOfficeRow[];
   expenses: ExpenseRow[];
   retirementContributions: RetirementContributionRow[];
+  /** The edit log. Empty when the bundle was built for a screen or an estimate. */
+  history: HistoryRow[];
 };
 
 export const emptyBundle = (): Bundle => ({
@@ -144,4 +164,5 @@ export const emptyBundle = (): Bundle => ({
   homeOffice: [],
   expenses: [],
   retirementContributions: [],
+  history: [],
 });

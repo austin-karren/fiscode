@@ -86,9 +86,12 @@ const LABELS: Record<string, Record<string, string>> = {
   },
 };
 
-const text = (key: Key): StoredColumn => ({ name: key, key, kind: "text" });
+// `name` is the header a person sees. It differs from the flat key where the
+// key alone is ambiguous: `type` is an entity type in one table and a client
+// type in another, so they are written `entity_type` and `client_type`.
+const text = (key: Key, name: string = key): StoredColumn => ({ name, key, kind: "text" });
 const date = (key: Key): StoredColumn => ({ name: key, key, kind: "date" });
-const int = (key: Key): StoredColumn => ({ name: key, key, kind: "int" });
+const int = (key: Key, name: string = key): StoredColumn => ({ name, key, kind: "int" });
 const bool = (key: Key): StoredColumn => ({ name: key, key, kind: "bool" });
 /** Dollars column `amount` for the cents key `amount_cents`. */
 const money = (key: Key): StoredColumn => ({
@@ -98,8 +101,8 @@ const money = (key: Key): StoredColumn => ({
 });
 
 /** `<code>_label`: the human name of a code. Blank for a code we don't know. */
-const label = (key: Key): DerivedColumn => ({
-  name: `${key}_label`,
+const label = (key: Key, name: string = key): DerivedColumn => ({
+  name: `${name}_label`,
   derive: (row) => LABELS[`${row.record_type}.${key}`]?.[row[key] ?? ""] ?? "",
 });
 
@@ -115,7 +118,11 @@ const vehicleName: DerivedColumn = {
 
 const hours: DerivedColumn = {
   name: "hours",
-  derive: (row) => (row.minutes ? (Number(row.minutes) / 60).toFixed(2) : ""),
+  // Hundredths of an hour by integer math, then the same formatter as money.
+  derive: (row) =>
+    row.minutes
+      ? hundredthsToDecimal(String(Math.round((Number(row.minutes) * 100) / 60)), "hours")
+      : "",
 };
 
 const RECORD_TYPE = text("record_type");
@@ -147,8 +154,8 @@ export const SECTIONS: readonly Section[] = [
     title: "Business entity",
     columns: [
       RECORD_TYPE,
-      text("type"),
-      label("type"),
+      text("type", "entity_type"),
+      label("type", "entity_type"),
       date("start_date"),
       date("end_date"),
       text("notes"),
@@ -177,8 +184,8 @@ export const SECTIONS: readonly Section[] = [
     columns: [
       RECORD_TYPE,
       text("name"),
-      text("type"),
-      money("default_rate_cents"),
+      text("type", "client_type"),
+      { name: "default_hourly_rate", key: "default_rate_cents", kind: "money" },
       {
         name: "default_commission_rate_percent",
         key: "default_commission_rate_basis_points",
@@ -199,8 +206,8 @@ export const SECTIONS: readonly Section[] = [
       money("amount_cents"),
       text("source_type"),
       label("source_type"),
-      text("kind"),
-      label("kind"),
+      text("kind", "income_kind"),
+      label("kind", "income_kind"),
       text("description"),
       text("notes"),
       text("id"),
@@ -231,10 +238,10 @@ export const SECTIONS: readonly Section[] = [
       RECORD_TYPE,
       text("make"),
       text("model"),
-      int("year"),
+      int("year", "model_year"),
       int("mpg"),
-      text("method"),
-      label("method"),
+      text("method", "deduction_method"),
+      label("method", "deduction_method"),
       date("in_service_date"),
       text("notes"),
       text("id"),
@@ -263,8 +270,8 @@ export const SECTIONS: readonly Section[] = [
       RECORD_TYPE,
       date("start_date"),
       date("end_date"),
-      text("method"),
-      label("method"),
+      text("method", "deduction_method"),
+      label("method", "deduction_method"),
       int("office_sqft"),
       int("home_sqft"),
       money("monthly_rent_mortgage_cents"),
@@ -310,6 +317,23 @@ export const SECTIONS: readonly Section[] = [
       ...TAIL,
     ],
   },
+  {
+    // The edit log behind /history. Last in the file, and only in a full
+    // export: it is for restoring, not for reading. The JSON cells are kept
+    // verbatim so a restore brings back the same log.
+    recordType: "history",
+    title: "History",
+    columns: [
+      RECORD_TYPE,
+      text("at"),
+      text("op"),
+      text("entity"),
+      text("entity_id"),
+      text("before_json"),
+      text("after_json"),
+      text("id"),
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -328,18 +352,18 @@ export const unguardText = (value: string): string =>
   GUARDED.test(value) ? value.slice(1) : value;
 
 /** Integer hundredths ("123456") to a two-decimal string ("1234.56"). */
-const hundredthsToDecimal = (raw: string, column: string): string => {
+function hundredthsToDecimal(raw: string, column: string): string {
   if (raw === "") return "";
   const n = Number(raw);
   if (!Number.isSafeInteger(n)) {
     // Rounding here would make the export lossy without anyone noticing.
-    throw new Error(`Cannot export ${column}: "${raw}" is not a whole number`);
+    throw new Error(`${column}: "${raw}" is not a whole number`);
   }
   const abs = Math.abs(n);
   const whole = Math.trunc(abs / 100);
   const frac = String(abs % 100).padStart(2, "0");
   return `${n < 0 ? "-" : ""}${whole}.${frac}`;
-};
+}
 
 // Accepts what the export writes (`1234.56`) and what a spreadsheet may save
 // back: `1234`, `1234.5`, `$1,234.56`, `-$12.30`. Never more than two decimals,
@@ -356,9 +380,24 @@ const decimalToHundredths = (cell: string): string | undefined => {
   return String(m[1] || m[2] ? -value || 0 : value);
 };
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** Write one stored cell. `raw` is the flat row's v1 string. */
+/** True for a real calendar date written `YYYY-MM-DD` (so not `2026-02-30`). */
+export const isIsoDate = (value: string): boolean => {
+  const m = ISO_DATE.exec(value);
+  if (!m) return false;
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const d = new Date(Date.UTC(year, month - 1, day));
+  // setUTCFullYear so years below 100 are not read as 19xx.
+  d.setUTCFullYear(year);
+  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
+};
+
+/**
+ * Write one stored cell. `raw` is the flat row's v1 string. Throws when the
+ * stored value could not be read back: the importer would refuse the file, so
+ * the user should learn it at export time, not at restore time.
+ */
 export const encodeCell = (column: StoredColumn, raw: string): string => {
   switch (column.kind) {
     case "money":
@@ -369,6 +408,10 @@ export const encodeCell = (column: StoredColumn, raw: string): string => {
     case "text":
       return guardText(raw);
     case "date":
+      if (raw !== "" && !isIsoDate(raw)) {
+        throw new Error(`${column.name}: "${raw}" is not a date written as YYYY-MM-DD`);
+      }
+      return raw;
     case "int":
       return raw;
   }
@@ -394,13 +437,19 @@ export const decodeCell = (kind: CellKind, cell: string, unguard: boolean): Deco
     }
     case "bool": {
       const v = cell.trim().toLowerCase();
-      return { ok: true, value: v === "yes" ? "1" : v === "no" ? "0" : v };
+      if (v === "" || v === "1" || v === "0") return { ok: true, value: v };
+      if (v === "yes") return { ok: true, value: "1" };
+      if (v === "no") return { ok: true, value: "0" };
+      return { ok: false, message: `Expected yes or no, got "${cell}"` };
     }
     case "date": {
       const v = cell.trim();
-      return v === "" || ISO_DATE.test(v)
+      return v === "" || isIsoDate(v)
         ? { ok: true, value: v }
-        : { ok: false, message: `Expected a date as YYYY-MM-DD, got "${cell}"` };
+        : {
+            ok: false,
+            message: `Expected a date as YYYY-MM-DD, got "${cell}". In a spreadsheet, format the column as yyyy-mm-dd before saving`,
+          };
     }
     case "text":
       return { ok: true, value: unguard ? unguardText(cell) : cell };
@@ -425,6 +474,8 @@ const buildHeaderLookup = (): ReadonlyMap<string, { key: Key; kind: CellKind }> 
   for (const c of stored) {
     if (c.name !== c.key) map.set(c.name, { key: c.key, kind: c.kind });
   }
+  // A v2 header from before it was renamed to `default_hourly_rate`.
+  map.set("default_rate", { key: "default_rate_cents", kind: "money" });
   return map;
 };
 

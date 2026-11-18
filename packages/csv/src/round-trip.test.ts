@@ -185,32 +185,46 @@ const fullBundle = (): Bundle => ({
       deletedAt: null,
     },
   ],
+  history: [
+    {
+      id: "h_1",
+      entity: "client",
+      entityId: "cl_1",
+      op: "insert",
+      beforeJson: null,
+      afterJson: '{"id":"cl_1","name":"Stable Commission Co","notes":null}',
+      at: "2026-06-04T12:00:00.000Z",
+    },
+    {
+      id: "h_2",
+      entity: "client",
+      entityId: "cl_1",
+      op: "update",
+      beforeJson: '{"id":"cl_1","name":"Stable, \\"Co\\""}',
+      afterJson: '{"id":"cl_1","name":"Stable Commission Co"}',
+      at: "2026-06-05T08:30:00.000Z",
+    },
+  ],
 });
 
-const stripExportedTimestamp = (csv: string): string =>
-  csv.replace(/^# exported: .*$/m, "# exported: <MASKED>");
-
 describe("CSV round-trip", () => {
-  it("export → import → export is byte-stable (with timestamp masked)", () => {
+  it("export → import → export is byte-identical", () => {
     const bundle = fullBundle();
     const csv1 = exportBundle(bundle, {
       scope: "full",
-      exportedAt: FIXED_TIMESTAMP,
     });
     const { bundle: round, validationErrors } = parseCsv(csv1);
     expect(validationErrors).toEqual([]);
     const csv2 = exportBundle(round, {
       scope: "full",
-      exportedAt: FIXED_TIMESTAMP,
     });
-    expect(stripExportedTimestamp(csv1)).toBe(stripExportedTimestamp(csv2));
+    expect(csv2).toBe(csv1);
   });
 
   it("preserves all fields exactly", () => {
     const bundle = fullBundle();
     const csv = exportBundle(bundle, {
       scope: "full",
-      exportedAt: FIXED_TIMESTAMP,
     });
     const { bundle: round } = parseCsv(csv);
     expect(round).toEqual(bundle);
@@ -221,7 +235,6 @@ describe("CSV round-trip", () => {
     const csv = exportBundle(bundle, {
       scope: "yearly",
       year: 2026,
-      exportedAt: FIXED_TIMESTAMP,
     });
     const { bundle: round } = parseCsv(csv);
     expect(round.profile?.id).toBe("profile");
@@ -236,7 +249,6 @@ describe("CSV round-trip", () => {
     const csv = exportBundle(bundle, {
       scope: "yearly",
       year: 2027,
-      exportedAt: FIXED_TIMESTAMP,
     });
     const { bundle: round } = parseCsv(csv);
     expect(round.profile?.id).toBe("profile");
@@ -252,19 +264,18 @@ describe("CSV round-trip", () => {
     const csv = exportBundle(bundle, {
       scope: "yearly",
       year: 2026,
-      exportedAt: FIXED_TIMESTAMP,
     });
     const { provenance } = parseCsv(csv);
     expect(provenance.scope).toBe("yearly");
     expect(provenance.year).toBe(2026);
-    expect(provenance.exportedAt).toBe(FIXED_TIMESTAMP);
+    expect(provenance.schema).toBe("v2");
+    expect(provenance.exportedAt).toBeUndefined();
   });
 
   it("Excel-style file with header comments is still parseable (comments stripped by importer)", () => {
     const bundle = fullBundle();
     const csv = exportBundle(bundle, {
       scope: "full",
-      exportedAt: FIXED_TIMESTAMP,
     });
     // Simulate an extra rogue `#` line a user might have prepended.
     const dirtied = "# user note: please review\n" + csv;

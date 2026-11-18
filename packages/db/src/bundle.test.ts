@@ -18,6 +18,7 @@ describe("Bundle shape", () => {
         "clients",
         "entities",
         "expenses",
+        "history",
         "homeOffice",
         "income",
         "mileage",

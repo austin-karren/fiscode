@@ -23,6 +23,7 @@ export const recordTypeSchema = z.enum([
   "home_office",
   "expense",
   "retirement_contribution",
+  "history",
 ]);
 export type RecordType = z.infer<typeof recordTypeSchema>;
 
@@ -121,6 +122,14 @@ export const csvRowSchema = z.object({
 
   // retirement_contribution
   account: optStr,
+
+  // history (the append-only edit log; one row per change)
+  at: optStr,
+  entity: optStr,
+  entity_id: optStr,
+  op: optStr,
+  before_json: optStr,
+  after_json: optStr,
 });
 export type CsvRow = z.infer<typeof csvRowSchema>;
 
@@ -178,4 +187,13 @@ export const CSV_COLUMNS: ReadonlyArray<keyof CsvRow> = [
   "monthly_insurance_cents",
   "regular_exclusive_ack",
   "account",
+  "at",
+  "entity",
+  "entity_id",
+  "op",
+  "before_json",
+  "after_json",
 ];
+
+/** Schema markers this build can read. A file with any other marker is refused. */
+export const READABLE_SCHEMA_VERSIONS: readonly string[] = ["v1", "v2"];

@@ -1,12 +1,8 @@
 import Papa from "papaparse";
 import type { Bundle } from "./bundle-types.ts";
 import { CSV_COLUMNS, type CsvRow, type RecordType } from "./schema.ts";
-import { buildProvenance, EOL, type Provenance } from "./provenance.ts";
+import { BOM, buildProvenance, EOL } from "./provenance.ts";
 import { encodeCell, guardText, isStored, SECTIONS, type Lookup } from "./sections.ts";
-
-// Excel reads a CSV without a byte-order mark in the local code page, which
-// turns é or § into mojibake. Sheets and Numbers accept the mark too.
-const BOM = "﻿";
 
 const bool = (v: boolean | null | undefined): string => (v === true ? "1" : v === false ? "0" : "");
 const num = (v: number | null | undefined): string =>
@@ -198,13 +194,40 @@ const bundleToRows = (bundle: Bundle): Record<string, string>[] => {
       }),
     );
   }
+  for (const h of bundle.history) {
+    rows.push(
+      emit("history", h.id, {
+        at: h.at,
+        entity: h.entity,
+        entity_id: h.entityId,
+        op: h.op,
+        before_json: str(h.beforeJson),
+        after_json: str(h.afterJson),
+      }),
+    );
+  }
   return rows;
 };
 
 export type ExportOptions = {
   scope: "full" | "yearly";
   year?: number;
-  exportedAt?: string; // testing seam
+};
+
+// Plain code-unit comparison: the same on every machine, unlike localeCompare.
+const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * Row order inside a section: by date (or span start, or the time of a
+ * history entry), then by id. Tables
+ * without a date (clients, vehicles) are in id order, which for the app's
+ * ULIDs is creation order. The export sorts for itself so the bytes depend
+ * only on the rows, not on the order the database or an imported file
+ * happened to hand them over in.
+ */
+const byRowOrder = (a: Record<string, string>, b: Record<string, string>): number => {
+  const key = (r: Record<string, string>) => r.date || r.start_date || r.at || "";
+  return compare(key(a), key(b)) || compare(a.id ?? "", b.id ?? "");
 };
 
 const filterYearly = (bundle: Bundle, year: number): Bundle => {
@@ -226,20 +249,23 @@ const filterYearly = (bundle: Bundle, year: number): Bundle => {
     entities: bundle.entities.filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
     spouses: bundle.spouses.filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
     homeOffice: bundle.homeOffice.filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
+    // The yearly file is for an accountant, not a backup: no edit log.
+    history: [],
   };
 };
 
+/**
+ * Write a bundle as CSV. The output is a pure function of the rows and the
+ * scope: no clock, no locale, no machine detail. Two exports of the same
+ * state are the same bytes. Soft-deleted rows are written like any other,
+ * with their `deleted_at`.
+ */
 export const exportBundle = (bundle: Bundle, options: ExportOptions): string => {
   const filtered =
     options.scope === "yearly" && options.year !== undefined
       ? filterYearly(bundle, options.year)
       : bundle;
   const rows = bundleToRows(filtered);
-  const provenance: Provenance = {
-    scope: options.scope,
-    year: options.year,
-    exportedAt: options.exportedAt ?? new Date().toISOString(),
-  };
   const lookup: Lookup = {
     clientNames: new Map(filtered.clients.map((c) => [c.id, c.name])),
     vehicleNames: new Map(
@@ -249,16 +275,22 @@ export const exportBundle = (bundle: Bundle, options: ExportOptions): string => 
       ]),
     ),
   };
-  let out = BOM + buildProvenance(provenance);
+  let out = BOM + buildProvenance(options);
   for (const section of SECTIONS) {
-    const sectionRows = rows.filter((r) => r.record_type === section.recordType);
+    const sectionRows = rows.filter((r) => r.record_type === section.recordType).sort(byRowOrder);
     if (sectionRows.length === 0) continue;
     const table = [
       section.columns.map((c) => c.name),
       ...sectionRows.map((row) =>
-        section.columns.map((c) =>
-          isStored(c) ? encodeCell(c, row[c.key] ?? "") : guardText(c.derive(row, lookup)),
-        ),
+        section.columns.map((c) => {
+          try {
+            return isStored(c) ? encodeCell(c, row[c.key] ?? "") : guardText(c.derive(row, lookup));
+          } catch (cause) {
+            // Name the row so the user can find and fix it in the app.
+            const why = cause instanceof Error ? cause.message : String(cause);
+            throw new Error(`Cannot export ${section.recordType} row ${row.id}: ${why}`, { cause });
+          }
+        }),
       ),
     ];
     // Papa quotes any cell holding a comma, a quote, a line break or outer

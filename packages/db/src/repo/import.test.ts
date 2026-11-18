@@ -145,7 +145,21 @@ describe("importBundle — append", () => {
     expect(round.clients.map((c) => c.name).sort()).toEqual(["Brought in", "Existing"]);
   });
 
+  it("an import into a database that holds nothing records no snapshot", async () => {
+    // Nothing to revert to, and a restore into an empty db must be exact.
+    await importBundle(fullBundle(), "import-append");
+    expect(await historyRepo.listAll()).toEqual([]);
+  });
+
   it("snapshot is still recorded for append", async () => {
+    await clientRepo.create({
+      name: "Existing",
+      type: null,
+      notes: null,
+      defaultRateCents: null,
+      defaultCommissionRate: null,
+      deletedAt: null,
+    });
     await importBundle(fullBundle(), "import-append");
     const snapshots = (await historyRepo.listAll()).filter((h) => h.entity === "__import_snapshot");
     expect(snapshots).toHaveLength(1);

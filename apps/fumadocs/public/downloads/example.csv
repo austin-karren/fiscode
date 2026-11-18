@@ -1,16 +1,12 @@
-﻿# fiscode export
-# source: https://fiscode.app
-# schema: v2
-# exported: 2026-06-04T12:00:00.000Z
-# scope: full
-# Money is in dollars. Dates are YYYY-MM-DD. Import this file at the source URL to restore it.
+﻿# fiscode export (schema: v2; scope: full)
+# Money is in dollars. Dates are YYYY-MM-DD. Import this file at https://fiscode.app to restore it.
 
 # Profile
 record_type,filing_status,filing_status_label,state,se_start_date,dependents,quarterly_method,quarterly_method_label,prep_lead_days,tracks_roth,uses_retirement,id,created_at,updated_at
 profile,mfj,Married filing jointly,UT,2024-01-01,0,annualized,Annualized installment,14,yes,yes,profile,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z
 
 # Business entity
-record_type,type,type_label,start_date,end_date,notes,id,created_at,updated_at,deleted_at
+record_type,entity_type,entity_type_label,start_date,end_date,notes,id,created_at,updated_at,deleted_at
 entity,sole_prop,Sole proprietor,2024-01-01,,Filed DBA in Q1 2024.,ent_01HXSP00ENTITY0000000,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 
 # Spouse W-2 income
@@ -18,12 +14,12 @@ record_type,start_date,end_date,annual_w2_wages,annual_federal_withholding,annua
 spouse,2024-01-01,,45000.00,4500.00,1800.00,,sp_01HXSP00SPOUSE0000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 
 # Clients
-record_type,name,type,default_rate,default_commission_rate_percent,notes,id,created_at,updated_at,deleted_at
+record_type,name,client_type,default_hourly_rate,default_commission_rate_percent,notes,id,created_at,updated_at,deleted_at
 client,Stable Commission Co,recurring,,6.00,Monthly retainer + bonus structure.,cl_01HXSP00CLIENT0000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 client,Ad-hoc Consulting,consulting,15000.00,,,cl_01HXSP00CLIENT0000002,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 
 # Income
-record_type,date,client_name,amount,source_type,source_type_label,kind,kind_label,description,notes,id,client_id,created_at,updated_at,deleted_at
+record_type,date,client_name,amount,source_type,source_type_label,income_kind,income_kind_label,description,notes,id,client_id,created_at,updated_at,deleted_at
 income,2026-01-15,Stable Commission Co,10000.00,1099,1099 self-employment,recurring,Recurring,January retainer,,in_01HXSP00INCOME0000001,cl_01HXSP00CLIENT0000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 income,2026-03-31,Stable Commission Co,3500.00,1099,1099 self-employment,bonus,Bonus,Q1 commission bonus,,in_01HXSP00INCOME0000002,cl_01HXSP00CLIENT0000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 income,2026-07-10,Ad-hoc Consulting,6250.00,1099,1099 self-employment,consulting,Consulting,Q3 engagement,Includes $250 travel reimbursement (deducted separately).,in_01HXSP00INCOME0000003,cl_01HXSP00CLIENT0000002,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
@@ -33,7 +29,7 @@ record_type,date,client_name,minutes,hours,description,notes,id,client_id,create
 time_entry,2026-01-15,Stable Commission Co,480,8.00,Full day onsite,,te_01HXSP00TIME000000001,cl_01HXSP00CLIENT0000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 
 # Vehicles
-record_type,make,model,year,mpg,method,method_label,in_service_date,notes,id,created_at,updated_at,deleted_at
+record_type,make,model,model_year,mpg,deduction_method,deduction_method_label,in_service_date,notes,id,created_at,updated_at,deleted_at
 vehicle,Toyota,RAV4,2022,28,standard_mileage,Standard mileage,2024-01-01,,v_01HXSP00VEHICLE000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 
 # Mileage
@@ -42,7 +38,7 @@ mileage,2026-02-10,2022 Toyota RAV4,47,Client visit (Stable Commission Co),,mi_0
 mileage,2026-07-08,2022 Toyota RAV4,124,Conference (Ad-hoc Consulting),,mi_01HXSP00MILEAGE000002,v_01HXSP00VEHICLE000001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 
 # Home office
-record_type,start_date,end_date,method,method_label,office_sqft,home_sqft,monthly_rent_mortgage,monthly_utilities,monthly_insurance,regular_exclusive_ack,notes,id,created_at,updated_at,deleted_at
+record_type,start_date,end_date,deduction_method,deduction_method_label,office_sqft,home_sqft,monthly_rent_mortgage,monthly_utilities,monthly_insurance,regular_exclusive_ack,notes,id,created_at,updated_at,deleted_at
 home_office,2024-01-01,,simplified,Simplified,150,2000,,,,yes,,ho_01HXSP00HOMEOFFICE001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 
 # Expenses

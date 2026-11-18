@@ -53,6 +53,9 @@ export const applyImport = (
       incoming.retirementContributions,
       conflicts,
     ),
+    // History is append-only: entries the file brings are added, and an entry
+    // both sides already hold is the same entry, not a conflict to report.
+    history: mergeRows("history", existing.history, incoming.history, []),
   };
   return { next, conflicts, replaced: existing };
 };

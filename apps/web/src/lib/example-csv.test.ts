@@ -2,14 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  EXAMPLE_FIXED_TIMESTAMP,
-  applyImport,
-  emptyBundle,
-  exampleBundle,
-  exportBundle,
-  parseCsv,
-} from "@fiscode/csv";
+import { applyImport, emptyBundle, exampleBundle, exportBundle, parseCsv } from "@fiscode/csv";
 import { buildBundle, importBundle, taxYearCacheRepo } from "@fiscode/db";
 import { setupTestDb, teardownTestDb } from "@fiscode/db/test";
 
@@ -54,10 +47,7 @@ afterEach(() => {
 
 describe("published example.csv — full import chain", () => {
   it("the on-disk example.csv matches what `bun run example:csv` would emit", () => {
-    const expected = exportBundle(exampleBundle(), {
-      scope: "full",
-      exportedAt: EXAMPLE_FIXED_TIMESTAMP,
-    });
+    const expected = exportBundle(exampleBundle(), { scope: "full" });
     const onDisk = readFileSync(EXAMPLE_CSV_PATH, "utf8");
     expect(onDisk).toBe(expected);
   });

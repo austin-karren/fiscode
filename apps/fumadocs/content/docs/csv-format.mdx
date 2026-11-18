@@ -4,8 +4,8 @@ description: The lossless source-of-truth format fiscode reads and writes — an
 icon: FileText
 ---
 
-CSV is the canonical format for fiscode data. One file holds everything, laid out as **one small
-table per record type**: profile, clients, income, expenses and so on. It is meant to be opened in
+CSV is the canonical format for fiscode data. One file holds all the data you entered, laid out as
+**one small table per record type**: profile, clients, income, expenses and so on. It is meant to be opened in
 Excel, Google Sheets or Numbers and read by a person, and to load back into fiscode without losing
 anything.
 
@@ -15,15 +15,11 @@ The layout lives in `packages/csv/src/sections.ts`. The stored fields live in
 ## What the file looks like
 
 ```
-# fiscode export
-# source: https://fiscode.app
-# schema: v2
-# exported: 2026-06-04T12:00:00.000Z
-# scope: full
-# Money is in dollars. Dates are YYYY-MM-DD. Import this file at the source URL to restore it.
+# fiscode export (schema: v2; scope: full)
+# Money is in dollars. Dates are YYYY-MM-DD. Import this file at https://fiscode.app to restore it.
 
 # Income
-record_type,date,client_name,amount,source_type,source_type_label,kind,kind_label,description,notes,id,client_id,created_at,updated_at,deleted_at
+record_type,date,client_name,amount,source_type,source_type_label,income_kind,income_kind_label,description,notes,id,client_id,created_at,updated_at,deleted_at
 income,2026-01-15,Stable Commission Co,10000.00,1099,1099 self-employment,recurring,Recurring,January retainer,,in_01…,cl_01…,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 
 # Expenses
@@ -38,7 +34,36 @@ Each table has three parts:
 3. One row per record. The first cell names the record type.
 
 Within a table the readable columns come first (date, name, amount, category) and the ids and
-timestamps come last. A record type with no rows is left out of the file.
+timestamps come last. Rows are in date order, then id order. A record type with no rows is left
+out of the file.
+
+The file holds **every row, including deleted ones**. Deleting in fiscode is a soft delete: the
+row stays and gets a `deleted_at` time. A deleted row is exported with that time filled in and
+comes back deleted on import, so a restore never turns a delete into a permanent one. If you are
+reading the file as an accountant, skip any row with a value in `deleted_at`.
+
+The file holds **nothing that depends on when or where it was exported**. Two exports of the same
+data are the same bytes. The export date is in the file name instead.
+
+### What is in the file, and what is not
+
+| In fiscode                                    | Full export | Yearly export           |
+| --------------------------------------------- | ----------- | ----------------------- |
+| Profile, clients, vehicles                    | yes         | yes                     |
+| Income, expenses, mileage, time, retirement   | yes         | rows dated in that year |
+| Entity, spouse and home-office spans          | yes         | spans that overlap it   |
+| Deleted rows                                  | yes         | yes, by the same rules  |
+| Edit history (the log behind `/history`)      | yes         | no                      |
+| Downloaded tax figures (the `/tax-data` page) | no          | no                      |
+
+The downloaded tax figures are a cache. fiscode fetches them again by itself, so they are never
+exported.
+
+The **History** table is the last one in a full export. Each row is one change: when, what kind
+(`insert`, `update`, `delete`, `revert`), which record, and the record before and after as JSON
+text. It is there so a restore brings the log back; it is not meant for reading. An import also
+logs itself as one history row that holds the whole state from before the import, so a file from
+an app that has imported before can be much larger than its data.
 
 ## Two workflows
 
@@ -87,8 +112,8 @@ the importer converts `1234.56` back to `123456` exactly, with no floating-point
 These columns are computed on export and **ignored on import**. Edit the code or the id beside
 them, not the label:
 
-- `filing_status_label`, `quarterly_method_label`, `type_label` (entity), `source_type_label`,
-  `kind_label`, `method_label`, `category_label`, `account_label`
+- `filing_status_label`, `quarterly_method_label`, `entity_type_label`, `source_type_label`,
+  `income_kind_label`, `deduction_method_label`, `category_label`, `account_label`
 - `client_name` — the name of the client in `client_id`
 - `vehicle_name` — year, make and model of the vehicle in `vehicle_id`
 - `hours` — `minutes` divided by 60
@@ -99,9 +124,10 @@ them, not the label:
   inner quotes doubled (RFC 4180). Lines end in CRLF.
 - The file starts with a UTF-8 byte-order mark so Excel reads accented and non-Latin characters
   correctly. The importer accepts files with or without it.
-- A text cell that starts with `=`, `+`, `-` or `@` would be run as a formula by a spreadsheet.
-  The export puts a `'` in front of it (`'=SUM(A1)`), and the importer takes it off again. A text
-  cell that already starts with `'` gets one more for the same reason. Amounts are never guarded,
+- A text cell that starts with `=`, `+`, `-` or `@` (or a tab or carriage return, which some
+  spreadsheets skip over) would be run as a formula by a spreadsheet. The export puts a `'` in
+  front of it (`'=SUM(A1)`), and the importer takes it off again. A text cell that already starts
+  with `'` gets one more for the same reason. Amounts are never guarded,
   so `-50.00` stays a number.
 
 ## Authoring tips
@@ -123,9 +149,13 @@ them, not the label:
 
 ## Provenance header
 
-Each export begins with `#` lines holding the schema version, the export timestamp, the scope
-(`full` or `yearly`, plus the year) and the source URL. A spreadsheet shows them as text in
-column A. You can omit them in a hand-authored file.
+Each export begins with two `#` lines. The first holds the schema version and the scope (`full`,
+or `yearly` plus the year). The second says how to read the file. A spreadsheet shows them as
+text in column A. You can omit them in a hand-authored file.
+
+```
+# fiscode export (schema: v2; scope: yearly; year: 2026)
+```
 
 ## Old files (schema v1)
 
@@ -142,9 +172,25 @@ income,in_01…,2026-06-04T12:00:00.000Z,…,1000000,…
 with the same three rules — `#` lines are comments, a row starting with `record_type` is a
 header, anything else is a row under the header above it — and the **column name** says how to
 read a cell: `amount_cents` is integer cents, `amount` is dollars. A v1 file is simply a file
-with one header and cents columns. You can even mix the two styles in one file.
+with one header and cents columns. You can even mix the two styles in one file. If one row fills
+both `amount` and `amount_cents`, they must agree; a row where they differ is rejected.
 
-The `# schema:` line is used for one thing: a file marked `v1` never carried the `'` formula
+A few v2 headers are longer than the v1 name so they read clearly on their own. The importer
+accepts both:
+
+| v2 header                         | v1 name                                    |
+| --------------------------------- | ------------------------------------------ |
+| `entity_type`, `client_type`      | `type`                                     |
+| `income_kind`                     | `kind`                                     |
+| `model_year`                      | `year`                                     |
+| `deduction_method`                | `method`                                   |
+| `amount`, `annual_w2_wages`, …    | `amount_cents`, `annual_w2_wages_cents`, … |
+| `default_hourly_rate`             | `default_rate_cents`                       |
+| `default_commission_rate_percent` | `default_commission_rate_basis_points`     |
+
+v1 files also had an `# exported:` time line. It is read and ignored.
+
+The `schema:` marker is used for one thing: a file marked `v1` never carried the `'` formula
 guard, so its text is kept exactly as written.
 
 Exports are always written as v2. An app version older than v2 cannot read a v2 file.
@@ -206,7 +252,7 @@ Jul onward = two rows).
 
 <TypeTable
   type={{
-    type: {
+    entity_type: {
       description: "sole_prop | single_member_llc | s_corp. s_corp is stored but not calculated.",
       type: "code",
       required: true,
@@ -240,8 +286,8 @@ Payers. Income rows reference clients by `client_id`.
 <TypeTable
   type={{
     name: { description: "Display name.", type: "string", required: true },
-    type: { description: "Free-form (e.g. recurring, consulting).", type: "string" },
-    default_rate: { description: "Default hourly rate.", type: "money" },
+    client_type: { description: "Free-form (e.g. recurring, consulting).", type: "string" },
+    default_hourly_rate: { description: "Default rate in dollars per hour.", type: "money" },
     default_commission_rate_percent: {
       description: "Default commission rate, e.g. 6.00 for 6%.",
       type: "percent",
@@ -260,7 +306,7 @@ rows are informational unless you also record them on a `spouse` span.
     date: { description: "Payment date.", type: "date", required: true },
     amount: { description: "Amount paid.", type: "money", required: true },
     source_type: { description: "1099 | w2", type: "code", required: true },
-    kind: { description: "recurring | bonus | consulting | other", type: "code" },
+    income_kind: { description: "recurring | bonus | consulting | other", type: "code" },
     description: { description: "Short label.", type: "string" },
     notes: { description: "Long-form notes.", type: "string" },
     client_id: { description: "The client's id. Empty for W-2 entries.", type: "string" },
@@ -289,9 +335,9 @@ Vehicles available for business mileage. Each `mileage` row references one by `v
   type={{
     make: { description: "Manufacturer.", type: "string", required: true },
     model: { description: "Model name.", type: "string", required: true },
-    year: { description: "Model year.", type: "whole number" },
+    model_year: { description: "Model year.", type: "whole number" },
     mpg: { description: "Miles per gallon (informational).", type: "whole number" },
-    method: {
+    deduction_method: {
       description: "standard_mileage | actual. Only standard_mileage is calculated.",
       type: "code",
     },
@@ -327,7 +373,7 @@ $1,500/yr) is calculated; `actual`-method rows are stored but contribute $0.
   type={{
     start_date: { description: "Config start.", type: "date", required: true },
     end_date: { description: "Config end. Empty = open-ended.", type: "date" },
-    method: { description: "simplified | actual.", type: "code" },
+    deduction_method: { description: "simplified | actual.", type: "code" },
     office_sqft: {
       description: "Office area, square feet. Clamped at 300 for the deduction.",
       type: "whole number",
@@ -404,16 +450,28 @@ When you upload a CSV to fiscode you pick one of three modes:
   Use this when the CSV is the source of truth (the typical CSV-first workflow).
 - **restore** — the same as overwrite, with wording for reverting to a known-good backup.
 
-Every import appends a history entry holding the full pre-import state, so you can revert.
+Every import over existing data appends a history entry holding the full pre-import state, so you
+can revert.
 
 ## Validation
 
-The importer reports errors per row rather than stopping at the first bad cell. A file with any
-rejected row is not imported. Common rejections:
+The importer checks every row rather than stopping at the first bad cell. A file with any
+rejected row is not imported at all. The app shows the first few problems on screen, each with the
+row number as your spreadsheet shows it, the record type, the column, and what was expected:
+
+```
+Row 50 (expense): amount: Expected a dollar amount with at most two decimals, like 1234.56, got "899.999"
+Row 27 (income): date: Expected a date as YYYY-MM-DD, got "1/15/2026". In a spreadsheet, format the column as yyyy-mm-dd before saving
+```
+
+Common rejections:
 
 - **Unknown `record_type`** — a typo, or a record type the running app doesn't recognize.
 - **A money cell it cannot read exactly** — `ten`, `1e3`, or more than two decimals.
-- **A date that is not `YYYY-MM-DD`.**
+- **A date that is not a real `YYYY-MM-DD` date** — `1/15/2026`, and also `2026-02-30`.
+- **Dollar and cents columns that disagree** in one row.
+- **A schema marker this version does not know** — the file was written by a newer fiscode.
+  Update the app, then import again.
 - **A non-integer in a whole-number or `…_cents` column** — e.g. `amount_cents: 12.50`.
 - **Missing `se_start_date` on `profile`** — required; the tax engine uses it to gate which rows
   count toward the year.
@@ -422,8 +480,24 @@ rejected row is not imported. Common rejections:
 
 ## Round-trip guarantee
 
-`Export → Import → Export` gives back the same bytes, given the same export timestamp. In the
-app the timestamp on line 4 is the only thing that changes between two exports of the same data.
-Old v1 files import to the same state and re-export as v2. Both are enforced by vitest tests in
-`packages/csv/src/format.test.ts` and `packages/csv/src/round-trip.test.ts`, against a saved v1
-fixture.
+- Two exports of the same data are the same bytes, whenever and wherever they are made.
+- `Full export → restore into an empty database → full export` gives back the same bytes: the
+  same rows, deleted ones included, and the same history.
+- Old v1 files import to the same state and re-export as v2.
+
+These are enforced by vitest tests in `packages/csv/src/format.test.ts` (against a saved v1
+fixture) and `packages/db/src/repo/sync.test.ts` (through a real database).
+
+Three things to know about that guarantee:
+
+- **It is about an empty database.** An import over existing data adds one history row holding
+  the state from before the import, so that import can be reverted. The next export then has
+  that extra row. Today the app asks for a short setup before it shows the import card, so a
+  restore in the app is an import over that setup; restoring straight into an empty app is
+  planned.
+- **An empty text field and a missing one are the same cell.** Both are written as an empty cell
+  and read back as "no value".
+- **The export refuses to write what it could not read back.** If a stored date is not
+  `YYYY-MM-DD` (possible in data imported by an older version), the export stops and names the
+  row. Fix that row in the app, then export again. An old v1 file that holds such a date is
+  rejected on import for the same reason; correct the date in the file first.

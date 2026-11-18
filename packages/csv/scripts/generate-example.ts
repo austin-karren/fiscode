@@ -13,9 +13,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { EXAMPLE_FIXED_TIMESTAMP, exampleBundle, exportBundle } from "../src/index.ts";
+import { exampleBundle, exportBundle } from "../src/index.ts";
 
-const csv = exportBundle(exampleBundle(), { scope: "full", exportedAt: EXAMPLE_FIXED_TIMESTAMP });
+const csv = exportBundle(exampleBundle(), { scope: "full" });
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outDir = join(here, "..", "..", "..", "apps", "fumadocs", "public", "downloads");
