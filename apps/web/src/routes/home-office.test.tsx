@@ -34,12 +34,22 @@ const ackError = "Acknowledge regular & exclusive use";
 describe("home office form", () => {
   it("ticks the acknowledgement when its label is clicked", () => {
     render(<HomeOfficePage />);
-    const label = screen.getByText("Regular & exclusive use");
-    expect(label.tagName).toBe("LABEL");
-    expect(document.getElementById(label.getAttribute("for")!)).not.toBeNull();
-
-    fireEvent.click(label);
+    fireEvent.click(screen.getByText("Regular & exclusive use"));
     expect(ackBox()).toBeChecked();
+  });
+
+  it("names the acknowledgement by its card text, without the info button", () => {
+    render(<HomeOfficePage />);
+    expect(ackBox()).toHaveAccessibleName(
+      "Regular & exclusive use I acknowledge the home office is used regularly and exclusively for business.",
+    );
+    expect(screen.getByRole("button", { name: "More info about Regular & exclusive use" }));
+  });
+
+  it("gives every element a unique id", () => {
+    render(<HomeOfficePage />);
+    const ids = [...document.querySelectorAll("[id]")].map((el) => el.id);
+    expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
   });
 
   it("marks the acknowledgement invalid when submitted without it", async () => {

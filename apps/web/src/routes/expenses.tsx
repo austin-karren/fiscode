@@ -25,6 +25,7 @@ import { TSFormField } from "../components/forms/ts-form-field";
 import { DatePicker, dateToIso } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { LabelWithTooltip } from "../components/forms/labeled";
+import { InfoTooltip } from "../components/info-tooltip";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
@@ -192,7 +193,14 @@ function ExpensesPage() {
             </TSFormField>
             <TSFormField form={form} name="flagForSection179">
               {(field) => (
-                <FormItem className="@sm:col-span-2 @4xl:col-span-5">
+                <FormItem className="relative @sm:col-span-2 @4xl:col-span-5">
+                  {/* The card is one <label>, so its text names the checkbox.
+                      The info button stays outside it to keep that name clean. */}
+                  <InfoTooltip
+                    text={GLOSSARY.section179}
+                    ariaLabel="More info about §179 candidate"
+                    className="absolute top-3 right-3 z-10"
+                  />
                   <FieldLabel>
                     <Field orientation="horizontal">
                       <FormControl>
@@ -203,11 +211,7 @@ function ExpensesPage() {
                         />
                       </FormControl>
                       <FieldContent>
-                        <FieldTitle>
-                          <LabelWithTooltip tooltip={GLOSSARY.section179}>
-                            §179 candidate
-                          </LabelWithTooltip>
-                        </FieldTitle>
+                        <FieldTitle>§179 candidate</FieldTitle>
                         <FieldDescription>
                           Equipment you'd like to fully expense this year rather than depreciate.
                         </FieldDescription>

@@ -24,6 +24,7 @@ import { TSFormField } from "../components/forms/ts-form-field";
 import { DatePicker, dateToIso } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { LabelWithTooltip } from "../components/forms/labeled";
+import { InfoTooltip } from "../components/info-tooltip";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditHomeOfficeDialog } from "../components/edit-home-office-dialog";
@@ -173,7 +174,14 @@ function HomeOfficePage() {
               validators={{ onBlur: fs.regularExclusiveAck }}
             >
               {(field) => (
-                <FormItem className="@sm:col-span-2 @4xl:col-span-4">
+                <FormItem className="relative @sm:col-span-2 @4xl:col-span-4">
+                  {/* The card is one <label>, so its text names the checkbox.
+                      The info button stays outside it to keep that name clean. */}
+                  <InfoTooltip
+                    text={GLOSSARY.regularExclusive}
+                    ariaLabel="More info about Regular & exclusive use"
+                    className="absolute top-3 right-3 z-10"
+                  />
                   <FieldLabel>
                     <Field orientation="horizontal">
                       <FormControl>
@@ -184,11 +192,7 @@ function HomeOfficePage() {
                         />
                       </FormControl>
                       <FieldContent>
-                        <FieldTitle>
-                          <LabelWithTooltip tooltip={GLOSSARY.regularExclusive}>
-                            Regular &amp; exclusive use
-                          </LabelWithTooltip>
-                        </FieldTitle>
+                        <FieldTitle>Regular &amp; exclusive use</FieldTitle>
                         <FieldDescription>
                           I acknowledge the home office is used regularly and exclusively for
                           business.
