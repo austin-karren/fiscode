@@ -362,8 +362,9 @@ describe("deriveYear — home-office actual (Form 8829)", () => {
   });
 
   it("a shared changeover day belongs to the later home, and the total never exceeds the profit", () => {
-    // Simplified Jan 1 – Jul 1 (182 days: $750 × 182/365 = $373.97), actual from Jul 1 ($1,046.53).
-    // $1,000 earned Jul 1: Jul 1 is the actual home's, so the old home's profit is $0.
+    // Simplified entered Jan 1 – Jul 1, actual from Jul 1 ($1,046.53). Jul 1 is the new home's,
+    // for profit and amount: the old home owns 181 days ($750 × 181/365 = $371.92).
+    // $1,000 earned Jul 1: the old home's profit is $0.
     const b = makeBundle({
       income: [income("i1", "2026-07-01", 1_000_00)],
       homeOffice: [
@@ -373,10 +374,33 @@ describe("deriveYear — home-office actual (Form 8829)", () => {
     });
     const d = deriveYear(b, 2026);
     expect(d.homeOfficeDeduction).toBeLessThanOrEqual(1_000_00);
-    // old home: $373.97 lost; new home: $1,000 allowed, $46.53 carried
+    // old home: $371.92 lost; new home: $1,000 allowed, $46.53 carried
     expect(d.homeOfficeDeduction).toBe(1_000_00);
-    expect(d.homeOfficeLost).toBe(37_397);
+    expect(d.homeOfficeLost).toBe(37_192);
     expect(d.homeOfficeCarryover).toBe(4_653);
+  });
+
+  it("the same move typed two ways gives the same figures (r4: amount over owned days)", () => {
+    // "ends Jun 30 / starts Jul 1" and "ends Jul 1 / starts Jul 1": the old home owns Jan 1 – Jun 30
+    // either way (181 days, $371.92); $3,000 earned Feb 10 → old home in full, new home carried.
+    const entered = (oldEnd: string) =>
+      deriveYear(
+        makeBundle({
+          income: [income("i1", "2026-02-10", 3_000_00)],
+          homeOffice: [
+            homeOffice("h1", "2026-01-01", oldEnd, 150),
+            { ...actualOffice("2026-07-01"), id: "h2" },
+          ],
+        }),
+        2026,
+      );
+    const a = entered("2026-06-30");
+    const b = entered("2026-07-01");
+    expect(a.homeOfficeDeduction).toBe(37_192);
+    expect(a.homeOfficeCarryover).toBe(104_653);
+    expect(b.homeOfficeDeduction).toBe(a.homeOfficeDeduction);
+    expect(b.homeOfficeLost).toBe(a.homeOfficeLost);
+    expect(b.homeOfficeCarryover).toBe(a.homeOfficeCarryover);
   });
 
   it("the total is capped at the whole profit when expenses fall outside every office's days", () => {

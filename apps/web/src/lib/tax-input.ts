@@ -82,16 +82,25 @@ const sumMileageDeductionWithinYear = (
   );
 };
 
-// One home-office config's amount before the gross income limit, prorated to
-// its days in use within the year (or through `through`), SE start clamped.
+// One home-office config's amount before the gross income limit, over the
+// days it owns.
 type HomeOfficePiece = {
   method: "simplified" | "actual";
   amount: Cents;
-  /** The config's days in use: [from, to], inclusive ISO dates. */
+  /** The days this config owns: [from, to], inclusive ISO dates. */
   from: string;
   to: string;
 };
 
+// The configs that deduct something, each with the days it owns within the
+// year (through `through`, not before the SE start), and its amount prorated
+// over exactly those days. One source of owned days for the amount and the
+// profit window:
+// - Where two configs overlap, the later start owns the shared days (a move
+//   entered as "ends Jul 1" and "starts Jul 1" gives Jul 1 to the new home;
+//   an overlap of any kind is treated as a move to the later config).
+// - A config that deducts nothing (no area, no costs, or an office larger
+//   than the home) owns no days.
 const homeOfficePieces = (
   bundle: Bundle,
   year: number,
@@ -99,17 +108,32 @@ const homeOfficePieces = (
   through: string,
 ): { pieces: HomeOfficePiece[]; areaRejected: number } => {
   const cfg = getYearConfig(year);
-  const pieces: HomeOfficePiece[] = [];
-  let simplifiedSoFar = 0;
+  const yearDays = isLeapYear(year) ? 366 : 365;
   let areaRejected = 0;
+  const candidates: Array<{ h: Bundle["homeOffice"][number]; from: string; to: string }> = [];
   for (const h of bundle.homeOffice) {
     if (h.deletedAt !== null) continue;
     const window = activeWindow(year, h.startDate, h.endDate, seStartDate, through);
     if (!window) continue;
-    const monthsActive = monthsActiveIn(year, h.startDate, h.endDate, seStartDate, through);
     if (h.method === "simplified") {
-      const sqft = Math.min(h.officeSqft ?? 0, cfg.homeOffice.simplifiedMaxSqft);
-      if (sqft <= 0) continue;
+      if (Math.min(h.officeSqft ?? 0, cfg.homeOffice.simplifiedMaxSqft) <= 0) continue;
+    } else {
+      const fullYear = actualHomeOfficeExpenses({ ...h, monthsActive: 12 });
+      if (fullYear.areaRejected) areaRejected += 1;
+      if (fullYear.amount <= 0) continue;
+    }
+    candidates.push({ h, ...window });
+  }
+  candidates.sort((x, y) => (x.from < y.from ? -1 : x.from > y.from ? 1 : 0));
+  const pieces: HomeOfficePiece[] = [];
+  let simplifiedSoFar = 0;
+  candidates.forEach((c, i) => {
+    const next = candidates.slice(i + 1).find((n) => n.from <= c.to);
+    const to = next ? dayBefore(next.from) : c.to;
+    if (to < c.from) return;
+    const monthsActive = (daysBetweenInclusive(c.from, to) / yearDays) * 12;
+    if (c.h.method === "simplified") {
+      const sqft = Math.min(c.h.officeSqft ?? 0, cfg.homeOffice.simplifiedMaxSqft);
       const annual = sqft * cfg.homeOffice.simplifiedRatePerSqft;
       // The $1,500 cap holds across simplified configs.
       const amount = Math.min(
@@ -117,13 +141,12 @@ const homeOfficePieces = (
         Math.round((annual * monthsActive) / 12),
       );
       simplifiedSoFar += amount;
-      pieces.push({ method: "simplified", amount: cents(amount), ...window });
+      pieces.push({ method: "simplified", amount: cents(amount), from: c.from, to });
     } else {
-      const r = actualHomeOfficeExpenses({ ...h, monthsActive });
-      if (r.areaRejected) areaRejected += 1;
-      pieces.push({ method: "actual", amount: r.amount, ...window });
+      const amount = actualHomeOfficeExpenses({ ...c.h, monthsActive }).amount;
+      pieces.push({ method: "actual", amount, from: c.from, to });
     }
-  }
+  });
   return { pieces, areaRejected };
 };
 
@@ -165,9 +188,8 @@ const tentativeProfitBetween = (
 // more than one home: "include only the income earned and the deductions
 // attributable to that income during the period you owned the home".
 //
-// - Each date belongs to one config: where two overlap (a move entered as
-//   "ends Jul 1" and "starts Jul 1"), the later start wins the shared days.
-// - Configs that deduct nothing (no costs, or area rejected) own no days.
+// - Each config's profit window is the days it owns (see homeOfficePieces),
+//   the same days its amount is prorated over.
 // - The total allowed never exceeds the business's whole tentative profit
 //   (line 27 is never more than line 15). Any excess over it is cut from the
 //   latest config back.
@@ -184,17 +206,9 @@ const limitedHomeOffice = (
   through: string,
   wholeTentativeProfit: number,
 ): { allowed: Cents; lost: Cents; carryover: Cents; areaRejected: number } => {
-  const { pieces: all, areaRejected } = homeOfficePieces(bundle, year, seStartDate, through);
-  const pieces = all
-    .filter((p) => p.amount > 0)
-    .toSorted((x, y) => (x.from < y.from ? -1 : x.from > y.from ? 1 : 0));
-  // Profit windows: a later start takes the shared days.
-  const profitTo = (i: number): string => {
-    const next = pieces.slice(i + 1).find((p) => p.from <= pieces[i]!.to);
-    return next ? dayBefore(next.from) : pieces[i]!.to;
-  };
-  const cut = pieces.map((piece, i) => {
-    const profit = tentativeProfitBetween(bundle, year, seStartDate, piece.from, profitTo(i));
+  const { pieces, areaRejected } = homeOfficePieces(bundle, year, seStartDate, through);
+  const cut = pieces.map((piece) => {
+    const profit = tentativeProfitBetween(bundle, year, seStartDate, piece.from, piece.to);
     return { piece, ...limitToTentativeProfit(piece.amount, profit) };
   });
   // Never more than the whole tentative profit: trim from the latest config back.
@@ -237,32 +251,6 @@ const activeWindow = (
   const from = start > floor ? start : floor;
   const to = end === null || end > through ? through : end;
   return from <= to ? { from, to } : null;
-};
-
-// Returns a fractional month count (active-day-count / year-days * 12)
-// for the home-office simplified deduction. Day-count proration matches
-// what an accountant does for partial-year periods — the previous
-// month-number subtraction over-credited any month containing even one
-// active day. With the new SE-start clamp, mid-month boundaries are
-// common, so the bucket math became materially wrong.
-const monthsActiveIn = (
-  year: number,
-  start: string,
-  end: string | null,
-  seStartDate: string,
-  through = `${year}-12-31`,
-): number => {
-  const yStart = `${year}-01-01`;
-  const yEnd = through;
-  if (start > yEnd) return 0;
-  if (end !== null && end < yStart) return 0;
-  const lowerBound = (seStartDate || yStart) > yStart ? seStartDate || yStart : yStart;
-  const effStart = start > lowerBound ? start : lowerBound;
-  const effEnd = end === null || end > yEnd ? yEnd : end;
-  if (effStart > effEnd) return 0;
-  const activeDays = daysBetweenInclusive(effStart, effEnd);
-  const yearDays = isLeapYear(year) ? 366 : 365;
-  return (activeDays / yearDays) * 12;
 };
 
 const isLeapYear = (year: number): boolean =>

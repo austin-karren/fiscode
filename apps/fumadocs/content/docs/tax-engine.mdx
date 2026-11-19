@@ -101,10 +101,12 @@ you owned the home". So:
 
 - A home used from July 1 is limited by the profit dated from July 1. Income earned before it
   counts toward no home office.
-- Each date belongs to one home: when a move is entered as "ends Jul 1" and "starts Jul 1", the
-  new home has Jul 1.
+- Each date belongs to one home, for both its deduction and its profit: when a move is entered as
+  "ends Jul 1" and "starts Jul 1", the new home has Jul 1. Any overlap is treated as a move to the
+  later home, which owns the shared days.
 - A config that deducts nothing (no costs, or an office larger than the home) has no days.
-- The total never exceeds the business's whole tentative profit.
+- The total never exceeds the business's whole tentative profit. Any excess is cut from the latest
+  home back, and is lost or carried over by that home's method.
 
 **Mortgage interest and real estate taxes:** fiscode assumes the standard deduction, so their
 business share goes on lines 16 and 17 and is limited with the other operating expenses ("If you
