@@ -23,6 +23,7 @@ import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { archivedSuffix, pickableParents } from "./parent-name";
+import { useToday } from "../lib/use-today";
 
 const editSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -42,9 +43,10 @@ export function EditTimeDialog({
 }) {
   const [open, setOpen] = useState(false);
 
+  const today = useToday();
   const form = useForm({
     defaultValues: {
-      date: isoToDate(entry.date) ?? new Date(),
+      date: isoToDate(entry.date) ?? today,
       hours: String(entry.minutes / 60),
       clientId: entry.clientId ?? "",
       description: entry.description ?? "",

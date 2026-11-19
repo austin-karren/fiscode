@@ -34,6 +34,7 @@ import { moneyAmount } from "../lib/field-schemas";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@fiscode/ui/components/tooltip";
 import { GLOSSARY } from "../lib/tax-glossary";
+import { useToday } from "../lib/use-today";
 
 const CATEGORIES = Object.entries(EXPENSE_CATEGORY_LABELS);
 
@@ -62,9 +63,10 @@ function ExpensesPage() {
   const { expenses, profile } = useLoaderData({ from: "/expenses" });
   const router = useRouter();
 
+  const today = useToday();
   const form = useForm({
     defaultValues: {
-      date: new Date() as Date | undefined,
+      date: today as Date | undefined,
       amount: "",
       category: "software_subs",
       description: "",

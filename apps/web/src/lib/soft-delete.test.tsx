@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { Toaster } from "sonner";
+import { Toaster, toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { restoreRow, softDeleteWithUndo } from "./soft-delete";
@@ -13,7 +13,12 @@ const makeRepo = () => ({
   revertTo: vi.fn(async (_id: string, snapshot: DemoRow) => snapshot),
 });
 
-afterEach(cleanup);
+// Sonner keeps toasts in a module-wide store that outlives the Toaster, so a
+// later test would otherwise see (and click) an earlier test's Undo.
+afterEach(() => {
+  cleanup();
+  toast.dismiss();
+});
 
 describe("softDeleteWithUndo", () => {
   it("deletes the row at once and tells the caller", async () => {

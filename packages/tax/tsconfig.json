@@ -1,4 +1,8 @@
 {
   "extends": "@fiscode/config/tsconfig.library.json",
+  "compilerOptions": {
+    // `console` (config/index.ts) is declared by the DOM lib; tax runs in the browser app.
+    "lib": ["ESNext", "DOM"]
+  },
   "include": ["src/**/*.ts"]
 }
