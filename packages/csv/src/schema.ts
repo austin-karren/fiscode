@@ -1,3 +1,4 @@
+import { parseWholeNumber } from "@fiscode/core";
 import { z } from "zod";
 
 // The flat row: every stored field of every record type, keyed by its v1
@@ -30,20 +31,19 @@ export type RecordType = z.infer<typeof recordTypeSchema>;
 const optStr = z.string().optional();
 const optBool = z.union([z.literal("0"), z.literal("1"), z.literal("")]).optional();
 
-// Numeric cells: empty → undefined; non-empty → must parse to a finite integer.
-// We accept the raw string here (no transform) and validate strictly in
-// rowToBundle once we know which record_type expects which integer columns.
-// Storing the validated string keeps the column-level error message tied
-// to the column name in zod's issue path, then the row-mapper consumes via
-// `parseInt` knowing the value is well-formed.
+// Numeric cells: empty or spaces → blank; non-empty → plain ASCII digits with an
+// optional minus, within the safe-integer range (`parseWholeNumber` in
+// @fiscode/core). No exponent, hex, `+` or decimal point. Ranges are not
+// checked: Restore must take back any value the app's own export writes.
+// The row-mapper then reads the validated string with `Number`.
 const optInt = z
   .string()
   .optional()
   .refine(
     (s) => {
-      if (s === undefined || s === "") return true;
-      const n = Number(s.trim());
-      return Number.isFinite(n) && Number.isInteger(n);
+      if (s === undefined) return true;
+      const parsed = parseWholeNumber(s, { signed: true });
+      return parsed.ok || parsed.reason === "empty";
     },
     { message: "Expected an integer" },
   );
