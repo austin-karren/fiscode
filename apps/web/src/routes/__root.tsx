@@ -7,6 +7,7 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import { AppSidebar } from "../components/app-sidebar";
 import { ErrorEmpty } from "../components/empty-states/error";
+import { ServiceWorkerUpdates } from "../components/service-worker-updates";
 import { NotFoundEmpty } from "../components/empty-states/not-found";
 
 export const Route = createRootRoute({
@@ -58,6 +59,7 @@ function RootLayout() {
           </main>
         </SidebarInset>
         <Toaster richColors />
+        <ServiceWorkerUpdates />
         {import.meta.env.DEV && <TanStackRouterDevtools position="bottom-right" />}
       </SidebarProvider>
     </TooltipProvider>
