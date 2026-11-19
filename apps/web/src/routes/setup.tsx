@@ -216,7 +216,10 @@ function SetupPage() {
         </Card>
       </EnterToSubmitForm>
 
-      <ImportCard variant="setup" onImported={() => navigate({ to: "/" })} />
+      {/* "Restore a backup" on the set-up-first screens links here. */}
+      <div id="restore" className="scroll-mt-16">
+        <ImportCard variant="setup" onImported={() => navigate({ to: "/" })} />
+      </div>
     </Page>
   );
 }
