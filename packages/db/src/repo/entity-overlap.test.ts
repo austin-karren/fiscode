@@ -300,3 +300,79 @@ describe("an end date before the start date", () => {
     expect(noted?.notes).toBe("from a file");
   });
 });
+
+describe("entityRepo.moveFirstStart (Profile SE start follows into the first period)", () => {
+  it("r2 demo C: a stored overlap that the move grows is refused (preexisting)", async () => {
+    await importBundle(
+      {
+        ...emptyBundle(),
+        entities: [
+          row("a", "sole_prop", "2026-03-01", null),
+          row("b", "single_member_llc", "2026-06-01", null),
+        ],
+      },
+      "import-restore",
+    );
+    const result = await entityRepo.moveFirstStart("2026-02-02");
+    expect(result).toMatchObject({ moved: false, reason: "rejected" });
+    if (!result.moved && result.reason === "rejected") {
+      expect(result.error).toBeInstanceOf(EntityOverlapError);
+      expect((result.error as EntityOverlapError).preexisting).toBe(true);
+    }
+  });
+
+  it("r2 demo D: shrinking out of one stored overlap, still in another, is saved", async () => {
+    await importBundle(
+      {
+        ...emptyBundle(),
+        entities: [
+          row("a", "sole_prop", "2026-01-05", "2026-12-31"),
+          row("b", "single_member_llc", "2026-02-01", "2026-02-28"),
+          row("c", "single_member_llc", "2026-06-01", null),
+        ],
+      },
+      "import-restore",
+    );
+    expect(await entityRepo.moveFirstStart("2026-03-01")).toEqual({
+      moved: true,
+      id: "a",
+      from: "2026-01-05",
+    });
+  });
+
+  it("moves the earliest live period's start and reports it", async () => {
+    const first = await entityRepo.create(input("sole_prop", "2026-11-02", null));
+    const result = await entityRepo.moveFirstStart("2026-03-02");
+    expect(result).toEqual({ moved: true, id: first.id, from: "2026-11-02" });
+    expect((await entityRepo.list())[0]!.startDate).toBe("2026-03-02");
+  });
+
+  it("moves only the first period when there are two", async () => {
+    await entityRepo.create(input("sole_prop", "2026-03-02", "2026-09-01"));
+    const second = await entityRepo.create(input("single_member_llc", "2026-09-01", null));
+    await entityRepo.moveFirstStart("2026-01-15");
+    const rows = await entityRepo.list();
+    expect(rows.map((r) => r.startDate)).toEqual(["2026-01-15", "2026-09-01"]);
+    expect(rows[1]!.id).toBe(second.id);
+  });
+
+  it("does nothing when the first period already starts there, or there is none", async () => {
+    expect(await entityRepo.moveFirstStart("2026-03-02")).toEqual({ moved: false, reason: "none" });
+    await entityRepo.create(input("sole_prop", "2026-03-02", null));
+    expect(await entityRepo.moveFirstStart("2026-03-02")).toEqual({ moved: false, reason: "same" });
+  });
+
+  it("refuses a move past the first period's end, through the repo's rules, and writes nothing", async () => {
+    await entityRepo.create(input("sole_prop", "2026-01-01", "2026-06-30"));
+    await entityRepo.create(input("single_member_llc", "2026-06-30", null));
+    const historyBefore = await historyRepo.listAll();
+    const result = await entityRepo.moveFirstStart("2026-08-01");
+    expect(result).toMatchObject({ moved: false, reason: "rejected" });
+    if (!result.moved && result.reason === "rejected") {
+      expect(result.error).toBeInstanceOf(EntityDatesError);
+      expect(result.error.message.length).toBeGreaterThan(0);
+    }
+    expect((await entityRepo.list())[0]!.startDate).toBe("2026-01-01");
+    expect(await historyRepo.listAll()).toEqual(historyBefore);
+  });
+});

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canMoveEntityStart,
   EntityDatesError,
   EntityOverlapError,
   EntityPeriodError,
@@ -281,4 +282,79 @@ describe("formatDisplayDate", () => {
     expect(formatDisplayDate("1/15/2026")).toBe("1/15/2026");
     expect(formatDisplayDate("2026-13-01")).toBe("2026-13-01");
   });
+});
+
+describe("canMoveEntityStart: the rule the repo and the Profile dialog share", () => {
+  const p = (id: string, type: string, startDate: string, endDate: string | null) => ({
+    id,
+    type,
+    startDate,
+    endDate,
+    deletedAt: null,
+  });
+  type Case = {
+    name: string;
+    live: ReturnType<typeof p>[];
+    move: string;
+    expected: null | "dates" | "overlap-new" | "overlap-preexisting";
+    conflictId?: string;
+  };
+  const cases: Case[] = [
+    {
+      name: "Austin's case: one open period, start moved earlier",
+      live: [p("a", "sole_prop", "2026-11-02", null)],
+      move: "2026-03-02",
+      expected: null,
+    },
+    {
+      name: "r1 demo B: a closed first period moved past its own end",
+      live: [
+        p("a", "sole_prop", "2026-01-05", "2026-02-28"),
+        p("b", "single_member_llc", "2026-03-01", null),
+      ],
+      move: "2026-03-02",
+      expected: "dates",
+    },
+    {
+      name: "r2 demo C: an existing overlap, start moved earlier (grows) is rejected",
+      live: [
+        p("a", "sole_prop", "2026-03-01", null),
+        p("b", "single_member_llc", "2026-06-01", null),
+      ],
+      move: "2026-02-02",
+      expected: "overlap-preexisting",
+      conflictId: "b",
+    },
+    {
+      name: "r2 demo D: shrinking out of one existing overlap, still in another, is allowed",
+      live: [
+        p("a", "sole_prop", "2026-01-05", "2026-12-31"),
+        p("b", "single_member_llc", "2026-02-01", "2026-02-28"),
+        p("c", "single_member_llc", "2026-06-01", null),
+      ],
+      move: "2026-03-01",
+      expected: null,
+    },
+    {
+      name: "a shrink that lands on the next period's start day adds an overlap",
+      live: [
+        p("a", "sole_prop", "2026-01-01", "2026-06-01"),
+        p("b", "single_member_llc", "2026-06-01", null),
+      ],
+      move: "2026-06-01",
+      expected: "overlap-new",
+      conflictId: "b",
+    },
+  ];
+  for (const c of cases) {
+    it(c.name, () => {
+      const problem = canMoveEntityStart(c.live, c.live[0]!, c.move);
+      if (c.expected === null) return expect(problem).toBeNull();
+      if (c.expected === "dates") return expect(problem).toBeInstanceOf(EntityDatesError);
+      expect(problem).toBeInstanceOf(EntityOverlapError);
+      const err = problem as EntityOverlapError;
+      expect(err.preexisting).toBe(c.expected === "overlap-preexisting");
+      expect(err.conflict.id).toBe(c.conflictId);
+    });
+  }
 });

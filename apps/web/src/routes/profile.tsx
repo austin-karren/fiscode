@@ -9,6 +9,8 @@ import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
 import {
   EntityPeriodError,
   cents,
+  EntityOverlapError,
+  canMoveEntityStart,
   ENTITY_TYPE_LABELS,
   FILING_STATUS_LABELS,
   QUARTERLY_METHOD_LABELS,
@@ -160,10 +162,54 @@ function ProfileFormPanel({
         quarterlyMethod: parsed.quarterlyMethod,
         prepLeadDays: parsed.prepLeadDays,
       });
-      toast.success("Profile updated.");
+      const newStart = dateToIso(value.seStartDate!);
+      if (moveEntityStart && entityStartToMove(newStart) && !entityMoveBlocked(newStart)) {
+        const moved = await entityRepo.moveFirstStart(newStart);
+        if (moved.moved) {
+          toast.success(
+            `Profile updated. Your first entity period now starts ${formatDate(newStart)}.`,
+          );
+        } else if (moved.reason === "rejected") {
+          toast.error(`Profile updated. The entity period was not moved: ${moved.error.message}`);
+        } else {
+          toast.success("Profile updated.");
+        }
+      } else {
+        toast.success("Profile updated.");
+      }
       router.invalidate();
     },
   });
+
+  // The first entity period, when a new SE start would move its start: the
+  // confirm dialog offers that move (on by default).
+  const firstEntity = entities
+    .filter((e) => e.deletedAt === null)
+    .toSorted((a, b) => (a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : 0))[0];
+  const entityStartToMove = (newStart: string) =>
+    newStart !== profile.seStartDate &&
+    firstEntity !== undefined &&
+    firstEntity.startDate !== newStart;
+  const [moveEntityStart, setMoveEntityStart] = useState(true);
+  // Why the repo would refuse the move, checked before it is offered with
+  // the repo's own rule (`canMoveEntityStart`); the repo stays the backstop.
+  const entityMoveBlocked = (newStart: string): string | null => {
+    if (!firstEntity) return null;
+    const problem = canMoveEntityStart(entities, firstEntity, newStart);
+    if (!problem) return null;
+    if (problem instanceof EntityOverlapError) {
+      return `Your first entity period stays as it is. ${problem.message}`;
+    }
+    return `Your first entity period ends ${formatDate(firstEntity.endDate!)}, before ${formatDate(newStart)}, so it stays as it is. Edit it under Entity periods if you need to.`;
+  };
+
+  // The new SE start when the dialog has something to say about the first
+  // entity period (a checkbox, or why it stays).
+  const offeredMove = (): string | undefined => {
+    const v = profileForm.state.values.seStartDate;
+    const newStart = v ? dateToIso(v) : undefined;
+    return newStart && entityStartToMove(newStart) ? newStart : undefined;
+  };
 
   // Set when the repo blocks an entity period: an overlap, or an end before the start.
   // Set when the repo blocks the dates; shown on the field it is about.
@@ -228,6 +274,8 @@ function ProfileFormPanel({
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (changedScopeFields().length > 0) {
+      // Ticked by default every time the dialog opens.
+      setMoveEntityStart(true);
       setScopeConfirmOpen(true);
       return;
     }
@@ -269,11 +317,29 @@ function ProfileFormPanel({
         open={scopeConfirmOpen}
         onOpenChange={setScopeConfirmOpen}
         title="Save changes to scope-shifting fields?"
-        description={`Changing your ${changedScopeFields().join(" and ")} retroactively recomputes the year. Rows dated outside the new window stop being counted; brackets and rates change with the new filing-status / state. The underlying data is unchanged.`}
+        description={`Changing your ${changedScopeFields().join(" and ")} retroactively recomputes the year. Rows dated outside the new window stop being counted; brackets and rates change with the new filing-status / state. ${
+          offeredMove() ? "Your rows are unchanged." : "The underlying data is unchanged."
+        }`}
         confirmLabel="Save"
         confirmVariant="destructive"
         onConfirm={() => void profileForm.handleSubmit()}
-      />
+      >
+        {(() => {
+          const newStart = offeredMove();
+          if (!newStart || !firstEntity) return null;
+          const blocked = entityMoveBlocked(newStart);
+          if (blocked) return <p className="text-sm">{blocked}</p>;
+          return (
+            <label className="flex items-start gap-2 text-sm">
+              <FieldCheckbox checked={moveEntityStart} onCheckedChange={setMoveEntityStart} />
+              <span>
+                Also move your first entity period ({labelFor(ENTITY_TYPE_LABELS, firstEntity.type)}
+                ) to start {formatDate(newStart)}, from {formatDate(firstEntity.startDate)}.
+              </span>
+            </label>
+          );
+        })()}
+      </ConfirmDialog>
 
       <EnterToSubmitForm onSubmit={handleProfileSubmit}>
         <Card>
