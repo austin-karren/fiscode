@@ -1,4 +1,8 @@
+import type { Bundle } from "@fiscode/csv";
 import { expensesCountedForYear, type ExpenseForYear } from "@fiscode/core";
+import { getYearConfig, mileageRateOn } from "@fiscode/tax";
+
+import { countedInYear } from "./tax-input";
 
 /**
  * The year-end packet's expense breakdown: totals in cents per category, over
@@ -15,4 +19,41 @@ export const expenseTotalsByCategory = (
     totals[e.category] = (totals[e.category] ?? 0) + e.amountCents;
   }
   return totals;
+};
+
+const byDate = <T extends { date: string }>(a: T, b: T) => a.date.localeCompare(b.date);
+
+/**
+ * The year-end packet's lists, over the rows behind its totals
+ * (`countedInYear`): the 1099 income, oldest first; 1099 income per client,
+ * largest first, with income that has no client on its own line; and the
+ * mileage log, oldest first, each trip with the rate in force on its date.
+ * Per-trip dollars are left out: the deduction is rounded once per rate, so
+ * per-trip amounts would not add up to it.
+ */
+export const yearEndLists = (
+  bundle: Pick<Bundle, "income" | "mileage">,
+  year: number,
+  seStartDate: string,
+) => {
+  const income = countedInYear(
+    bundle.income.filter((i) => i.sourceType === "1099"),
+    year,
+    seStartDate,
+  ).sort(byDate);
+
+  const totals = new Map<string | null, number>();
+  for (const i of income) totals.set(i.clientId, (totals.get(i.clientId) ?? 0) + i.amountCents);
+  const clientTotals = [...totals]
+    .map(([clientId, amountCents]) => ({ clientId, amountCents }))
+    .sort((a, b) =>
+      a.clientId === null ? 1 : b.clientId === null ? -1 : b.amountCents - a.amountCents,
+    );
+
+  const cfg = getYearConfig(year);
+  const mileage = countedInYear(bundle.mileage, year, seStartDate)
+    .sort(byDate)
+    .map((t) => ({ ...t, ratePerMile: mileageRateOn(cfg, t.date) }));
+
+  return { income, clientTotals, mileage };
 };

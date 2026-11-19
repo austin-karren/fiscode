@@ -21,14 +21,26 @@ const inSeRange = (date: string, seStartDate: string, year: number): boolean => 
   return yearOf(date as never) === year && date >= floor;
 };
 
+/**
+ * The rows that count toward `year`: live, dated in the year, and on or after
+ * the SE start. The income and mileage totals are sums over these, and the
+ * year-end packet lists the same rows.
+ */
+export const countedInYear = <T extends { date: string; deletedAt: string | null }>(
+  rows: readonly T[],
+  year: number,
+  seStartDate: string,
+): T[] => rows.filter((r) => r.deletedAt === null && inSeRange(r.date, seStartDate, year));
+
 const sumWithinYear = (
   rows: Array<{ date: string; amountCents: number; deletedAt: string | null }>,
   year: number,
   seStartDate: string,
 ): Cents =>
-  rows
-    .filter((r) => r.deletedAt === null && inSeRange(r.date, seStartDate, year))
-    .reduce((sum, r) => addCents(sum, cents(r.amountCents)), cents(0));
+  countedInYear(rows, year, seStartDate).reduce(
+    (sum, r) => addCents(sum, cents(r.amountCents)),
+    cents(0),
+  );
 
 // Which expenses count (startup expenses before the SE start included) is
 // `expensesCountedForYear` in @fiscode/core, shared with the year-end packet.

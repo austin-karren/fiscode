@@ -5,7 +5,7 @@ import { Card } from "@fiscode/ui/components/card";
 import { Button } from "@fiscode/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
 import { buildBundle } from "@fiscode/db";
-import { exportBundle, exportFileName } from "@fiscode/csv";
+import { exportBundle, exportFileName, type VehicleRow } from "@fiscode/csv";
 import { estimateYear, getYearConfig } from "@fiscode/tax";
 import {
   cents,
@@ -13,6 +13,7 @@ import {
   EXPENSE_CATEGORY_LABELS,
   FILING_STATUS_LABELS,
   formatUSD,
+  INCOME_KIND_LABELS,
   labelFor,
   todayIso,
   yearOf,
@@ -25,7 +26,7 @@ import { buildAnnualizedInput, buildTaxInput, deriveYear } from "../lib/tax-inpu
 import { GLOSSARY } from "../lib/tax-glossary";
 import { formatDate } from "../lib/format-date";
 import { US_STATE_BY_CODE } from "../lib/us-states";
-import { expenseTotalsByCategory } from "../lib/year-end";
+import { expenseTotalsByCategory, yearEndLists } from "../lib/year-end";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { SetupRequiredEmpty } from "../components/empty-states/setup-required";
 import { InfoTooltip } from "../components/info-tooltip";
@@ -46,6 +47,7 @@ export const Route = createFileRoute("/year-end")({
         result: undefined,
         derived: undefined,
         totalsByCategory: undefined,
+        lists: undefined,
       } as const;
     }
     const profile = bundle.profile;
@@ -60,7 +62,8 @@ export const Route = createFileRoute("/year-end")({
     });
     const derived = deriveYear(bundle, year);
     const totalsByCategory = expenseTotalsByCategory(bundle.expenses, year, profile.seStartDate);
-    return { bundle, profile, year, result, derived, totalsByCategory } as const;
+    const lists = yearEndLists(bundle, year, derived.seStartDate);
+    return { bundle, profile, year, result, derived, totalsByCategory, lists } as const;
   },
   component: YearEndPage,
 });
@@ -80,7 +83,7 @@ function usePrintDate() {
 
 function YearEndPage() {
   const data = useLoaderData({ from: "/year-end" });
-  const { profile, year, result, derived, totalsByCategory } = data;
+  const { bundle, profile, year, result, derived, totalsByCategory, lists } = data;
   const printedOn = usePrintDate();
 
   // Profile missing → route still renders, but with SetupRequiredEmpty in
@@ -213,6 +216,8 @@ function YearEndPage() {
         </dl>
       </Card>
 
+      <YearEndLists lists={lists!} bundle={bundle} year={year} derived={derived} />
+
       <Card className="p-4 print:break-inside-avoid print:overflow-visible print:p-0 print:ring-0">
         <h2 className="mb-3 text-sm font-medium uppercase text-muted-foreground">
           Expense breakdown
@@ -280,5 +285,143 @@ function Row({
       </dt>
       <dd className="tabular-nums">{children}</dd>
     </div>
+  );
+}
+
+// A list card for the packet. Long lists may break across printed pages, so
+// only each row is kept whole.
+function ListCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Card className="p-4 print:overflow-visible print:p-0 print:ring-0">
+      <h2 className="mb-3 text-sm font-medium uppercase text-muted-foreground">{title}</h2>
+      <div className="overflow-x-auto print:overflow-visible">{children}</div>
+    </Card>
+  );
+}
+
+const ROW = "break-inside-avoid border-b border-border/40";
+const TOTAL_ROW = "break-inside-avoid font-medium";
+
+function YearEndLists({
+  lists,
+  bundle,
+  year,
+  derived,
+}: {
+  lists: ReturnType<typeof yearEndLists>;
+  bundle: { clients: { id: string; name: string }[]; vehicles: VehicleRow[] };
+  year: number;
+  derived: { gross1099: number; mileageDeduction: number };
+}) {
+  const clientName = (id: string | null) =>
+    id === null ? "No client" : (bundle.clients.find((c) => c.id === id)?.name ?? "Unknown client");
+  const vehicleName = (id: string | null) => {
+    const v = bundle.vehicles.find((x) => x.id === id);
+    return v ? [v.year, v.make, v.model].filter(Boolean).join(" ") : "—";
+  };
+  const totalMiles = lists.mileage.reduce((sum, t) => sum + t.businessMiles, 0);
+  return (
+    <>
+      <ListCard title="1099 income by client">
+        <table className="w-full text-sm">
+          <tbody>
+            {lists.clientTotals.map((t) => (
+              <tr key={t.clientId ?? "none"} className={ROW}>
+                <td className="py-1">{clientName(t.clientId)}</td>
+                <td className="py-1 text-right tabular-nums">{formatUSD(cents(t.amountCents))}</td>
+              </tr>
+            ))}
+            {lists.clientTotals.length === 0 ? (
+              <tr>
+                <td className="py-1 text-muted-foreground" colSpan={2}>
+                  No 1099 income for {year}.
+                </td>
+              </tr>
+            ) : (
+              <tr className={TOTAL_ROW}>
+                <td className="py-1">Total 1099 income</td>
+                <td className="py-1 text-right tabular-nums">
+                  {formatUSD(cents(derived.gross1099))}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </ListCard>
+
+      <ListCard title="1099 income">
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs text-muted-foreground">
+            <tr className={ROW}>
+              <th className="py-1 pe-3 font-medium">Date</th>
+              <th className="py-1 pe-3 font-medium">Client</th>
+              <th className="py-1 pe-3 font-medium">Kind</th>
+              <th className="py-1 pe-3 font-medium">Description</th>
+              <th className="py-1 text-right font-medium">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lists.income.map((i) => (
+              <tr key={i.id} className={ROW}>
+                <td className="py-1 pe-3 whitespace-nowrap">{formatDate(i.date)}</td>
+                <td className="py-1 pe-3">{clientName(i.clientId)}</td>
+                <td className="py-1 pe-3">{labelFor(INCOME_KIND_LABELS, i.kind)}</td>
+                <td className="py-1 pe-3">{i.description ?? "—"}</td>
+                <td className="py-1 text-right tabular-nums">{formatUSD(cents(i.amountCents))}</td>
+              </tr>
+            ))}
+            {lists.income.length === 0 ? (
+              <tr>
+                <td className="py-1 text-muted-foreground" colSpan={5}>
+                  No 1099 income for {year}.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </ListCard>
+
+      <ListCard title="Mileage log">
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs text-muted-foreground">
+            <tr className={ROW}>
+              <th className="py-1 pe-3 font-medium">Date</th>
+              <th className="py-1 pe-3 font-medium">Vehicle</th>
+              <th className="py-1 pe-3 font-medium">Purpose</th>
+              <th className="py-1 pe-3 text-right font-medium">Miles</th>
+              <th className="py-1 text-right font-medium">Rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lists.mileage.map((t) => (
+              <tr key={t.id} className={ROW}>
+                <td className="py-1 pe-3 whitespace-nowrap">{formatDate(t.date)}</td>
+                <td className="py-1 pe-3">{vehicleName(t.vehicleId)}</td>
+                <td className="py-1 pe-3">{t.purpose ?? "—"}</td>
+                <td className="py-1 pe-3 text-right tabular-nums">{t.businessMiles}</td>
+                <td className="py-1 text-right tabular-nums whitespace-nowrap">
+                  ${t.ratePerMile.toFixed(3)}/mi
+                </td>
+              </tr>
+            ))}
+            {lists.mileage.length === 0 ? (
+              <tr>
+                <td className="py-1 text-muted-foreground" colSpan={5}>
+                  No business trips for {year}.
+                </td>
+              </tr>
+            ) : (
+              <tr className={TOTAL_ROW}>
+                <td className="py-1 pe-3" colSpan={3}>
+                  Total ({formatUSD(cents(derived.mileageDeduction))} deduction)
+                </td>
+                <td className="py-1 pe-3 text-right tabular-nums">{totalMiles}</td>
+                <td />
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </ListCard>
+    </>
   );
 }

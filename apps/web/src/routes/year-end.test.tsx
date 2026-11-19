@@ -31,6 +31,44 @@ const loaderData = {
     excludedBeforeSeStart: { income: 0, expense: 0, mileage: 0 },
   },
   totalsByCategory: { software_subs: 8950 },
+  bundle: {
+    clients: [{ id: "c_demo", name: "Demo Client Co" }],
+    vehicles: [{ id: "v_demo", year: 2020, make: "Demo", model: "Wagon" }],
+  },
+  lists: {
+    income: [
+      {
+        id: "i1",
+        date: "2026-03-02",
+        clientId: "c_demo",
+        kind: "consulting",
+        description: "Demo engagement",
+        amountCents: 100_000,
+      },
+      {
+        id: "i2",
+        date: "2026-04-01",
+        clientId: null,
+        kind: "bonus",
+        description: null,
+        amountCents: 50_000,
+      },
+    ],
+    clientTotals: [
+      { clientId: "c_demo", amountCents: 100_000 },
+      { clientId: null, amountCents: 50_000 },
+    ],
+    mileage: [
+      {
+        id: "m1",
+        date: "2026-07-15",
+        vehicleId: "v_demo",
+        purpose: "Demo client visit",
+        businessMiles: 40,
+        ratePerMile: 0.76,
+      },
+    ],
+  },
 };
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
@@ -106,6 +144,27 @@ describe("year-end packet", () => {
       loaderData.derived.excludedBeforeSeStart = { income: 0, expense: 0, mileage: 0 };
       loaderData.derived.seStartDate = "2026-01-01";
     }
+  });
+
+  it("lists 1099 income per client, every income row, and the mileage log", () => {
+    render(<YearEndPage />);
+    const card = (title: string) =>
+      screen.getByRole("heading", { name: title }).closest("[data-slot=card]") as HTMLElement;
+
+    const byClient = card("1099 income by client");
+    expect(byClient).toHaveTextContent("Demo Client Co$1,000.00");
+    expect(byClient).toHaveTextContent("No client$500.00");
+    expect(byClient).toHaveTextContent("Total 1099 income$1,500.00");
+
+    const income = card("1099 income");
+    expect(income).toHaveTextContent("Mar 2, 2026Demo Client CoConsultingDemo engagement$1,000.00");
+    expect(income).toHaveTextContent("Apr 1, 2026No clientBonus—$500.00");
+
+    const log = card("Mileage log");
+    expect(log).toHaveTextContent("Jul 15, 20262020 Demo WagonDemo client visit40$0.760/mi");
+    expect(log).toHaveTextContent("Total ($0.00 deduction)40");
+
+    for (const c of [byClient, income, log]) expectNoRawValues(c);
   });
 
   it("tells the reader to confirm tax figures and links to Tax data, with no developer copy", () => {
