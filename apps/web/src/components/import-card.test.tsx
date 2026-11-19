@@ -299,6 +299,33 @@ describe("import card: an app that holds data", () => {
     expect(within(dialog).getByRole("button", { name: "Add rows" })).toBeDisabled();
   });
 
+  it("says that an added entity period is not checked for overlap", async () => {
+    buildBundle.mockResolvedValue(appState());
+    const withEntity: Bundle = {
+      ...emptyBundle(),
+      entities: [
+        {
+          id: "ent_new",
+          type: "single_member_llc",
+          startDate: "2026-11-02",
+          endDate: null,
+          notes: null,
+          createdAt: FIXED,
+          updatedAt: FIXED,
+          deletedAt: null,
+        },
+      ],
+    };
+    render(<ImportCard />);
+    choose(exportBundle(withEntity, { scope: "full" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Add rows/ }));
+
+    expect(dialog).toHaveTextContent(
+      "1 entity period will be added as the file has it, without the check for overlapping periods.",
+    );
+  });
+
   it("says nothing changed when the import fails, and keeps the dialog open", async () => {
     buildBundle.mockResolvedValue(appState());
     importBundle.mockRejectedValue(new Error("UNIQUE constraint failed: income.id"));

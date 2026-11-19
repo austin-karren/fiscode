@@ -7,7 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/u
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
 import {
-  EntityOverlapError,
+  EntityPeriodError,
   cents,
   nonNegativeIntegerString,
   optionalUsdString,
@@ -151,7 +151,7 @@ function ProfileFormPanel({
     },
   });
 
-  // Set when the repo blocks an entity period that overlaps another one.
+  // Set when the repo blocks an entity period: an overlap, or an end before the start.
   const [entityError, setEntityError] = useState<string | null>(null);
 
   const entityForm = useForm({
@@ -172,7 +172,7 @@ function ProfileFormPanel({
           deletedAt: null,
         });
       } catch (err) {
-        if (!(err instanceof EntityOverlapError)) throw err;
+        if (!(err instanceof EntityPeriodError)) throw err;
         setEntityError(err.message);
         return;
       }
@@ -186,7 +186,7 @@ function ProfileFormPanel({
     try {
       await entityRepo.update(id, { endDate: dateToIso(new Date()) });
     } catch (err) {
-      if (!(err instanceof EntityOverlapError)) throw err;
+      if (!(err instanceof EntityPeriodError)) throw err;
       toast.error(err.message);
       return;
     }

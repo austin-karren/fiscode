@@ -19,7 +19,7 @@ import { z } from "zod";
 import { TSFormField } from "./forms/ts-form-field";
 import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
-import { ENTITY_TYPE_LABELS, EntityOverlapError, labelOptions } from "@fiscode/core";
+import { ENTITY_TYPE_LABELS, EntityPeriodError, labelOptions } from "@fiscode/core";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 
 const ENTITY_OPTIONS = labelOptions(ENTITY_TYPE_LABELS).filter((o) => o.value !== "s_corp");
@@ -32,7 +32,7 @@ const editSchema = z.object({
 
 export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
-  // Set when the repo blocks dates that overlap another period.
+  // Set when the repo blocks the dates: an overlap, or an end before the start.
   const [overlap, setOverlap] = useState<string | null>(null);
 
   const form = useForm({
@@ -51,7 +51,7 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
           endDate: value.endDate ? dateToIso(value.endDate) : null,
         });
       } catch (err) {
-        if (!(err instanceof EntityOverlapError)) throw err;
+        if (!(err instanceof EntityPeriodError)) throw err;
         setOverlap(err.message);
         return;
       }
@@ -84,6 +84,10 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
         <EnterToSubmitForm
           onSubmit={(e) => {
             e.preventDefault();
+            // The trigger sits inside the add-period form on the profile page,
+            // and a React submit event bubbles through the dialog's portal.
+            // Without this, saving here would submit that form as well.
+            e.stopPropagation();
             void form.handleSubmit();
           }}
         >

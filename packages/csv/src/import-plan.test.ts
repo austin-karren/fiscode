@@ -221,6 +221,33 @@ describe("planImport", () => {
   });
 });
 
+describe("planImport: entity periods added by Add rows", () => {
+  const entity = (id: string, deletedAt: string | null = null) => ({
+    id,
+    type: "single_member_llc",
+    startDate: "2026-11-02",
+    endDate: null,
+    notes: null,
+    createdAt: FIXED,
+    updatedAt: FIXED,
+    deletedAt,
+  });
+
+  it("counts the live entity periods that would be added, not the skipped or deleted ones", () => {
+    const existing: Bundle = {
+      ...emptyBundle(),
+      profile: profile(),
+      entities: [entity("ent_here")],
+    };
+    const incoming: Bundle = {
+      ...emptyBundle(),
+      entities: [entity("ent_here"), entity("ent_new"), entity("ent_gone", FIXED)],
+    };
+    expect(planImport(existing, incoming, "append").addedEntityPeriods).toBe(1);
+    expect(planImport(existing, incoming, "restore").addedEntityPeriods).toBe(0);
+  });
+});
+
 describe("countRows", () => {
   it("counts the profile as one live row", () => {
     expect(countRows({ ...emptyBundle(), profile: profile() })).toEqual({

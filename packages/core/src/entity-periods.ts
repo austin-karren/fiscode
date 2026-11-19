@@ -1,7 +1,8 @@
 import { ENTITY_TYPE_LABELS, labelFor } from "./labels.ts";
 
-// The rule that a business has one entity type at a time. Pure: the database
-// layer enforces it on every write, and a form can call it to check early.
+// The rules for entity periods: a business has one entity type at a time, and
+// a period does not end before it starts. Pure: the database layer enforces
+// them on every write, and a form can call them to check early.
 
 /** The fields of an entity period this rule reads. A database row fits. */
 export type EntityPeriod = {
@@ -38,9 +39,10 @@ export const formatDisplayDate = (iso: string): string => {
  * - `endDate: null` means open-ended: the period covers every day from its
  *   start on.
  * - One period may start on the day another ends. That shared changeover day
- *   is not an overlap; it belongs to the later period, which is also the one
- *   the estimate picks. This is what "End today", then adding the next period
- *   starting today, produces.
+ *   is not an overlap. This is what "End today", then adding the next period
+ *   starting today, produces. It is safe because the estimate never reads one
+ *   day from two periods: it picks a single period per calendar year, the one
+ *   with the latest start among those that reach into the year.
  * - Two periods that start on the same day always overlap, even one-day ones.
  * - The entity type does not matter: a business is one type at a time, so a
  *   sole proprietor period and an LLC period over the same days conflict.
@@ -49,6 +51,10 @@ export const formatDisplayDate = (iso: string): string => {
  * `id` is ignored too, so editing a period never conflicts with itself.
  *
  * When several periods conflict, the one that starts first is returned.
+ *
+ * A candidate whose end is before its start is not this function's business:
+ * it covers no day and overlaps nothing here. Reject it with
+ * `endsBeforeStart` first, as the entity repo does.
  */
 export const findEntityOverlap = <T extends EntityPeriod>(
   periods: readonly T[],
@@ -66,28 +72,71 @@ export const findEntityOverlap = <T extends EntityPeriod>(
   return conflicts.reduce((first, p) => (p.startDate < first.startDate ? p : first));
 };
 
-/**
- * The sentence shown when a save is blocked. It names the other period the way
- * the user knows it (type label and dates) and says what to do next.
- */
-export const entityOverlapMessage = (conflict: EntityPeriod): string => {
-  const label = labelFor(ENTITY_TYPE_LABELS, conflict.type);
-  const start = formatDisplayDate(conflict.startDate);
-  return conflict.endDate === null
-    ? `This overlaps your ${label} period that started ${start} and is still open. End that period first, or change these dates.`
-    : `This overlaps your ${label} period from ${start} to ${formatDisplayDate(conflict.endDate)}. Change these dates so the two do not overlap. A period may start on the day the other one ends.`;
+/** True when a period has an end date that is before its start date. */
+export const endsBeforeStart = (period: Pick<EntityPeriod, "startDate" | "endDate">): boolean =>
+  period.endDate !== null && period.endDate < period.startDate;
+
+/** The sentence shown when a save is blocked because the dates are in the wrong order. */
+export const entityDatesMessage = (period: Pick<EntityPeriod, "startDate" | "endDate">): string =>
+  `The end date (${formatDisplayDate(period.endDate ?? "")}) is before the start date (${formatDisplayDate(period.startDate)}). Pick an end date on or after the start date, or leave it empty for a period that is still open.`;
+
+const describePeriod = (period: EntityPeriod): string => {
+  const label = labelFor(ENTITY_TYPE_LABELS, period.type);
+  const start = formatDisplayDate(period.startDate);
+  return period.endDate === null
+    ? `${label} period that started ${start} and is still open`
+    : `${label} period from ${start} to ${formatDisplayDate(period.endDate)}`;
 };
 
 /**
- * Thrown by the entity repo when a write would overlap another period.
- * `message` is `entityOverlapMessage(conflict)`, ready to show as it is.
+ * The sentence shown when a save is blocked by an overlap. It names the other
+ * period the way the user knows it (type label and dates) and says what to do.
+ *
+ * `preexisting` is for a period that already overlapped the other one before
+ * this change (two such periods can come from a file, or from before this rule
+ * existed). "End that period first" would then send the user back and forth,
+ * so the message says how to separate the two instead.
  */
-export class EntityOverlapError extends Error {
+export const entityOverlapMessage = (
+  conflict: EntityPeriod,
+  options: { preexisting?: boolean } = {},
+): string => {
+  const other = describePeriod(conflict);
+  if (options.preexisting) {
+    return `This period already overlaps your ${other}, and these dates would not separate them. End one of the two on or before the day the other one starts. Ending either of them is always allowed.`;
+  }
+  return conflict.endDate === null
+    ? `This overlaps your ${other}. End that period first, or change these dates. A period may start on the day the other one ends.`
+    : `This overlaps your ${other}. Change these dates so the two do not overlap. A period may start on the day the other one ends.`;
+};
+
+/**
+ * The base of every rejection the entity repo raises on purpose. `message` is
+ * written for the user and can be shown as it is.
+ */
+export class EntityPeriodError extends Error {
+  override readonly name: string = "EntityPeriodError";
+}
+
+/** Thrown by the entity repo when a write would overlap another period. */
+export class EntityOverlapError extends EntityPeriodError {
   override readonly name = "EntityOverlapError";
   readonly conflict: EntityPeriod;
+  /** True when the two periods already overlapped before this write. */
+  readonly preexisting: boolean;
 
-  constructor(conflict: EntityPeriod) {
-    super(entityOverlapMessage(conflict));
+  constructor(conflict: EntityPeriod, options: { preexisting?: boolean } = {}) {
+    super(entityOverlapMessage(conflict, options));
     this.conflict = conflict;
+    this.preexisting = options.preexisting ?? false;
+  }
+}
+
+/** Thrown by the entity repo when a period's end date is before its start date. */
+export class EntityDatesError extends EntityPeriodError {
+  override readonly name = "EntityDatesError";
+
+  constructor(period: Pick<EntityPeriod, "startDate" | "endDate">) {
+    super(entityDatesMessage(period));
   }
 }

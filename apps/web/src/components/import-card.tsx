@@ -354,6 +354,12 @@ const describePlan = (plan: ImportPlan, fileHasNoProfile: boolean): string[] => 
       );
     }
     if (addsNothing(plan)) return lines;
+    if (plan.addedEntityPeriods > 0) {
+      const one = plan.addedEntityPeriods === 1;
+      lines.push(
+        `${n(plan.addedEntityPeriods, "entity period")} will be added as the file has ${one ? "it" : "them"}, without the check for overlapping periods. Look at Entity periods on your profile afterwards.`,
+      );
+    }
     lines.push(
       `Nothing here is removed: ${n(current.live, "row")} and ${n(current.deleted, "deleted row")} stay.`,
     );

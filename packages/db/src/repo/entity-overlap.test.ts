@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
-import { EntityOverlapError } from "@fiscode/core";
+import { EntityDatesError, EntityOverlapError } from "@fiscode/core";
 import { exportBundle } from "@fiscode/csv";
 import { setupTestDb, teardownTestDb } from "../test/setup-db.ts";
 import { emptyBundle, type Bundle } from "../bundle.ts";
@@ -49,7 +49,7 @@ describe("entityRepo.create", () => {
 
     expect(err.conflict).toMatchObject({ id: first.id, type: "sole_prop" });
     expect(err.message).toBe(
-      "This overlaps your Sole proprietor period that started Jan 1, 2024 and is still open. End that period first, or change these dates.",
+      "This overlaps your Sole proprietor period that started Jan 1, 2024 and is still open. End that period first, or change these dates. A period may start on the day the other one ends.",
     );
     expect(await entityRepo.list()).toEqual([first]);
     expect(await historyRepo.listAll()).toEqual(historyBefore);
@@ -135,11 +135,55 @@ describe("periods that came in overlapping from a file", () => {
     expect(await fullExport()).toBe(file);
   });
 
-  it("an edit that leaves them overlapping is rejected; one that separates them is saved", async () => {
+  it("either period can be ended, even on a day that leaves them overlapping", async () => {
     await importBundle(overlapping(), "import-restore");
 
-    await rejection(entityRepo.update("ent_a", { endDate: "2026-12-31" }));
+    // "End today" on the older one: it still overlaps the newer one, but it
+    // only got shorter, so it cannot have added an overlap.
+    const older = await entityRepo.update("ent_a", { endDate: "2026-11-18" });
+    expect(older?.endDate).toBe("2026-11-18");
 
+    const newer = await entityRepo.update("ent_b", { endDate: "2026-11-18" });
+    expect(newer?.endDate).toBe("2026-11-18");
+  });
+
+  it("a save that changes no date goes through, as the edit dialog sends it", async () => {
+    await importBundle(overlapping(), "import-restore");
+    const saved = await entityRepo.update("ent_a", {
+      type: "sole_prop",
+      startDate: "2024-01-01",
+      endDate: null,
+    });
+    expect(saved).toMatchObject({ startDate: "2024-01-01", endDate: null });
+  });
+
+  it("moving the start later is a shrink and goes through", async () => {
+    await importBundle(overlapping(), "import-restore");
+    const saved = await entityRepo.update("ent_a", { startDate: "2025-01-01" });
+    expect(saved?.startDate).toBe("2025-01-01");
+  });
+
+  it("widening one of them is still rejected, with a message that is not circular", async () => {
+    await importBundle(overlapping(), "import-restore");
+
+    const err = await rejection(entityRepo.update("ent_a", { startDate: "2023-01-01" }));
+
+    expect(err.preexisting).toBe(true);
+    expect(err.message).toContain("already overlaps your Single-member LLC period");
+    expect(err.message).not.toContain("End that period first");
+    expect((await entityRepo.get("ent_a"))?.startDate).toBe("2024-01-01");
+  });
+
+  it("an overlap the edit itself would create is not called pre-existing", async () => {
+    await entityRepo.create(input("sole_prop", "2024-01-01", "2024-12-31"));
+    const second = await entityRepo.create(input("single_member_llc", "2025-01-01", null));
+    const err = await rejection(entityRepo.update(second.id, { startDate: "2024-06-01" }));
+    expect(err.preexisting).toBe(false);
+    expect(err.message).toContain("Change these dates");
+  });
+
+  it("separating them is saved", async () => {
+    await importBundle(overlapping(), "import-restore");
     const fixed = await entityRepo.update("ent_a", { endDate: "2026-11-02" });
     expect(fixed?.endDate).toBe("2026-11-02");
   });
@@ -148,5 +192,62 @@ describe("periods that came in overlapping from a file", () => {
     await importBundle(overlapping(), "import-restore");
     const noted = await entityRepo.update("ent_a", { notes: "restored from a backup" });
     expect(noted?.notes).toBe("restored from a backup");
+  });
+});
+
+describe("an end date before the start date", () => {
+  const datesRejection = async (write: Promise<unknown>): Promise<EntityDatesError> => {
+    const err = await write.then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(EntityDatesError);
+    return err as EntityDatesError;
+  };
+
+  it("create rejects it, so it cannot be used to get around the overlap rule", async () => {
+    await entityRepo.create(input("sole_prop", "2024-01-01", null));
+
+    const err = await datesRejection(
+      entityRepo.create(input("single_member_llc", "2026-11-02", "2023-01-01")),
+    );
+
+    expect(err.message).toBe(
+      "The end date (Jan 1, 2023) is before the start date (Nov 2, 2026). Pick an end date on or after the start date, or leave it empty for a period that is still open.",
+    );
+    expect(await entityRepo.list()).toHaveLength(1);
+  });
+
+  it("update rejects it, also when the change only shortens the period", async () => {
+    const only = await entityRepo.create(input("sole_prop", "2024-01-01", null));
+    await datesRejection(entityRepo.update(only.id, { endDate: "2023-12-31" }));
+    expect((await entityRepo.get(only.id))?.endDate).toBeNull();
+  });
+
+  it("revertTo rejects it", async () => {
+    const only = await entityRepo.create(input("sole_prop", "2024-01-01", null));
+    await datesRejection(entityRepo.revertTo(only.id, { ...only, endDate: "2023-12-31" }));
+  });
+
+  it("a one-day period is fine", async () => {
+    const day = await entityRepo.create(input("sole_prop", "2024-05-05", "2024-05-05"));
+    expect(day.endDate).toBe("2024-05-05");
+  });
+
+  it("a file that holds such a row restores exactly, and the row can still be given notes", async () => {
+    const inverted: Bundle = {
+      ...emptyBundle(),
+      entities: [row("ent_inv", "sole_prop", "2026-11-02", "2023-01-01")],
+    };
+    const file = exportBundle(inverted, { scope: "full" });
+    await importBundle(inverted, "import-restore");
+
+    expect(
+      exportBundle(await buildBundle({ includeDeleted: true, includeHistory: true }), {
+        scope: "full",
+      }),
+    ).toBe(file);
+    const noted = await entityRepo.update("ent_inv", { notes: "from a file" });
+    expect(noted?.notes).toBe("from a file");
   });
 });

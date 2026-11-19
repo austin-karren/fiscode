@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  EntityDatesError,
   EntityOverlapError,
+  EntityPeriodError,
+  endsBeforeStart,
+  entityDatesMessage,
   entityOverlapMessage,
   findEntityOverlap,
   formatDisplayDate,
@@ -184,7 +188,7 @@ describe("findEntityOverlap", () => {
 describe("entityOverlapMessage", () => {
   it("names an open period by type label and start date, and says what to do", () => {
     expect(entityOverlapMessage(period("a", "2024-01-01", null))).toBe(
-      "This overlaps your Sole proprietor period that started Jan 1, 2024 and is still open. End that period first, or change these dates.",
+      "This overlaps your Sole proprietor period that started Jan 1, 2024 and is still open. End that period first, or change these dates. A period may start on the day the other one ends.",
     );
   });
 
@@ -203,11 +207,64 @@ describe("entityOverlapMessage", () => {
   });
 });
 
+describe("entityOverlapMessage, for two periods that already overlapped", () => {
+  it("does not say to end the other one first; it says how to separate them", () => {
+    const message = entityOverlapMessage(period("a", "2024-01-01", null), { preexisting: true });
+    expect(message).toBe(
+      "This period already overlaps your Sole proprietor period that started Jan 1, 2024 and is still open, and these dates would not separate them. End one of the two on or before the day the other one starts. Ending either of them is always allowed.",
+    );
+    expect(message).not.toContain("End that period first");
+  });
+});
+
+describe("endsBeforeStart", () => {
+  it.each([
+    { name: "end before start", startDate: "2026-11-02", endDate: "2023-01-01", inverted: true },
+    {
+      name: "end one day before start",
+      startDate: "2026-11-02",
+      endDate: "2026-11-01",
+      inverted: true,
+    },
+    { name: "one-day period", startDate: "2026-11-02", endDate: "2026-11-02", inverted: false },
+    { name: "end after start", startDate: "2026-11-02", endDate: "2026-11-03", inverted: false },
+    { name: "open-ended", startDate: "2026-11-02", endDate: null, inverted: false },
+  ])("$name", ({ startDate, endDate, inverted }) => {
+    expect(endsBeforeStart({ startDate, endDate })).toBe(inverted);
+  });
+
+  it("an inverted candidate overlaps nothing, which is why it is rejected on its own", () => {
+    const open = period("a", "2024-01-01", null);
+    expect(
+      findEntityOverlap([open], { startDate: "2026-11-02", endDate: "2023-01-01" }),
+    ).toBeNull();
+  });
+
+  it("has a message that names both dates and says what to do", () => {
+    expect(entityDatesMessage({ startDate: "2026-11-02", endDate: "2023-01-01" })).toBe(
+      "The end date (Jan 1, 2023) is before the start date (Nov 2, 2026). Pick an end date on or after the start date, or leave it empty for a period that is still open.",
+    );
+  });
+});
+
+describe("EntityDatesError", () => {
+  it("is an EntityPeriodError with the ready-made message", () => {
+    const err = new EntityDatesError({ startDate: "2026-11-02", endDate: "2023-01-01" });
+    expect(err).toBeInstanceOf(EntityPeriodError);
+    expect(err.name).toBe("EntityDatesError");
+    expect(err.message).toBe(
+      entityDatesMessage({ startDate: "2026-11-02", endDate: "2023-01-01" }),
+    );
+  });
+});
+
 describe("EntityOverlapError", () => {
   it("carries the conflict and the ready-made message", () => {
     const conflict = period("a", "2024-01-01", null);
     const err = new EntityOverlapError(conflict);
     expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(EntityPeriodError);
+    expect(err.preexisting).toBe(false);
     expect(err.name).toBe("EntityOverlapError");
     expect(err.conflict).toBe(conflict);
     expect(err.message).toBe(entityOverlapMessage(conflict));
