@@ -1,4 +1,6 @@
-import { createFileRoute, useLoaderData } from "@tanstack/react-router";
+import { Link, createFileRoute, useLoaderData } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { Card } from "@fiscode/ui/components/card";
 import { Button } from "@fiscode/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
@@ -56,9 +58,23 @@ export const Route = createFileRoute("/year-end")({
   component: YearEndPage,
 });
 
+// The date on the packet is the day it is printed, which can be later than
+// the day the page was opened. `beforeprint` also fires for the browser's own
+// print command, and the update has to land before the print snapshot.
+function usePrintDate() {
+  const [printedOn, setPrintedOn] = useState(() => new Date());
+  useEffect(() => {
+    const refresh = () => flushSync(() => setPrintedOn(new Date()));
+    window.addEventListener("beforeprint", refresh);
+    return () => window.removeEventListener("beforeprint", refresh);
+  }, []);
+  return printedOn;
+}
+
 function YearEndPage() {
   const data = useLoaderData({ from: "/year-end" });
   const { profile, year, result, derived, totalsByCategory } = data;
+  const printedOn = usePrintDate();
 
   // Profile missing → route still renders, but with SetupRequiredEmpty in
   // place of the packet. Avoids the dead-end of bouncing the user back to
@@ -120,7 +136,23 @@ function YearEndPage() {
     <Page
       title={`Year-end packet · ${year}`}
       description="Printable summary for the accountant. CSV download below contains the underlying data."
-      actions={<Button onClick={download}>Download {year} CSV</Button>}
+      actions={
+        <>
+          <Button variant="outline" onClick={() => window.print()}>
+            Print
+          </Button>
+          <Button onClick={download}>Download {year} CSV</Button>
+        </>
+      }
+      printHeader={
+        <>
+          <h1 className="text-2xl font-semibold tracking-tight">fiscode year-end summary</h1>
+          <p className="mt-1 text-sm">Tax year {year}</p>
+          <p className="text-sm">
+            Printed {printedOn.toLocaleDateString("en-US", { dateStyle: "long" })}
+          </p>
+        </>
+      }
     >
       {exclTotal > 0 ? (
         <Alert variant="warning">
@@ -133,7 +165,7 @@ function YearEndPage() {
         </Alert>
       ) : null}
 
-      <Card className="p-4 print:border-0 print:shadow-none">
+      <Card className="p-4 print:break-inside-avoid print:overflow-visible print:p-0 print:ring-0">
         <dl className="grid gap-2 @md:grid-cols-2">
           <Row label="Filing status" tooltip={GLOSSARY.filingStatus}>
             {profile.filingStatus.toUpperCase()}
@@ -173,14 +205,17 @@ function YearEndPage() {
         </dl>
       </Card>
 
-      <Card className="p-4 print:border-0 print:shadow-none">
+      <Card className="p-4 print:break-inside-avoid print:overflow-visible print:p-0 print:ring-0">
         <h2 className="mb-3 text-sm font-medium uppercase text-muted-foreground">
           Expense breakdown
         </h2>
         <table className="w-full text-sm">
           <tbody>
             {Object.entries(totalsByCategory).map(([cat, total]) => (
-              <tr key={cat} className="border-b border-border/40 last:border-b-0">
+              <tr
+                key={cat}
+                className="break-inside-avoid border-b border-border/40 last:border-b-0"
+              >
                 <td className="py-1">{cat}</td>
                 <td className="py-1 text-right tabular-nums">{formatUSD(cents(total))}</td>
               </tr>
@@ -196,7 +231,7 @@ function YearEndPage() {
         </table>
       </Card>
 
-      <Card className="p-4 print:border-0 print:shadow-none">
+      <Card className="p-4 print:break-inside-avoid print:overflow-visible print:p-0 print:ring-0">
         <h2 className="mb-3 text-sm font-medium uppercase text-muted-foreground">
           Tax config used
         </h2>
@@ -206,9 +241,12 @@ function YearEndPage() {
           {formatUSD(cents(getYearConfig(year).ssWageBase))}.
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
-          Tax figures change annually. Search for{" "}
-          <code className="rounded bg-muted px-1">todo: verify</code> in the tax package source to
-          see which figures need fresh confirmation.
+          Tax figures change every year. Confirm them against the IRS and SSA before filing. The
+          figures fiscode uses are on the{" "}
+          <Link to="/tax-data" className="underline underline-offset-2">
+            Tax data
+          </Link>{" "}
+          screen.
         </p>
       </Card>
     </Page>
@@ -225,7 +263,7 @@ function Row({
   tooltip?: string;
 }) {
   return (
-    <div className="flex justify-between border-b border-border/40 py-1">
+    <div className="flex break-inside-avoid justify-between border-b border-border/40 py-1">
       <dt className="inline-flex items-center gap-1.5 text-muted-foreground">
         {label}
         {tooltip ? <InfoTooltip text={tooltip} /> : null}

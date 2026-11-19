@@ -1,4 +1,12 @@
-import { parseUSD } from "@fiscode/core";
+import {
+  checkAmountRange,
+  inWholeRange,
+  parseMoney,
+  parseWholeNumber,
+  vehicleYearRange,
+  WHOLE_RANGES,
+  type WholeRange,
+} from "@fiscode/core";
 import { z } from "zod";
 
 /**
@@ -6,13 +14,12 @@ import { z } from "zod";
  * reject the same input with the same message. Each takes the input's string
  * and returns the typed value. Messages say what is allowed.
  *
- * `Number()` alone is too loose for a form: it reads "1e3", "0x10" and
- * "-50". These schemas only accept plain digits with an optional decimal part.
+ * The syntax and range rules live in @fiscode/core (`parseMoney`,
+ * `parseWholeNumber`, `checkAmountRange`, `WHOLE_RANGES`); this file words
+ * the messages.
  */
 
 const PLAIN_DECIMAL = /^(\d+\.?\d*|\.\d+)$/;
-const PLAIN_INTEGER = /^\d+$/;
-const GROUPED_THOUSANDS = /^\d{1,3}(,\d{3})+(\.\d*)?$/;
 
 const fail = (ctx: z.RefinementCtx, message: string) => {
   ctx.addIssue({ code: "custom", message });
@@ -21,23 +28,21 @@ const fail = (ctx: z.RefinementCtx, message: string) => {
 
 // ─── Money ──────────────────────────────────────────────────────────────────
 
-/** Amounts must be below this many dollars. */
-const AMOUNT_CEILING_DOLLARS = 100_000_000;
-
 const parseAmount = (raw: string, ctx: z.RefinementCtx, allowZero: boolean) => {
-  // "$1,234.56" is fine: the symbol and spaces are dropped, and so are commas
-  // that group thousands. "12,50" is not read as 1250.
-  const unsigned = raw.replace(/[$\s]/g, "");
-  const cleaned = GROUPED_THOUSANDS.test(unsigned) ? unsigned.replace(/,/g, "") : unsigned;
   const hint = allowZero
     ? "Enter an amount of 0 or more, like 12.50"
     : "Enter an amount greater than 0, like 12.50";
-  if (!PLAIN_DECIMAL.test(cleaned)) return fail(ctx, hint);
-  if (/\.\d{3,}$/.test(cleaned)) return fail(ctx, "Use at most 2 decimal places, like 12.50");
-  const dollars = Number(cleaned);
-  if (dollars >= AMOUNT_CEILING_DOLLARS) return fail(ctx, "Enter an amount below $100,000,000");
-  if (dollars === 0 && !allowZero) return fail(ctx, hint);
-  return parseUSD(cleaned)!;
+  const ceiling = "Enter an amount below $100,000,000";
+  const parsed = parseMoney(raw);
+  if (!parsed.ok) {
+    if (parsed.reason === "decimals") return fail(ctx, "Use at most 2 decimal places, like 12.50");
+    if (parsed.reason === "too_large") return fail(ctx, ceiling);
+    return fail(ctx, hint);
+  }
+  const range = checkAmountRange(parsed.cents, allowZero ? "nonNegative" : "positive");
+  if (range === "too_large") return fail(ctx, ceiling);
+  if (range === "below_floor") return fail(ctx, hint);
+  return parsed.cents;
 };
 
 /** A required amount greater than 0, as cents. */
@@ -70,55 +75,37 @@ export const hoursWorked = z.string().transform((s, ctx): number => {
 
 // ─── Whole numbers ──────────────────────────────────────────────────────────
 
-const inRange = (
-  raw: string,
-  ctx: z.RefinementCtx,
-  min: number,
-  max: number,
-  message: string,
-): number => {
-  const trimmed = raw.trim();
-  if (!PLAIN_INTEGER.test(trimmed)) return fail(ctx, message);
-  const n = Number(trimmed);
-  if (n < min || n > max) return fail(ctx, message);
-  return n;
+const inRange = (raw: string, ctx: z.RefinementCtx, range: WholeRange, message: string) => {
+  const parsed = parseWholeNumber(raw);
+  if (!parsed.ok || !inWholeRange(parsed.value, range)) return fail(ctx, message);
+  return parsed.value;
 };
 
-const rangeMessage = (min: number, max: number) =>
+const rangeMessage = ({ min, max }: WholeRange) =>
   `Enter a whole number from ${min.toLocaleString("en-US")} to ${max.toLocaleString("en-US")}`;
 
-const wholeNumber = (min: number, max: number) =>
-  z.string().transform((s, ctx) => inRange(s, ctx, min, max, rangeMessage(min, max)));
+const wholeNumber = (range: WholeRange) =>
+  z.string().transform((s, ctx) => inRange(s, ctx, range, rangeMessage(range)));
 
-const optionalWholeNumber = (min: number, max: number) =>
+const optionalWholeNumber = (range: WholeRange) =>
   z
     .string()
-    .transform((s, ctx) =>
-      s.trim() === "" ? null : inRange(s, ctx, min, max, rangeMessage(min, max)),
-    );
+    .transform((s, ctx) => (s.trim() === "" ? null : inRange(s, ctx, range, rangeMessage(range))));
 
 /** Business miles on one trip. */
-export const tripMiles = wholeNumber(1, 9_999);
+export const tripMiles = wholeNumber(WHOLE_RANGES.tripMiles);
 /** Days of lead time before a deadline. */
-export const leadDays = wholeNumber(1, 365);
+export const leadDays = wholeNumber(WHOLE_RANGES.leadDays);
 /** Dependents on the return. */
-export const dependentsCount = wholeNumber(0, 99);
+export const dependentsCount = wholeNumber(WHOLE_RANGES.dependents);
 /** Square feet of an office or a home; blank is no value. */
-export const optionalSqft = optionalWholeNumber(0, 99_999);
+export const optionalSqft = optionalWholeNumber(WHOLE_RANGES.sqft);
 /** Miles per gallon; blank is no value. */
-export const optionalMpg = optionalWholeNumber(0, 999);
-
-const FIRST_VEHICLE_YEAR = 1900;
+export const optionalMpg = optionalWholeNumber(WHOLE_RANGES.mpg);
 
 /** A vehicle's model year; blank is no value. Next year's models are on sale. */
 export const optionalVehicleYear = z.string().transform((s, ctx) => {
   if (s.trim() === "") return null;
-  const last = new Date().getFullYear() + 1;
-  return inRange(
-    s,
-    ctx,
-    FIRST_VEHICLE_YEAR,
-    last,
-    `Enter a 4-digit year from ${FIRST_VEHICLE_YEAR} to ${last}`,
-  );
+  const range = vehicleYearRange();
+  return inRange(s, ctx, range, `Enter a 4-digit year from ${range.min} to ${range.max}`);
 });
