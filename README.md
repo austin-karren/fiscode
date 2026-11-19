@@ -138,7 +138,7 @@ bun run check          # oxlint + oxfmt --write
 ```
 
 > If your editor's `oxlint` / `oxfmt` LSP errors with `Cannot find module
-'.../node_modules/oxfmt/bin/oxfmt'` after a fresh `bun install`, restart the
+> '.../node_modules/oxfmt/bin/oxfmt'` after a fresh `bun install`, restart the
 > editor's language server. Bun's isolated linker creates the symlinks
 > correctly, but some LSPs cache file-not-found from before install finished.
 
