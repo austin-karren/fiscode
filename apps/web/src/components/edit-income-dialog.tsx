@@ -96,7 +96,7 @@ export function EditIncomeDialog({
           }}
         >
           <div className="grid gap-3">
-            <TSFormField form={form} name="date">
+            <TSFormField form={form} name="date" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Date</FormLabel>
@@ -111,7 +111,12 @@ export function EditIncomeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="amount" validators={{ onBlur: editSchema.shape.amount }}>
+            <TSFormField
+              form={form}
+              name="amount"
+              requirement="required"
+              validators={{ onBlur: editSchema.shape.amount }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Amount</FormLabel>
@@ -127,7 +132,7 @@ export function EditIncomeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="clientId">
+            <TSFormField form={form} name="clientId" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Client</FormLabel>
@@ -149,7 +154,7 @@ export function EditIncomeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="kind">
+            <TSFormField form={form} name="kind" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Kind</FormLabel>
@@ -167,7 +172,7 @@ export function EditIncomeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="description">
+            <TSFormField form={form} name="description" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Description</FormLabel>

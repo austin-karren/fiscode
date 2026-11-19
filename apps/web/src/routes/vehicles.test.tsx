@@ -117,7 +117,7 @@ describe("vehicle year", () => {
     renderPage();
     fireEvent.change(screen.getByLabelText("Make"), { target: { value: "Demo" } });
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "Hatch" } });
-    const input = screen.getByLabelText("Year");
+    const input = screen.getByLabelText("Year (optional)");
     fireEvent.change(input, { target: { value: year } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     return input;

@@ -79,7 +79,7 @@ export function EditVehicleDialog({
           }}
         >
           <div className="grid gap-3">
-            <TSFormField form={form} name="make">
+            <TSFormField form={form} name="make" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Make</FormLabel>
@@ -94,7 +94,7 @@ export function EditVehicleDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="model">
+            <TSFormField form={form} name="model" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Model</FormLabel>
@@ -109,7 +109,12 @@ export function EditVehicleDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="year" validators={{ onBlur: editSchema.shape.year }}>
+            <TSFormField
+              form={form}
+              name="year"
+              requirement="optional"
+              validators={{ onBlur: editSchema.shape.year }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Year</FormLabel>
@@ -126,7 +131,12 @@ export function EditVehicleDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="mpg" validators={{ onBlur: editSchema.shape.mpg }}>
+            <TSFormField
+              form={form}
+              name="mpg"
+              requirement="optional"
+              validators={{ onBlur: editSchema.shape.mpg }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>MPG</FormLabel>

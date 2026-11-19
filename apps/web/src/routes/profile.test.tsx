@@ -165,7 +165,7 @@ describe("spouse income blocks", () => {
   it("takes new blocks when filing jointly", () => {
     profile.filingStatus = "mfj";
     render(<ProfilePage />);
-    expect(within(card()).getByLabelText("Annual W-2 wages")).toBeInTheDocument();
+    expect(within(card()).getByLabelText("Annual W-2 wages (optional)")).toBeInTheDocument();
     expect(within(card()).getByRole("button", { name: "Add" })).toBeInTheDocument();
     expect(card()).not.toHaveTextContent(WHY);
   });
@@ -173,7 +173,7 @@ describe("spouse income blocks", () => {
   it("says why, and takes no new block, under any other filing status", () => {
     render(<ProfilePage />);
     expect(card()).toHaveTextContent(WHY);
-    expect(within(card()).queryByLabelText("Annual W-2 wages")).not.toBeInTheDocument();
+    expect(within(card()).queryByLabelText("Annual W-2 wages (optional)")).not.toBeInTheDocument();
     expect(within(card()).queryByRole("button", { name: "Add" })).not.toBeInTheDocument();
   });
 

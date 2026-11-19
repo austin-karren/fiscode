@@ -86,7 +86,7 @@ export function EditTimeDialog({
           }}
         >
           <div className="grid gap-3">
-            <TSFormField form={form} name="date">
+            <TSFormField form={form} name="date" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Date</FormLabel>
@@ -101,7 +101,12 @@ export function EditTimeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="hours" validators={{ onBlur: editSchema.shape.hours }}>
+            <TSFormField
+              form={form}
+              name="hours"
+              requirement="required"
+              validators={{ onBlur: editSchema.shape.hours }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Hours</FormLabel>
@@ -118,7 +123,7 @@ export function EditTimeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="clientId">
+            <TSFormField form={form} name="clientId" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Client</FormLabel>
@@ -140,7 +145,7 @@ export function EditTimeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="description">
+            <TSFormField form={form} name="description" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Description</FormLabel>

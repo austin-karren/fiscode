@@ -124,7 +124,7 @@ describe("adding a run of expenses", () => {
     fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
     const card = within(addCard());
     expect(card.getByLabelText("Amount")).toHaveValue("120.00");
-    expect(card.getByLabelText("Description")).toHaveValue("Demo conference travel");
+    expect(card.getByLabelText("Description (optional)")).toHaveValue("Demo conference travel");
     await waitFor(() => expect(card.getByLabelText("Date")).toHaveFocus());
 
     fireEvent.click(card.getByRole("button", { name: "Add" }));
@@ -134,7 +134,7 @@ describe("adding a run of expenses", () => {
       ),
     );
     await waitFor(() => expect(card.getByLabelText("Amount")).toHaveValue(""));
-    expect(card.getByLabelText("Description")).toHaveValue("");
+    expect(card.getByLabelText("Description (optional)")).toHaveValue("");
     expect(card.getByLabelText("Date")).toHaveTextContent("Mar 5, 2026");
     expect(card.getByRole("combobox", { name: "Category" })).toHaveTextContent("Travel");
     await waitFor(() => expect(card.getByLabelText("Amount")).toHaveFocus());

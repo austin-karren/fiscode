@@ -89,7 +89,7 @@ export function EditHomeOfficeDialog({
           }}
         >
           <div className="grid gap-3">
-            <TSFormField form={form} name="startDate">
+            <TSFormField form={form} name="startDate" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Start date</FormLabel>
@@ -105,10 +105,10 @@ export function EditHomeOfficeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="endDate">
+            <TSFormField form={form} name="endDate" requirement="optional">
               {(field) => (
                 <FormItem>
-                  <FormLabel>End date (optional)</FormLabel>
+                  <FormLabel>End date</FormLabel>
                   <FormControl>
                     <DatePicker
                       yearsBack={CONFIG_YEARS_BACK}
@@ -122,7 +122,7 @@ export function EditHomeOfficeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="method">
+            <TSFormField form={form} name="method" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Method</FormLabel>
@@ -141,6 +141,7 @@ export function EditHomeOfficeDialog({
             <TSFormField
               form={form}
               name="officeSqft"
+              requirement="optional"
               validators={{ onBlur: editSchema.shape.officeSqft }}
             >
               {(field) => (
@@ -162,6 +163,7 @@ export function EditHomeOfficeDialog({
             <TSFormField
               form={form}
               name="homeSqft"
+              requirement="optional"
               validators={{ onBlur: editSchema.shape.homeSqft }}
             >
               {(field) => (

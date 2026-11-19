@@ -146,7 +146,12 @@ function IncomePage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1fr_1.2fr_1fr_2fr]">
-            <TSFormField form={form} name="date" validators={{ onBlur: fieldSchemas.date }}>
+            <TSFormField
+              form={form}
+              name="date"
+              requirement="required"
+              validators={{ onBlur: fieldSchemas.date }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Date</FormLabel>
@@ -161,7 +166,12 @@ function IncomePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="amount" validators={{ onBlur: fieldSchemas.amount }}>
+            <TSFormField
+              form={form}
+              name="amount"
+              requirement="required"
+              validators={{ onBlur: fieldSchemas.amount }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Amount</FormLabel>
@@ -178,7 +188,7 @@ function IncomePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="clientId">
+            <TSFormField form={form} name="clientId" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Client</FormLabel>
@@ -197,7 +207,7 @@ function IncomePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="kind">
+            <TSFormField form={form} name="kind" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Kind</FormLabel>
@@ -213,7 +223,7 @@ function IncomePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="description">
+            <TSFormField form={form} name="description" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Description</FormLabel>

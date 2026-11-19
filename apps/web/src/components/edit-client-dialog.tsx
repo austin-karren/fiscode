@@ -73,7 +73,7 @@ export function EditClientDialog({ client, onSaved }: { client: ClientRow; onSav
           }}
         >
           <div className="grid gap-3">
-            <TSFormField form={form} name="name">
+            <TSFormField form={form} name="name" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Name</FormLabel>
@@ -88,7 +88,7 @@ export function EditClientDialog({ client, onSaved }: { client: ClientRow; onSav
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="type">
+            <TSFormField form={form} name="type" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Type</FormLabel>
@@ -107,6 +107,7 @@ export function EditClientDialog({ client, onSaved }: { client: ClientRow; onSav
             <TSFormField
               form={form}
               name="defaultRate"
+              requirement="optional"
               validators={{ onBlur: editSchema.shape.defaultRate }}
             >
               {(field) => (

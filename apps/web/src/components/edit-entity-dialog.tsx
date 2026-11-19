@@ -90,7 +90,7 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
           }}
         >
           <div className="grid gap-3">
-            <TSFormField form={form} name="type">
+            <TSFormField form={form} name="type" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Type</FormLabel>
@@ -111,6 +111,7 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
             <TSFormField
               form={form}
               name="startDate"
+              requirement="required"
               error={periodErrorFor(periodError, "startDate")}
             >
               {(field) => (
@@ -128,10 +129,15 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="endDate" error={periodErrorFor(periodError, "endDate")}>
+            <TSFormField
+              form={form}
+              name="endDate"
+              requirement="optional"
+              error={periodErrorFor(periodError, "endDate")}
+            >
               {(field) => (
                 <FormItem>
-                  <FormLabel>End (optional)</FormLabel>
+                  <FormLabel>End</FormLabel>
                   <FormControl>
                     <DatePicker
                       yearsBack={CONFIG_YEARS_BACK}

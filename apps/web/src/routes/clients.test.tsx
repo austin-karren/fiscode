@@ -153,7 +153,7 @@ describe("client default rate", () => {
   const submit = (rate: string) => {
     renderPage();
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Demo New Co" } });
-    const input = screen.getByLabelText("Default rate");
+    const input = screen.getByLabelText("Default rate (optional)");
     fireEvent.change(input, { target: { value: rate } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     return input;

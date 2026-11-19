@@ -3,7 +3,13 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FieldCheckbox } from "../components/forms/field-checkbox";
-import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
+import {
+  FormControl,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from "@fiscode/ui/components/form";
 import {
   Field,
   FieldContent,
@@ -106,7 +112,12 @@ function HomeOfficePage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1fr_1fr_1fr]">
-            <TSFormField form={form} name="startDate" validators={{ onBlur: fs.startDate }}>
+            <TSFormField
+              form={form}
+              name="startDate"
+              requirement="required"
+              validators={{ onBlur: fs.startDate }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Start date</FormLabel>
@@ -122,7 +133,7 @@ function HomeOfficePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="method">
+            <TSFormField form={form} name="method" requirement="required">
               {(field) => (
                 <FormItem>
                   <LabelWithTooltip tooltip={GLOSSARY.homeOfficeMethod}>Method</LabelWithTooltip>
@@ -138,7 +149,12 @@ function HomeOfficePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="officeSqft" validators={{ onBlur: fs.officeSqft }}>
+            <TSFormField
+              form={form}
+              name="officeSqft"
+              requirement="optional"
+              validators={{ onBlur: fs.officeSqft }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Office sqft</FormLabel>
@@ -155,7 +171,12 @@ function HomeOfficePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="homeSqft" validators={{ onBlur: fs.homeSqft }}>
+            <TSFormField
+              form={form}
+              name="homeSqft"
+              requirement="optional"
+              validators={{ onBlur: fs.homeSqft }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Home sqft</FormLabel>
@@ -186,6 +207,8 @@ function HomeOfficePage() {
                     ariaLabel="More info about Regular & exclusive use"
                     className="absolute top-3 right-3 z-10"
                   />
+                  {/* The hint as the checkbox's description (see LabelWithTooltip). */}
+                  <FormDescription className="sr-only">{GLOSSARY.regularExclusive}</FormDescription>
                   <FieldLabel>
                     <Field orientation="horizontal">
                       <FormControl>

@@ -59,7 +59,7 @@ describe("edit spouse dialog", () => {
     update.mockResolvedValueOnce(spouse);
     const { outerSubmit, onSaved } = renderInsideAddForm();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    const wages = await screen.findByLabelText("Annual W-2 wages");
+    const wages = await screen.findByLabelText("Annual W-2 wages (optional)");
     fireEvent.keyDown(wages, { key: "Enter" });
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
