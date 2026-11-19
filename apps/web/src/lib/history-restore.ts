@@ -27,7 +27,7 @@ import {
   snapshotTitle,
   type NameLookup,
 } from "./history-describe";
-import { revertWithUndo } from "./soft-delete";
+import { revertWithUndo, undoFailed } from "./soft-delete";
 
 // What the History screen's Restore does for one history row, worked out
 // from the row's "before" snapshot and the record as it is now.
@@ -178,7 +178,10 @@ export function planRestore(
         repo,
         snapshot,
         current,
-        message: capitalize(gone ? `${name} is back.` : `${name} restored.`),
+        message:
+          row.entity === "profile"
+            ? "Profile restored."
+            : capitalize(gone ? `${name} is back.` : `${name} restored.`),
         undoneMessage: "Restore undone.",
         onChange,
       }),
@@ -219,7 +222,12 @@ function planImportRestore(before: Record<string, unknown>): RestorePlan {
         action: {
           label: "Undo",
           onClick: async () => {
-            await importBundle({ ...current, history: [] }, HISTORY_RESTORE_REASON);
+            try {
+              await importBundle({ ...current, history: [] }, HISTORY_RESTORE_REASON);
+            } catch (err) {
+              undoFailed(err);
+              return;
+            }
             onChange();
             toast.success("Restore undone.");
           },

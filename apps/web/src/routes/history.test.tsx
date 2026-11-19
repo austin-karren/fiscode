@@ -339,7 +339,7 @@ describe("restore from history", () => {
       "This puts the profile back to filing status Single. The current values are replaced.",
     );
     await waitFor(() => expect(db.profileRepo.revertTo).toHaveBeenCalledWith(profile));
-    expect(await screen.findByText("The profile restored.")).toBeInTheDocument();
+    expect(await screen.findByText("Profile restored.")).toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
     await waitFor(() => expect(db.profileRepo.revertTo).toHaveBeenLastCalledWith(edited));
@@ -400,5 +400,37 @@ describe("restore from history", () => {
 
     expect(await screen.findByText("Restore failed. Nothing was changed.")).toBeInTheDocument();
     expect(db.invalidate).not.toHaveBeenCalled();
+  });
+
+  it("says so when Undo of a record restore fails", async () => {
+    const gone = expenseAt(8950, { deletedAt: DELETED_AT });
+    await show([historyRow("expense", "delete", expenseAt(8950), gone, "expense_1")], {
+      expenses: [gone],
+    });
+    await confirmRestore("Deleted expense: Demo software $89.50");
+    await screen.findByText("Demo software $89.50 is back.");
+
+    db.expenseRepo.revertTo.mockRejectedValueOnce(new Error("demo failure"));
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    expect(await screen.findByText("Undo failed. Nothing was changed.")).toBeInTheDocument();
+    expect(screen.queryByText("Restore undone.")).not.toBeInTheDocument();
+    expect(db.invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so when Undo of going back to before an import fails", async () => {
+    const before = { ...emptyBundle, expenses: [expenseAt(8950)] };
+    const after = { ...emptyBundle, expenses: [expenseAt(9900)] };
+    await show([historyRow("__import_snapshot", "revert", before, after, "import-restore")], {
+      expenses: [expenseAt(12000)],
+    });
+    await confirmRestore("Import replaced everything (1 row)");
+    await waitFor(() => expect(db.importBundle).toHaveBeenCalledTimes(1));
+
+    db.importBundle.mockRejectedValueOnce(new Error("demo failure"));
+    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+
+    expect(await screen.findByText("Undo failed. Nothing was changed.")).toBeInTheDocument();
+    expect(screen.queryByText("Restore undone.")).not.toBeInTheDocument();
   });
 });

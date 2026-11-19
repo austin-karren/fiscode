@@ -86,11 +86,27 @@ export async function revertWithUndo<TRow extends SoftDeletableRow>({
     action: {
       label: "Undo",
       onClick: async () => {
-        if (current) await repo.revertTo(current.id, current);
-        else await repo.softDelete(snapshot.id);
+        try {
+          if (current) await repo.revertTo(current.id, current);
+          else await repo.softDelete(snapshot.id);
+        } catch (err) {
+          undoFailed(err);
+          return;
+        }
         onChange();
         toast.success(undoneMessage);
       },
     },
+  });
+}
+
+// An Undo that throws changed nothing (each write is one transaction); say so
+// and keep the toast up until it is read.
+export function undoFailed(err: unknown): void {
+  console.error(err);
+  toast.error("Undo failed. Nothing was changed.", {
+    description: err instanceof Error ? err.message : String(err),
+    duration: Infinity,
+    closeButton: true,
   });
 }
