@@ -43,6 +43,18 @@ describe("whole-number cells read plain digits only", () => {
     expect(firstTrip(v1WithMiles(" 7 "))).toEqual({ errors: 0, miles: 7 });
   });
 
+  it("reads a cell of only spaces as blank: null in a nullable column", () => {
+    const { bundle, validationErrors } = parseCsv(
+      V1_FIXTURE.replace("RAV4,2022,28,", "RAV4,  ,28,"),
+    );
+    expect(validationErrors).toEqual([]);
+    expect(bundle.vehicles[0]!.year).toBeNull();
+  });
+
+  it("reads a cell of only spaces in a required column the same as an empty cell", () => {
+    expect(firstTrip(v1WithMiles("  "))).toEqual(firstTrip(v1WithMiles("")));
+  });
+
   it("rejects the same junk in a v2 file", () => {
     const csv = exportBundle(exampleBundle(), { scope: "full" });
     const bad = csv.replace(/^(mileage,[^\n]*?),47,/m, "$1,1e3,");

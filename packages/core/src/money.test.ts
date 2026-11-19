@@ -97,6 +97,8 @@ describe("parseMoney", () => {
     expect(parseMoney("-$12.30", { signed: true })).toEqual({ ok: true, cents: -1_230 });
     expect(parseMoney("$-12.30", { signed: true })).toEqual({ ok: true, cents: -1_230 });
     expect(parseMoney("-$-12.30", { signed: true })).toEqual({ ok: false, reason: "syntax" });
+    expect(parseMoney("- 5", { signed: true })).toEqual({ ok: false, reason: "syntax" });
+    expect(parseMoney("-$ 5", { signed: true })).toEqual({ ok: true, cents: -500 });
     expect(parseMoney("-0", { signed: true })).toEqual({ ok: true, cents: 0 });
     expect(parseMoney("-12.345", { signed: true })).toEqual({ ok: false, reason: "decimals" });
   });

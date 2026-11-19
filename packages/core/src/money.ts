@@ -37,8 +37,8 @@ export type ParsedMoney = { ok: true; cents: Cents } | { ok: false; reason: Mone
 
 // Plain digits, an optional `$`, commas only between thousands groups, and an
 // optional decimal part (".5" and "5." are fine). A minus may sit on either
-// side of the `$`. No `+`, exponent, hex, or non-ASCII digits.
-const MONEY = /^(-?)\$?\s*(-?)(\d{1,3}(?:,\d{3})+|\d*)(?:\.(\d*))?$/;
+// side of the `$`; spaces are allowed only after the `$`. No `+`, exponent, hex, or non-ASCII digits.
+const MONEY = /^(-?)(?:\$\s*)?(-?)(\d{1,3}(?:,\d{3})+|\d*)(?:\.(\d*))?$/;
 
 /**
  * Read an amount as integer cents, without float arithmetic. A sign is read
