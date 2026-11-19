@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { Toaster } from "sonner";
+import { Toaster, toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The database is SQLite over OPFS and the router needs a browser history;
@@ -149,8 +149,11 @@ beforeEach(() => {
   n = 0;
 });
 
+// Sonner's toast store outlives the Toaster: without dismissing, a later test
+// sees an earlier test's Undo.
 afterEach(() => {
   cleanup();
+  toast.dismiss();
   vi.clearAllMocks();
 });
 
