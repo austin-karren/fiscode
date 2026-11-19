@@ -23,7 +23,7 @@ import {
   Coins,
   FileSpreadsheet,
   Gauge,
-  Github,
+  Code,
   History,
   Home,
   Receipt,
@@ -32,7 +32,7 @@ import {
 
 const EXTERNAL_LINKS = [
   { href: "https://docs.fiscode.app", label: "Docs", icon: BookOpen },
-  { href: "https://github.com/austin-karren/fiscode", label: "GitHub", icon: Github },
+  { href: "https://github.com/austin-karren/fiscode", label: "GitHub", icon: Code },
 ] as const;
 
 const NAV_GROUPS = [
