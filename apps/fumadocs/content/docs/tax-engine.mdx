@@ -77,9 +77,18 @@ expense. They are an adjustment on Schedule 1 line 17, figured on
 - **QBI:** it lowers QBI too. Reg. 1.199A-3(b)(1)(vi) counts "the self-employed health insurance
   deduction under section 162(l)" as attributable to the business.
 
-Not modelled: "You can't take the deduction for any month you were eligible to participate in any
-employer (including your spouse's) subsidized health plan". fiscode has no input for that
-eligibility, so leave out premiums for those months.
+Not modelled:
+
+- "You can't take the deduction for any month you were eligible to participate in any employer
+  (including your spouse's) subsidized health plan". fiscode has no input for that eligibility, so
+  leave out premiums for those months.
+- Marketplace plans with the premium tax credit. The
+  [Form 7206 instructions](https://www.irs.gov/pub/irs-pdf/i7206.pdf) say: "See Pub. 974 if the
+  insurance plan was considered to be established under your business and was obtained through the
+  Marketplace, and advance payments of the premium tax credit were made or you are claiming the
+  premium tax credit." Under [Pub 974](https://www.irs.gov/pub/irs-pdf/p974.pdf) the deduction and
+  the credit are figured together; fiscode does neither. Enter only what you paid yourself, and
+  expect your preparer to adjust.
 
 ### Utah income tax
 
