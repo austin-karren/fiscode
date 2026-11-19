@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 
 import "./index.css";
 import { boot } from "@fiscode/db";
+import { ThemeProvider } from "@fiscode/ui/components/theme";
 
 import { router } from "./router";
 import {
@@ -22,7 +23,9 @@ boot().then(async () => {
 
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <RouterProvider router={router} />
+      <ThemeProvider>
+        <RouterProvider router={router} />
+      </ThemeProvider>
     </StrictMode>,
   );
 
