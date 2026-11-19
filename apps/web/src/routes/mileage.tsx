@@ -23,6 +23,7 @@ import { EditMileageDialog } from "../components/edit-mileage-dialog";
 import { ParentName } from "../components/parent-name";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { GLOSSARY } from "../lib/tax-glossary";
+import { useToday } from "../lib/use-today";
 
 const mileageSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -48,9 +49,10 @@ function MileagePage() {
   // Only live vehicles can be picked for a new entry.
   const vehicles = allVehicles.filter((v) => !v.deletedAt);
 
+  const today = useToday();
   const form = useForm({
     defaultValues: {
-      date: new Date() as Date | undefined,
+      date: today as Date | undefined,
       miles: "",
       vehicleId: "",
       purpose: "",

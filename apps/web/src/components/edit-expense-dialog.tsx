@@ -26,6 +26,7 @@ import { SelectWithLabels } from "./forms/select-with-labels";
 import { LabelWithTooltip } from "./forms/labeled";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { GLOSSARY } from "../lib/tax-glossary";
+import { useToday } from "../lib/use-today";
 
 const editSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -47,9 +48,10 @@ export function EditExpenseDialog({
 }) {
   const [open, setOpen] = useState(false);
 
+  const today = useToday();
   const form = useForm({
     defaultValues: {
-      date: isoToDate(expense.date) ?? new Date(),
+      date: isoToDate(expense.date) ?? today,
       amount: formatUSD(cents(expense.amountCents)).replace(/[$,]/g, ""),
       category: expense.category,
       description: expense.description ?? "",

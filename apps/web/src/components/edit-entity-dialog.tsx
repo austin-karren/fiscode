@@ -21,6 +21,7 @@ import { CONFIG_YEARS_BACK, DatePicker, dateToIso, isoToDate } from "./forms/dat
 import { SelectWithLabels } from "./forms/select-with-labels";
 import { ENTITY_TYPE_LABELS, EntityPeriodError, labelOptions } from "@fiscode/core";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
+import { useToday } from "../lib/use-today";
 
 const ENTITY_OPTIONS = labelOptions(ENTITY_TYPE_LABELS).filter((o) => o.value !== "s_corp");
 
@@ -35,10 +36,11 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
   // Set when the repo blocks the dates: an overlap, or an end before the start.
   const [overlap, setOverlap] = useState<string | null>(null);
 
+  const today = useToday();
   const form = useForm({
     defaultValues: {
       type: entity.type as "sole_prop" | "single_member_llc",
-      startDate: isoToDate(entity.startDate) ?? new Date(),
+      startDate: isoToDate(entity.startDate) ?? today,
       endDate: entity.endDate ? isoToDate(entity.endDate) : (undefined as Date | undefined),
     },
     validators: { onSubmit: editSchema as never },
