@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 // Append-only version table. Every mutation writes a row here in the same
 // transaction as the actual change, so we have a full revertible history.
@@ -13,7 +13,10 @@ export const history = sqliteTable("history", {
   at: text("at")
     .notNull()
     .default(sql`(current_timestamp)`),
-});
+},
+  // Matches the index created by 0000_bootstrap.sql.
+  (t) => [index("history_entity_idx").on(t.entity, t.entityId)],
+);
 
 export type HistoryRow = typeof history.$inferSelect;
 export type HistoryInsert = typeof history.$inferInsert;

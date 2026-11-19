@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1795128560425,
+      "tag": "0000_bootstrap",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1795128560426,
+      "tag": "0001_tax_year_cache",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1795128560427,
+      "tag": "0002_expense_startup",
+      "breakpoints": true
+    }
+  ]
+}

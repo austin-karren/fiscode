@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const income = sqliteTable("income", {
   id: text("id").primaryKey(),
@@ -14,7 +14,10 @@ export const income = sqliteTable("income", {
   deletedAt: text("deleted_at"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
-});
+},
+  // Matches the index created by 0000_bootstrap.sql.
+  (t) => [index("income_date_idx").on(t.date)],
+);
 
 export type IncomeRow = typeof income.$inferSelect;
 export type IncomeInsert = typeof income.$inferInsert;

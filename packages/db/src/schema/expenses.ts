@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const expense = sqliteTable("expense", {
   id: text("id").primaryKey(),
@@ -19,7 +19,10 @@ export const expense = sqliteTable("expense", {
   deletedAt: text("deleted_at"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
-});
+},
+  // Matches the index created by 0000_bootstrap.sql.
+  (t) => [index("expense_date_idx").on(t.date)],
+);
 
 export type ExpenseRow = typeof expense.$inferSelect;
 export type ExpenseInsert = typeof expense.$inferInsert;
