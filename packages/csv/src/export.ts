@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { countedExpenseDate } from "@fiscode/core";
 import type { Bundle } from "./bundle-types.ts";
 import { CSV_COLUMNS, type CsvRow, type RecordType } from "./schema.ts";
 import { BOM, buildProvenance, EOL } from "./provenance.ts";
@@ -258,7 +259,11 @@ const filterYearly = (bundle: Bundle, year: number): Bundle => {
     income: live(bundle.income).filter((r) => within(r.date)),
     timeEntries: live(bundle.timeEntries).filter((r) => within(r.date)),
     mileage: live(bundle.mileage).filter((r) => within(r.date)),
-    expenses: live(bundle.expenses).filter((r) => within(r.date)),
+    // By the date each expense counts on: a startup cost paid before the SE start
+    // belongs to the year the business begins (IRC §195(b)), not the year it was paid.
+    expenses: live(bundle.expenses).filter((r) =>
+      within(countedExpenseDate(r, bundle.profile?.seStartDate)),
+    ),
     retirementContributions: live(bundle.retirementContributions).filter((r) => within(r.date)),
     entities: live(bundle.entities).filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
     spouses: live(bundle.spouses).filter((r) => spanOverlapsYear(r.startDate, r.endDate)),

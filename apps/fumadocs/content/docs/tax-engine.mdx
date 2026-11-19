@@ -59,6 +59,28 @@ threshold, with no W-2 wages or property, it shrinks in proportion to how far ta
 into the phase-in band, and is $0 at the band's end. From 2026, anyone with $1,000 or more of QBI
 gets at least $400 ([26 U.S.C. 199A(i)](https://uscode.house.gov), added by Pub. L. 119-21 §70105).
 
+### Startup costs (Section 195)
+
+An expense ticked "Startup expense" and paid before the self-employment start date is a startup
+cost. These are deducted together in the year the business begins, not the year they were paid.
+[IRC §195(b)(1)](https://www.govinfo.gov/link/uscode/26/195): "the taxpayer shall be allowed a
+deduction for the taxable year in which the active trade or business begins in an amount equal to
+the lesser of— (i) the amount of start-up expenditures with respect to the active trade or
+business, or (ii) $5,000, reduced (but not below zero) by the amount by which such start-up
+expenditures exceed $50,000, and (B) the remainder of such start-up expenditures shall be allowed
+as a deduction ratably over the 180-month period beginning with the month in which the active trade
+or business begins."
+
+- The start-year amount counts on the SE start date. The rest counts 1/180 a month, from the start
+  month on. Each year gets its months, and each quarterly period gets the months it covers.
+- Example, $12,000 paid before a March 2, 2026 start: $5,000 + 10 months × $38.89 = $5,388.89 in
+  2026, then $466.67 a year, ending in February 2041.
+- The year-end packet shows the year's deduction and the total paid on its own line. The yearly CSV
+  carries the startup rows in the year the business begins.
+- A startup-ticked expense paid on or after the SE start is an ordinary expense of its own year.
+
+Not modelled: organizational costs (§248), which have their own $5,000 deduction.
+
 ### Utah income tax
 
 Utah taxes income starting from federal AGI, not federal taxable income (TC-40 line 7). The tax is

@@ -9,8 +9,10 @@ export type ExpenseForYear = {
  * The date an expense counts on. A startup expense (Section 195) paid before
  * the SE start counts on the SE start date: IRC §195(b)(1)(A) allows the
  * deduction "for the taxable year in which the active trade or business begins"
- * (https://www.law.cornell.edu/uscode/text/26/195). Every other expense counts
- * on its own date. With no SE start, every expense counts on its own date.
+ * (https://www.govinfo.gov/link/uscode/26/195). Every other expense counts on
+ * its own date. With no SE start, every expense counts on its own date.
+ *
+ * The yearly CSV uses this to put a startup cost in the year it counts.
  */
 export const countedExpenseDate = (
   expense: Pick<ExpenseForYear, "date" | "startupExpense">,
@@ -20,22 +22,74 @@ export const countedExpenseDate = (
     ? seStartDate
     : expense.date;
 
+/** A startup cost under §195: ticked as startup and paid before the SE start. */
+export const isPreStartStartupCost = (
+  expense: Pick<ExpenseForYear, "date" | "startupExpense" | "deletedAt">,
+  seStartDate: string | null | undefined,
+): boolean =>
+  expense.deletedAt === null &&
+  expense.startupExpense === true &&
+  Boolean(seStartDate) &&
+  expense.date < seStartDate!;
+
+const isoFirstOfMonth = (monthIndex: number): string => {
+  const y = Math.floor(monthIndex / 12);
+  const m = (monthIndex % 12) + 1;
+  return `${y}-${String(m).padStart(2, "0")}-01`;
+};
+
 /**
- * The expenses that count toward `year`'s Schedule C, in their given order.
+ * The startup-cost deduction that falls within [from, to] (inclusive ISO dates),
+ * in cents. IRC §195(b)(1) (https://www.govinfo.gov/link/uscode/26/195):
+ * "(A) the taxpayer shall be allowed a deduction for the taxable year in which
+ * the active trade or business begins in an amount equal to the lesser of— (i)
+ * the amount of start-up expenditures with respect to the active trade or
+ * business, or (ii) $5,000, reduced (but not below zero) by the amount by which
+ * such start-up expenditures exceed $50,000, and (B) the remainder of such
+ * start-up expenditures shall be allowed as a deduction ratably over the
+ * 180-month period beginning with the month in which the active trade or
+ * business begins."
  *
- * An expense counts when all of these hold:
+ * The start-year amount counts on the SE start date. The remainder counts
+ * 1/180 a month: the start month on the SE start date, every later month on its
+ * first day. A year is the window Jan 1 – Dec 31; an annualized period ends at
+ * its cutoff.
+ */
+export const startupDeductionBetween = (
+  expenses: readonly (ExpenseForYear & { amountCents: number })[],
+  seStartDate: string | null | undefined,
+  from: string,
+  to: string,
+): number => {
+  if (!seStartDate) return 0;
+  const total = expenses
+    .filter((e) => isPreStartStartupCost(e, seStartDate))
+    .reduce((sum, e) => sum + e.amountCents, 0);
+  if (total <= 0) return 0;
+  const first = Math.max(0, Math.min(total, 500_000 - Math.max(0, total - 5_000_000)));
+  const monthly = (total - first) / 180;
+  const within = (d: string) => d >= from && d <= to;
+  const startMonth = Number(seStartDate.slice(0, 4)) * 12 + Number(seStartDate.slice(5, 7)) - 1;
+  let months = 0;
+  for (let k = 0; k < 180; k++) {
+    const counted = k === 0 ? seStartDate : isoFirstOfMonth(startMonth + k);
+    if (within(counted)) months++;
+  }
+  return Math.round((within(seStartDate) ? first : 0) + monthly * months);
+};
+
+/**
+ * The expenses that count toward `year`'s Schedule C one by one, in their given
+ * order. An expense counts when all of these hold:
  * - it is not deleted (`deletedAt` is null);
- * - its counted date (`countedExpenseDate`) is in `year` (by the `YYYY`);
- * - that date is on or after the SE start date.
+ * - it is dated in `year` (by the `YYYY` of its ISO date);
+ * - it is dated on or after the SE start date;
+ * - it is not a startup cost paid before the SE start. Those are deducted as a
+ *   group under §195(b) (`startupDeductionBetween`): at most $5,000 in the year
+ *   the business begins, the rest over 180 months.
  *
- * So a startup expense (Section 195) paid before the business began counts in
- * the year the business begins, whatever year it was paid in, and never in the
- * year it was paid if that is earlier. A startup expense dated on or after the
- * SE start is an ordinary expense of its own year.
- *
- * Not modelled: §195(b) allows at most $5,000 in that year (reduced by the
- * amount over $50,000) and amortizes the rest over 180 months; fiscode deducts
- * the whole amount.
+ * A startup expense dated on or after the SE start is an ordinary expense of its
+ * own year.
  *
  * A null or blank `seStartDate` is read as January 1 of `year`, so every live
  * expense dated in the year counts. The estimate and the year-end packet both
@@ -48,9 +102,7 @@ export const expensesCountedForYear = <T extends ExpenseForYear>(
 ): T[] => {
   const yearPrefix = String(year);
   const floor = seStartDate || `${yearPrefix}-01-01`;
-  return expenses.filter((e) => {
-    if (e.deletedAt !== null) return false;
-    const date = countedExpenseDate(e, seStartDate);
-    return date.slice(0, 4) === yearPrefix && date >= floor;
-  });
+  return expenses.filter(
+    (e) => e.deletedAt === null && e.date.slice(0, 4) === yearPrefix && e.date >= floor,
+  );
 };

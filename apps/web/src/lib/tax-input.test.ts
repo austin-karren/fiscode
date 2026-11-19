@@ -246,7 +246,8 @@ describe("bug A: a startup cost counts in the year the business begins (IRC §19
     const b = makeBundle({ profile, expenses: [startup] });
     expect(deriveYear(b, 2025).directExpenses).toBe(0);
     expect(deriveYear(b, 2026).directExpenses).toBe(900_00);
-    expect(deriveYear(b, 2025).excludedBeforeSeStart.expense).toBe(1);
+    // Not "excluded" in 2025: it is deducted under §195 in 2026.
+    expect(deriveYear(b, 2025).excludedBeforeSeStart.expense).toBe(0);
     expect(deriveYear(b, 2026).excludedBeforeSeStart.expense).toBe(0);
   });
 
@@ -276,9 +277,22 @@ describe("bug A: a startup cost counts in the year the business begins (IRC §19
     expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(100_00);
   });
 
-  it("year-end breakdown: in 2026's packet, not 2025's", () => {
-    expect(expenseTotalsByCategory([startup], 2025, "2026-02-01")).toEqual({});
-    expect(expenseTotalsByCategory([startup], 2026, "2026-02-01")).toEqual({ supplies: 900_00 });
+  it("year-end: its own §195 line in 2026 (deducted and total), not a category", () => {
+    const b = makeBundle({ profile, expenses: [startup] });
+    expect(expenseTotalsByCategory([startup], 2026, "2026-02-01")).toEqual({});
+    expect(deriveYear(b, 2026).startupCosts).toEqual({ deductedThisYear: 900_00, total: 900_00 });
+    expect(deriveYear(b, 2025).startupCosts).toEqual({ deductedThisYear: 0, total: 900_00 });
+  });
+
+  it("§195(b) limit: $12,000 paid before a Mar 2 start deducts $5,388.89, then $466.67", () => {
+    const big = { ...expense("s", "2025-12-15", 12_000_00), startupExpense: true };
+    const b = makeBundle({
+      profile: { ...profile, seStartDate: "2026-03-02" },
+      income: [income("i1", "2026-05-15", 50_000_00)],
+      expenses: [big],
+    });
+    expect(deriveYear(b, 2026).directExpenses).toBe(5_388_89);
+    expect(deriveYear(b, 2027).directExpenses).toBe(466_67);
   });
 });
 

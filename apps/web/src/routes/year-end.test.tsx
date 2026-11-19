@@ -43,6 +43,7 @@ const loaderData = {
     activeEntityType: "sole_prop",
     seStartDate: "2026-01-01",
     excludedBeforeSeStart: { income: 0, expense: 0, mileage: 0 },
+    startupCosts: { deductedThisYear: 0, total: 0 },
   },
   totalsByCategory: { software_subs: 8950 },
   names: {
@@ -159,6 +160,18 @@ describe("year-end packet", () => {
     } finally {
       loaderData.derived.excludedBeforeSeStart = { income: 0, expense: 0, mileage: 0 };
       loaderData.derived.seStartDate = "2026-01-01";
+    }
+  });
+
+  it("shows §195 startup costs: deducted this year, of the total paid (demo $12,000, start Mar 2)", () => {
+    loaderData.derived.startupCosts = { deductedThisYear: 538_889, total: 1_200_000 };
+    try {
+      render(<YearEndPage />);
+      const row = screen.getByText(/Startup costs \(Section 195\)/).closest("tr")!;
+      expect(row).toHaveTextContent("of $12,000.00 paid before the business began");
+      expect(row).toHaveTextContent("$5,388.89");
+    } finally {
+      loaderData.derived.startupCosts = { deductedThisYear: 0, total: 0 };
     }
   });
 

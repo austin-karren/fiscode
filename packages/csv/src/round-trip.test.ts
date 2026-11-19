@@ -250,6 +250,23 @@ describe("CSV round-trip", () => {
     expect(round).toEqual(bundle);
   });
 
+  it("yearly export puts a startup cost paid before the SE start in the year the business begins", () => {
+    // Paid 2025-12-15, SE start 2026-02-01: it counts in 2026 (IRC §195(b)), so the 2026
+    // accountant file carries it and the 2025 file doesn't. The full export is unchanged.
+    const bundle = fullBundle();
+    bundle.profile = { ...bundle.profile!, seStartDate: "2026-02-01" };
+    bundle.expenses = [
+      { ...bundle.expenses[0]!, id: "ex_startup", date: "2025-12-15", startupExpense: true },
+    ];
+    const rows = (year: number) =>
+      parseCsv(exportBundle(bundle, { scope: "yearly", year })).bundle.expenses.map((e) => e.id);
+    expect(rows(2026)).toEqual(["ex_startup"]);
+    expect(rows(2025)).toEqual([]);
+    expect(
+      parseCsv(exportBundle(bundle, { scope: "full" })).bundle.expenses.map((e) => e.id),
+    ).toEqual(["ex_startup"]);
+  });
+
   it("yearly export filters dated records to that year and includes spans that overlap", () => {
     const bundle = fullBundle();
     const csv = exportBundle(bundle, {

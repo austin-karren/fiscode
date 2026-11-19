@@ -30,9 +30,10 @@ describe("expenseTotalsByCategory", () => {
     expect(expenseTotalsByCategory(rows, 2026, "2026-04-01")).toEqual({ software_subs: 8950 });
   });
 
-  it("counts a startup expense dated before the SE start date", () => {
+  it("leaves a startup cost paid before the SE start to its own §195 line, not a category", () => {
+    // Deducted as a group under §195(b) (derived.startupCosts), so it isn't a per-category row.
     const rows = [expense("2026-02-10", "office_supplies", 4000, { startupExpense: true })];
-    expect(expenseTotalsByCategory(rows, 2026, "2026-04-01")).toEqual({ office_supplies: 4000 });
+    expect(expenseTotalsByCategory(rows, 2026, "2026-04-01")).toEqual({});
   });
 
   it("leaves out deleted expenses and other years", () => {
