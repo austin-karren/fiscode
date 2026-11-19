@@ -45,15 +45,15 @@ function RootLayout() {
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset>
-          <header className="flex h-12 shrink-0 items-center gap-2 bg-background/80 px-3 backdrop-blur sticky top-0 z-10">
+          <header className="flex h-12 shrink-0 items-center gap-2 bg-background/80 px-3 backdrop-blur sticky top-0 z-10 print:hidden">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mx-1 h-4 data-vertical:self-center" />
             <span className="font-mono text-sm font-medium tracking-tight">
               {formattedPathname}
             </span>
           </header>
-          <Separator orientation="horizontal" className="w-full" />
-          <main className="@container px-4 py-6 md:px-8">
+          <Separator orientation="horizontal" className="w-full print:hidden" />
+          <main className="@container px-4 py-6 md:px-8 print:p-0">
             <Outlet />
           </main>
         </SidebarInset>
