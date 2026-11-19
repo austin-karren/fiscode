@@ -109,6 +109,7 @@ function SetupPage() {
 
   return (
     <Page
+      width="narrow"
       title="Welcome to fiscode"
       description="Just the minimum to get started. Everything else is optional."
     >
@@ -120,7 +121,7 @@ function SetupPage() {
       >
         <Card>
           <CardHeader>SETUP</CardHeader>
-          <CardContent className="grid gap-3 pb-2 @sm:grid-cols-3">
+          <CardContent className="grid gap-3 pb-2">
             <TSFormField
               form={form}
               name="filingStatus"

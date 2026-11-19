@@ -109,7 +109,11 @@ function ProfilePage() {
   const { profile, entities, spouses } = useLoaderData({ from: "/profile" });
   if (!profile) {
     return (
-      <Page title="Profile" description="Filing status, residence, dependents, and preferences.">
+      <Page
+        width="form"
+        title="Profile"
+        description="Filing status, residence, dependents, and preferences."
+      >
         <SetupRequiredEmpty />
       </Page>
     );
@@ -312,7 +316,11 @@ function ProfileFormPanel({
   });
 
   return (
-    <Page title="Profile" description="Filing status, residence, dependents, and preferences.">
+    <Page
+      width="form"
+      title="Profile"
+      description="Filing status, residence, dependents, and preferences."
+    >
       <ConfirmDialog
         open={scopeConfirmOpen}
         onOpenChange={setScopeConfirmOpen}
@@ -462,7 +470,7 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <div className="flex items-end gap-4">
+            <div className="flex flex-wrap items-end gap-x-6 gap-y-2 @md:col-span-2">
               <TSFormField form={profileForm} name="tracksRoth">
                 {(field) => (
                   <FormItem className="flex flex-row items-center gap-2">
@@ -671,7 +679,11 @@ function ProfileFormPanel({
             </CardTitle>
           </CardHeader>
           {filesJointly ? (
-            <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @lg:grid-cols-3 @xl:grid-cols-[1fr_1fr_1fr_1fr_1fr]">
+            <CardContent
+              // Two groups: the dates (half the row each), then the three
+              // amounts (a third each).
+              className="grid items-start gap-3 pb-2 @sm:grid-cols-6 @sm:[&>*]:col-span-3 @lg:[&>*]:col-span-2 @lg:[&>*:nth-child(-n+2)]:col-span-3"
+            >
               <TSFormField
                 form={spouseForm}
                 name="startDate"

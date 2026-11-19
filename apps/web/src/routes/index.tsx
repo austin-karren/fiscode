@@ -98,8 +98,11 @@ function Dashboard() {
 
       <ExcludedBeforeSeAlert derived={derived} />
 
-      <div className="grid gap-4 @md:grid-cols-2 @xl:grid-cols-4">
+      {/* One primary figure, the year's total; the three taxes it adds up
+          recede beside it. */}
+      <div className="grid items-stretch gap-4 @md:grid-cols-3 @xl:grid-cols-[2fr_1fr_1fr_1fr]">
         <StatCard
+          primary
           label="Total liability"
           value={result.estimate.totalLiability}
           tooltip={GLOSSARY.totalLiability}
@@ -217,7 +220,7 @@ function Dashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <dl className="grid gap-2 text-sm @md:grid-cols-2">
+          <dl className="grid gap-2 gap-x-12 text-sm @md:grid-cols-2">
             <Row
               label="1099 income"
               value={formatUSD(derived.gross1099)}
@@ -245,7 +248,7 @@ function Dashboard() {
         </CardContent>
       </Card>
 
-      <section id="data" className="grid gap-4 @md:grid-cols-2 @xl:grid-cols-3 pt-2">
+      <section id="data" className="grid items-start gap-4 pt-2 @md:grid-cols-2 @xl:grid-cols-3">
         <ExportCard />
         <ImportCard />
         <BackupNudge />
@@ -254,15 +257,34 @@ function Dashboard() {
   );
 }
 
-function StatCard({ label, value, tooltip }: { label: string; value: Cents; tooltip?: string }) {
+function StatCard({
+  label,
+  value,
+  tooltip,
+  primary = false,
+}: {
+  label: string;
+  value: Cents;
+  tooltip?: string;
+  /** The page's main figure: larger, and full width until the row has room. */
+  primary?: boolean;
+}) {
   return (
-    <Card>
+    <Card className={primary ? "@md:col-span-3 @xl:col-span-1" : undefined}>
       <CardContent className="pt-6">
         <p className="inline-flex items-center gap-1.5 text-xs uppercase text-muted-foreground">
           {label}
           {tooltip ? <InfoTooltip text={tooltip} /> : null}
         </p>
-        <p className="mt-1 text-2xl font-semibold tabular-nums">{formatUSD(value)}</p>
+        <p
+          className={
+            primary
+              ? "mt-1 text-4xl font-semibold tracking-tight tabular-nums"
+              : "mt-1 text-lg font-medium tabular-nums text-muted-foreground"
+          }
+        >
+          {formatUSD(value)}
+        </p>
       </CardContent>
     </Card>
   );
