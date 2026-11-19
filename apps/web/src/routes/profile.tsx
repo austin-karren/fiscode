@@ -45,6 +45,7 @@ import {
 } from "../lib/entity-period-error";
 import { EditSpouseDialog } from "../components/edit-spouse-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
+import { softDeleteWithUndo } from "../lib/soft-delete";
 
 const FILING_OPTIONS = labelOptions(FILING_STATUS_LABELS);
 
@@ -124,6 +125,9 @@ function ProfileFormPanel({
   spouses: Awaited<ReturnType<typeof spouseRepo.list>>;
 }) {
   const router = useRouter();
+  // Spouse income only enters a joint return. Read from the saved profile, so
+  // the card follows what Save profile stored, not an unsaved pick.
+  const filesJointly = profile.filingStatus === "mfj";
 
   const profileForm = useForm({
     defaultValues: {
@@ -631,89 +635,102 @@ function ProfileFormPanel({
               <InfoTooltip text={GLOSSARY.spouseBlock} />
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @lg:grid-cols-3 @xl:grid-cols-[1fr_1fr_1fr_1fr_1fr]">
-            <TSFormField form={spouseForm} name="startDate" validators={{ onBlur: sfs.startDate }}>
-              {(field) => (
-                <FormItem>
-                  <FormLabel>Start</FormLabel>
-                  <FormControl>
-                    <DatePicker
-                      yearsBack={CONFIG_YEARS_BACK}
-                      value={field.state.value as Date | undefined}
-                      onBlur={field.handleBlur}
-                      onValueChange={(d) => field.handleChange(d)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField form={spouseForm} name="endDate">
-              {(field) => (
-                <FormItem>
-                  <FormLabel>End</FormLabel>
-                  <FormControl>
-                    <DatePicker
-                      yearsBack={CONFIG_YEARS_BACK}
-                      value={field.state.value as Date | undefined}
-                      onBlur={field.handleBlur}
-                      onValueChange={(d) => field.handleChange(d)}
-                      disableFuture={false}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField form={spouseForm} name="wages" validators={{ onBlur: sfs.wages }}>
-              {(field) => (
-                <FormItem>
-                  <FormLabel>Annual W-2 wages</FormLabel>
-                  <FormControl>
-                    <Input
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      placeholder="$0.00"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField form={spouseForm} name="fedWH" validators={{ onBlur: sfs.fedWH }}>
-              {(field) => (
-                <FormItem>
-                  <FormLabel>Fed withholding</FormLabel>
-                  <FormControl>
-                    <Input
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      placeholder="$0.00"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField form={spouseForm} name="stateWH" validators={{ onBlur: sfs.stateWH }}>
-              {(field) => (
-                <FormItem>
-                  <FormLabel>State withholding</FormLabel>
-                  <FormControl>
-                    <Input
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      placeholder="$0.00"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-          </CardContent>
+          {filesJointly ? (
+            <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @lg:grid-cols-3 @xl:grid-cols-[1fr_1fr_1fr_1fr_1fr]">
+              <TSFormField
+                form={spouseForm}
+                name="startDate"
+                validators={{ onBlur: sfs.startDate }}
+              >
+                {(field) => (
+                  <FormItem>
+                    <FormLabel>Start</FormLabel>
+                    <FormControl>
+                      <DatePicker
+                        yearsBack={CONFIG_YEARS_BACK}
+                        value={field.state.value as Date | undefined}
+                        onBlur={field.handleBlur}
+                        onValueChange={(d) => field.handleChange(d)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              </TSFormField>
+              <TSFormField form={spouseForm} name="endDate">
+                {(field) => (
+                  <FormItem>
+                    <FormLabel>End</FormLabel>
+                    <FormControl>
+                      <DatePicker
+                        yearsBack={CONFIG_YEARS_BACK}
+                        value={field.state.value as Date | undefined}
+                        onBlur={field.handleBlur}
+                        onValueChange={(d) => field.handleChange(d)}
+                        disableFuture={false}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              </TSFormField>
+              <TSFormField form={spouseForm} name="wages" validators={{ onBlur: sfs.wages }}>
+                {(field) => (
+                  <FormItem>
+                    <FormLabel>Annual W-2 wages</FormLabel>
+                    <FormControl>
+                      <Input
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                        placeholder="$0.00"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              </TSFormField>
+              <TSFormField form={spouseForm} name="fedWH" validators={{ onBlur: sfs.fedWH }}>
+                {(field) => (
+                  <FormItem>
+                    <FormLabel>Fed withholding</FormLabel>
+                    <FormControl>
+                      <Input
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                        placeholder="$0.00"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              </TSFormField>
+              <TSFormField form={spouseForm} name="stateWH" validators={{ onBlur: sfs.stateWH }}>
+                {(field) => (
+                  <FormItem>
+                    <FormLabel>State withholding</FormLabel>
+                    <FormControl>
+                      <Input
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                        placeholder="$0.00"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              </TSFormField>
+            </CardContent>
+          ) : (
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Spouse income counts only on a joint return. To add it, set filing status to Married
+                filing jointly above.
+              </p>
+            </CardContent>
+          )}
           <CardContent>
             <ul className="space-y-1 text-sm">
               {spouses.map((s) => (
@@ -724,6 +741,21 @@ function ProfileFormPanel({
                   </span>
                   <div className="ms-auto inline-flex gap-1">
                     <EditSpouseDialog spouse={s} onSaved={() => router.invalidate()} />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        void softDeleteWithUndo({
+                          repo: spouseRepo,
+                          row: s,
+                          message: "Spouse block deleted.",
+                          onChange: () => router.invalidate(),
+                        })
+                      }
+                    >
+                      Delete
+                    </Button>
                   </div>
                 </li>
               ))}
@@ -732,20 +764,22 @@ function ProfileFormPanel({
               ) : null}
             </ul>
           </CardContent>
-          <CardFooter className="justify-end">
-            <spouseForm.Subscribe
-              selector={(s) => ({
-                canSubmit: s.canSubmit,
-                isSubmitting: s.isSubmitting,
-              })}
-            >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
-                  {isSubmitting ? "Adding..." : "Add"}
-                </Button>
-              )}
-            </spouseForm.Subscribe>
-          </CardFooter>
+          {filesJointly ? (
+            <CardFooter className="justify-end">
+              <spouseForm.Subscribe
+                selector={(s) => ({
+                  canSubmit: s.canSubmit,
+                  isSubmitting: s.isSubmitting,
+                })}
+              >
+                {({ canSubmit, isSubmitting }) => (
+                  <Button type="submit" disabled={!canSubmit || isSubmitting}>
+                    {isSubmitting ? "Adding..." : "Add"}
+                  </Button>
+                )}
+              </spouseForm.Subscribe>
+            </CardFooter>
+          ) : null}
         </Card>
       </EnterToSubmitForm>
     </Page>
