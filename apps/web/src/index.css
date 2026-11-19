@@ -1,1 +1,42 @@
 @import "@fiscode/ui/globals.css";
+
+/* Paper is white whatever the screen theme is: the light palette is restated
+   here, with darker secondary text and rules so they survive a printer, and
+   it also overrides `.dark`. */
+@media print {
+  @page {
+    margin: 0.6in;
+  }
+
+  :root,
+  .dark {
+    color-scheme: light;
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.4 0 0);
+    --border: oklch(0.7 0 0);
+  }
+
+  /* App chrome that lives in packages/ui or outside the route tree. */
+  [data-slot="sidebar"],
+  [data-slot="sidebar-gap"],
+  [data-slot="sidebar-container"],
+  [data-sonner-toaster],
+  .TanStackRouterDevtools {
+    display: none !important;
+  }
+
+  /* The warning alert picks its text colour per theme with `dark:`. */
+  [data-slot="alert"],
+  [data-slot="alert"] * {
+    color: var(--foreground) !important;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
