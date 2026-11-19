@@ -13,6 +13,7 @@
     "**/.turbo/**",
     "**/routeTree.gen.ts",
     "**/*.d.ts",
-    "**/_generated/**"
+    "**/_generated/**",
+    "packages/db/src/migrations/meta/**"
   ]
 }

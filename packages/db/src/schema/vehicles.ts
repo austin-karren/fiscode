@@ -20,17 +20,19 @@ export const vehicle = sqliteTable("vehicle", {
 export type VehicleRow = typeof vehicle.$inferSelect;
 export type VehicleInsert = typeof vehicle.$inferInsert;
 
-export const mileage = sqliteTable("mileage", {
-  id: text("id").primaryKey(),
-  date: text("date").notNull(),
-  vehicleId: text("vehicle_id"),
-  businessMiles: integer("business_miles").notNull(),
-  purpose: text("purpose"),
-  notes: text("notes"),
-  deletedAt: text("deleted_at"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-},
+export const mileage = sqliteTable(
+  "mileage",
+  {
+    id: text("id").primaryKey(),
+    date: text("date").notNull(),
+    vehicleId: text("vehicle_id"),
+    businessMiles: integer("business_miles").notNull(),
+    purpose: text("purpose"),
+    notes: text("notes"),
+    deletedAt: text("deleted_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
   // Matches the index created by 0000_bootstrap.sql.
   (t) => [index("mileage_date_idx").on(t.date)],
 );

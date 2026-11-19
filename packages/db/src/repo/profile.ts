@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../client.ts";
 import { profile, type ProfileInsert, type ProfileRow } from "../schema/profile.ts";
-import { touchTimestamps, writeHistory } from "./base.ts";
+import { changesNothing, touchTimestamps, writeHistory } from "./base.ts";
 
 // Singleton profile keyed by the literal id 'profile'.
 const PROFILE_ID = "profile";
@@ -21,6 +21,7 @@ export const profileRepo = {
     const existing = await profileRepo.get();
     const now = new Date().toISOString();
     if (existing) {
+      if (changesNothing(existing, input)) return existing;
       await db
         .update(profile)
         .set({ ...input, ...touchTimestamps() })
