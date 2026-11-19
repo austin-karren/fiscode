@@ -470,7 +470,7 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <div className="flex items-end gap-4">
+            <div className="flex flex-wrap items-end gap-x-6 gap-y-2 @md:col-span-2">
               <TSFormField form={profileForm} name="tracksRoth">
                 {(field) => (
                   <FormItem className="flex flex-row items-center gap-2">
