@@ -34,8 +34,12 @@ const runMigrations = async (): Promise<void> => {
     const name = key.split("/").pop()!;
     if (applied.has(name)) continue;
     const sql = migrationModules[key]!;
-    // Split on `;\n` for multi-statement files. SQLocal's sql tag accepts
-    // single statements, so iterate.
+    // Split on `;\n` and run each chunk. A chunk may hold several statements:
+    // SQLocal's driver runs a chunk with sqlite-wasm `db.exec`, which executes
+    // every statement in it. drizzle-kit ends statements with
+    // `;--> statement-breakpoint`, which this split does not match, so a
+    // generated migration arrives as multi-statement chunks with the markers as
+    // `--` comments. That works; keep the split as it is.
     const statements = sql
       .split(/;\s*\n/)
       .map((s) => s.trim())

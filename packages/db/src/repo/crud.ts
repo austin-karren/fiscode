@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { getDb } from "../client.ts";
-import { newId, newRowTimestamps, touchTimestamps, writeHistory } from "./base.ts";
+import { changesNothing, newId, newRowTimestamps, touchTimestamps, writeHistory } from "./base.ts";
 
 type AnyRow = Record<string, unknown> & { id: string; deletedAt?: string | null };
 
@@ -52,6 +52,7 @@ export const makeCrudRepo = <TInsert extends Record<string, unknown>, TRow exten
       const db = getDb();
       const before = (await db.select().from(table).where(eq(table.id, id)).limit(1)) as TRow[];
       if (before.length === 0) return undefined;
+      if (changesNothing(before[0]!, patch)) return before[0];
       await db
         .update(table)
         .set({ ...patch, ...touchTimestamps() })

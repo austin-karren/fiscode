@@ -47,5 +47,19 @@ export const newRowTimestamps = () => ({
 
 export const touchTimestamps = () => ({ updatedAt: nowIso() });
 
+/**
+ * True when writing `patch` would leave `stored` as it is: every field the
+ * patch sets (undefined means "not set", as Drizzle treats it) already holds
+ * that value. Such a save writes nothing, so it adds no history row and does
+ * not move `updatedAt` (which the export carries).
+ */
+export const changesNothing = (
+  stored: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): boolean =>
+  Object.entries(patch).every(
+    ([key, value]) => value === undefined || Object.is(stored[key], value),
+  );
+
 export { newId, todayIso, eq };
 export type { AnyTable };
