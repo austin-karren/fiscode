@@ -92,13 +92,19 @@ the simplified method too). What the limit cuts depends on the method:
 - **Simplified:** lost. "Amount in excess of gross income limitation may not be carried over"
   ([IRS, simplified option](https://www.irs.gov/businesses/small-businesses-self-employed/simplified-option-for-home-office-deduction)).
 
-**More than one home in a year** (a move): each home is limited by the profit of its own period,
-from the income, expenses and mileage dated within it. "If you file more than one Form 8829,
-include only the income earned and the deductions attributable to that income during the period
-you owned the home for which Part I was completed" (instructions, Line 8). Pub 587 says the same
-for the simplified method. Income dated while no home office was in use counts toward neither.
-With one home, the limit is the whole year's tentative profit, even when the home was used for
-part of the year.
+**Whose income counts:** every home office, one or several, is limited by the profit from the
+income, expenses and mileage dated within its own days in use. Pub 587: "If some of the income is
+from a place of business other than your home, you must first determine the part of your gross
+income from the business use of your home". For more than one home, the Line 8 instructions say:
+"include only the income earned and the deductions attributable to that income during the period
+you owned the home". So:
+
+- A home used from July 1 is limited by the profit dated from July 1. Income earned before it
+  counts toward no home office.
+- Each date belongs to one home: when a move is entered as "ends Jul 1" and "starts Jul 1", the
+  new home has Jul 1.
+- A config that deducts nothing (no costs, or an office larger than the home) has no days.
+- The total never exceeds the business's whole tentative profit.
 
 **Mortgage interest and real estate taxes:** fiscode assumes the standard deduction, so their
 business share goes on lines 16 and 17 and is limited with the other operating expenses ("If you

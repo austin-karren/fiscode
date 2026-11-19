@@ -156,14 +156,21 @@ const tentativeProfitBetween = (
 
 // Gross income limit (Form 8829 lines 8, 15, 27; Pub 587 "Gross income
 // limitation", which applies to the simplified method too): each home's
-// deduction is at most the tentative profit before it.
+// deduction is at most the profit from the business use of that home.
 //
-// - One home in the period: line 8 is the business's whole tentative profit.
-// - More than one home (a move): each is limited by its own period's profit.
-//   i8829 Line 8: "If you file more than one Form 8829, include only the
-//   income earned and the deductions attributable to that income during the
-//   period you owned the home for which Part I was completed." Pub 587 says
-//   the same for the simplified method. Rows are assigned by their date.
+// Every config, one home or several, is limited by the profit from the rows
+// dated within its own days in use. Pub 587: "If some of the income is from a
+// place of business other than your home, you must first determine the part
+// of your gross income from the business use of your home." i8829 Line 8, for
+// more than one home: "include only the income earned and the deductions
+// attributable to that income during the period you owned the home".
+//
+// - Each date belongs to one config: where two overlap (a move entered as
+//   "ends Jul 1" and "starts Jul 1"), the later start wins the shared days.
+// - Configs that deduct nothing (no costs, or area rejected) own no days.
+// - The total allowed never exceeds the business's whole tentative profit
+//   (line 27 is never more than line 15). Any excess over it is cut from the
+//   latest config back.
 //
 // What the limit cuts depends on the method. Actual: Form 8829 line 43
 // carries it to next year. Simplified: "Amount in excess of gross income
@@ -177,22 +184,44 @@ const limitedHomeOffice = (
   through: string,
   wholeTentativeProfit: number,
 ): { allowed: Cents; lost: Cents; carryover: Cents; areaRejected: number } => {
-  const { pieces, areaRejected } = homeOfficePieces(bundle, year, seStartDate, through);
+  const { pieces: all, areaRejected } = homeOfficePieces(bundle, year, seStartDate, through);
+  const pieces = all
+    .filter((p) => p.amount > 0)
+    .toSorted((x, y) => (x.from < y.from ? -1 : x.from > y.from ? 1 : 0));
+  // Profit windows: a later start takes the shared days.
+  const profitTo = (i: number): string => {
+    const next = pieces.slice(i + 1).find((p) => p.from <= pieces[i]!.to);
+    return next ? dayBefore(next.from) : pieces[i]!.to;
+  };
+  const cut = pieces.map((piece, i) => {
+    const profit = tentativeProfitBetween(bundle, year, seStartDate, piece.from, profitTo(i));
+    return { piece, ...limitToTentativeProfit(piece.amount, profit) };
+  });
+  // Never more than the whole tentative profit: trim from the latest config back.
+  let over = cut.reduce((sum, c) => sum + c.allowed, 0) - Math.max(0, wholeTentativeProfit);
+  for (let i = cut.length - 1; i >= 0 && over > 0; i--) {
+    const trim = Math.min(over, cut[i]!.allowed);
+    cut[i] = {
+      ...cut[i]!,
+      allowed: cents(cut[i]!.allowed - trim),
+      disallowed: cents(cut[i]!.disallowed + trim),
+    };
+    over -= trim;
+  }
   let allowed = 0;
   let lost = 0;
   let carryover = 0;
-  for (const piece of pieces) {
-    const profit =
-      pieces.length === 1
-        ? wholeTentativeProfit
-        : tentativeProfitBetween(bundle, year, seStartDate, piece.from, piece.to);
-    const r = limitToTentativeProfit(piece.amount, profit);
-    allowed += r.allowed;
-    if (piece.method === "simplified") lost += r.disallowed;
-    else carryover += r.disallowed;
+  for (const c of cut) {
+    allowed += c.allowed;
+    if (c.piece.method === "simplified") lost += c.disallowed;
+    else carryover += c.disallowed;
   }
   return { allowed: cents(allowed), lost: cents(lost), carryover: cents(carryover), areaRejected };
 };
+
+// The ISO date before `iso` (UTC, so no timezone moves the day).
+const dayBefore = (iso: string): string =>
+  new Date(Date.UTC(...isoParts(iso)) - 86_400_000).toISOString().slice(0, 10);
 
 // The days a config is in use within the year, through `through`, and not
 // before the SE start: [from, to] inclusive, or null when there are none.
