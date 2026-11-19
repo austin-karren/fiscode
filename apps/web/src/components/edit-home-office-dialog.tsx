@@ -20,7 +20,7 @@ import { z } from "zod";
 
 import { optionalSqft } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
-import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
+import { CONFIG_YEARS_BACK, DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 
@@ -94,6 +94,7 @@ export function EditHomeOfficeDialog({
                   <FormLabel>Start date</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d ?? new Date())}
@@ -109,6 +110,7 @@ export function EditHomeOfficeDialog({
                   <FormLabel>End date (optional)</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}

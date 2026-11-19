@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { TSFormField } from "./forms/ts-form-field";
-import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
+import { CONFIG_YEARS_BACK, DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
 import { ENTITY_TYPE_LABELS, labelOptions } from "@fiscode/core";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
@@ -97,6 +97,7 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
                   <FormLabel>Start</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d ?? new Date())}
@@ -112,6 +113,7 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
                   <FormLabel>End (optional)</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}

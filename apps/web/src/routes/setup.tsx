@@ -19,7 +19,7 @@ import { TSFormField } from "../components/forms/ts-form-field";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { StateCombobox } from "../components/forms/state-combobox";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
-import { DatePicker, dateToIso } from "../components/forms/date-picker";
+import { CONFIG_YEARS_BACK, DatePicker, dateToIso } from "../components/forms/date-picker";
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { ImportCard } from "../components/import-card";
@@ -165,6 +165,7 @@ function SetupPage() {
                   <FormLabel>Self-employment start date</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onValueChange={(d) => field.handleChange(d)}
                       onBlur={field.handleBlur}
