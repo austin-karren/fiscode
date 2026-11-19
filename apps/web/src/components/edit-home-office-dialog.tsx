@@ -13,7 +13,11 @@ import { Input } from "@fiscode/ui/components/input";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { homeOfficeRepo } from "@fiscode/db";
 import type { HomeOfficeRow } from "@fiscode/csv";
-import { optionalNonNegativeIntegerString } from "@fiscode/core";
+import {
+  HOME_OFFICE_METHOD_LABELS,
+  labelOptions,
+  optionalNonNegativeIntegerString,
+} from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -23,10 +27,7 @@ import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 
-const METHOD_OPTIONS = [
-  { value: "simplified", label: "Simplified" },
-  { value: "actual", label: "Actual (advanced)" },
-];
+const METHOD_OPTIONS = labelOptions(HOME_OFFICE_METHOD_LABELS);
 
 const editSchema = z.object({
   startDate: z.date({ message: "Pick a start date" }),

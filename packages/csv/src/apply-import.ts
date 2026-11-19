@@ -1,7 +1,11 @@
 import type { Bundle } from "./bundle-types.ts";
 import { emptyBundle } from "./bundle-types.ts";
 
-export type ImportMode = "overwrite" | "append" | "restore";
+/**
+ * `restore` replaces everything with the file. `append` keeps what is here and
+ * adds the file's rows that are not here yet.
+ */
+export type ImportMode = "restore" | "append";
 
 export type ImportConflict = {
   table: string;
@@ -19,7 +23,7 @@ export type AppliedImport = {
  * the incoming bundle from a CSV, returns what the DB should look like after
  * applying the import (plus conflicts the caller can surface).
  *
- * - `overwrite` / `restore`: `next = incoming`. Wholesale replace.
+ * - `restore`: `next = incoming`. Wholesale replace.
  *   `replaced` captures `existing` for the caller to put into history.
  * - `append`: keep existing rows; add only non-colliding incoming rows.
  *   Colliding ids go into `conflicts` (existing-wins).
@@ -31,7 +35,7 @@ export const applyImport = (
   incoming: Bundle,
   mode: ImportMode,
 ): AppliedImport => {
-  if (mode === "overwrite" || mode === "restore") {
+  if (mode === "restore") {
     return { next: { ...incoming }, conflicts: [], replaced: existing };
   }
   const conflicts: ImportConflict[] = [];

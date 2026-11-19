@@ -32,7 +32,18 @@ export const setupTestDb = () => {
   }
 
   const db = drizzle(sqlite, { schema: tables, casing: "snake_case" });
-  __setDbForTests(db as never);
+  // better-sqlite3 has no `batch`. One BEGIN ... COMMIT on the single
+  // connection gives the same all-or-nothing rule the app gets from SQLocal.
+  __setDbForTests(db as never, async (queries) => {
+    sqlite.exec("BEGIN");
+    try {
+      for (const query of queries) await query;
+      sqlite.exec("COMMIT");
+    } catch (err) {
+      sqlite.exec("ROLLBACK");
+      throw err;
+    }
+  });
   return sqlite;
 };
 

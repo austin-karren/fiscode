@@ -3,7 +3,13 @@ import { Button } from "@fiscode/ui/components/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo } from "@fiscode/db";
-import { filingStatusSchema, stateCodeSchema } from "@fiscode/core";
+import {
+  ENTITY_TYPE_LABELS,
+  FILING_STATUS_LABELS,
+  filingStatusSchema,
+  labelOptions,
+  stateCodeSchema,
+} from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -16,19 +22,14 @@ import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { DatePicker, dateToIso } from "../components/forms/date-picker";
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { GLOSSARY } from "../lib/tax-glossary";
+import { ImportCard } from "../components/import-card";
 
-const FILING_OPTIONS = [
-  { value: "single", label: "Single" },
-  { value: "mfj", label: "Married filing jointly" },
-  { value: "mfs", label: "Married filing separately" },
-  { value: "hoh", label: "Head of household" },
-];
+const FILING_OPTIONS = labelOptions(FILING_STATUS_LABELS);
 
-const ENTITY_OPTIONS = [
-  { value: "sole_prop", label: "Sole proprietor" },
-  { value: "single_member_llc", label: "Single-member LLC" },
-  { value: "s_corp", label: "S corp (coming soon)" },
-];
+// S corp is listed and disabled: the estimate does not handle it yet.
+const ENTITY_OPTIONS = labelOptions(ENTITY_TYPE_LABELS).map((o) =>
+  o.value === "s_corp" ? { ...o, label: `${o.label} (coming soon)` } : o,
+);
 
 // Per-field schemas attached on each Field's `onBlur` so errors surface
 // when the user leaves an empty input, not while typing. The form-level
@@ -81,13 +82,18 @@ function SetupPage() {
           quarterlyMethod: "annualized",
           prepLeadDays: 14,
         });
-        await entityRepo.create({
-          type: value.entityType,
-          startDate: seStartIso,
-          endDate: null,
-          notes: null,
-          deletedAt: null,
-        });
+        // A backup restored on this screen without a profile row may already
+        // have brought the business entity. A second open-ended one would
+        // overlap it.
+        if ((await entityRepo.list()).length === 0) {
+          await entityRepo.create({
+            type: value.entityType,
+            startDate: seStartIso,
+            endDate: null,
+            notes: null,
+            deletedAt: null,
+          });
+        }
         toast.success("Profile saved.");
         navigate({ to: "/" });
       } catch (err) {
@@ -208,6 +214,8 @@ function SetupPage() {
           </CardFooter>
         </Card>
       </EnterToSubmitForm>
+
+      <ImportCard variant="setup" onImported={() => navigate({ to: "/" })} />
     </Page>
   );
 }

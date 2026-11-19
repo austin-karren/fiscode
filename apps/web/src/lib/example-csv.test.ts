@@ -73,14 +73,14 @@ describe("published example.csv — full import chain", () => {
     );
   });
 
-  it("Import → overwrite path lands every row in the DB and buildBundle reads them back", async () => {
+  it("Import → restore path lands every row in the DB and buildBundle reads them back", async () => {
     const onDisk = readFileSync(EXAMPLE_CSV_PATH, "utf8");
     const { bundle: parsed, validationErrors } = parseCsv(onDisk);
     expect(validationErrors).toEqual([]);
 
     // This is what the import-card.tsx component actually does:
-    const applied = applyImport(emptyBundle(), parsed, "overwrite");
-    await importBundle(applied.next, "import-overwrite");
+    const applied = applyImport(emptyBundle(), parsed, "restore");
+    await importBundle(applied.next, "import-restore");
 
     const round = await buildBundle();
     const reference = exampleBundle();
@@ -106,7 +106,7 @@ describe("published example.csv — full import chain", () => {
     expect(normalize(round.homeOffice)).toEqual(normalize(reference.homeOffice));
   });
 
-  it("Import → append path on a fresh DB produces the same end state as overwrite", async () => {
+  it("Import → append path on a fresh DB produces the same end state as restore", async () => {
     const onDisk = readFileSync(EXAMPLE_CSV_PATH, "utf8");
     const { bundle: parsed } = parseCsv(onDisk);
     const applied = applyImport(emptyBundle(), parsed, "append");
@@ -125,7 +125,7 @@ describe("published example.csv — full import chain", () => {
   it("import history is recorded (revertible)", async () => {
     const onDisk = readFileSync(EXAMPLE_CSV_PATH, "utf8");
     const { bundle: parsed } = parseCsv(onDisk);
-    await importBundle(applyImport(emptyBundle(), parsed, "overwrite").next, "import-overwrite");
+    await importBundle(applyImport(emptyBundle(), parsed, "restore").next, "import-restore");
 
     // The tax_year_cache table should still be empty after a data import
     // (it's a separate cache, not part of the user-bundle).

@@ -19,12 +19,10 @@ import { z } from "zod";
 import { TSFormField } from "./forms/ts-form-field";
 import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
+import { ENTITY_TYPE_LABELS, labelOptions } from "@fiscode/core";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 
-const ENTITY_OPTIONS = [
-  { value: "sole_prop", label: "Sole proprietor" },
-  { value: "single_member_llc", label: "Single-member LLC" },
-];
+const ENTITY_OPTIONS = labelOptions(ENTITY_TYPE_LABELS).filter((o) => o.value !== "s_corp");
 
 const editSchema = z.object({
   type: z.enum(["sole_prop", "single_member_llc"], { message: "Pick a type" }),

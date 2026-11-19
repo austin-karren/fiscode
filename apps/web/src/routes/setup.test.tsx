@@ -3,21 +3,29 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // The database is SQLite over OPFS and the router needs a browser history;
 // neither exists in jsdom. Both are replaced at the package boundary.
-const { upsert, create, navigate } = vi.hoisted(() => ({
+const { upsert, create, list, navigate, buildBundle, importBundle } = vi.hoisted(() => ({
+  list: vi.fn(async (): Promise<unknown[]> => []),
   upsert: vi.fn(async () => {}),
   create: vi.fn(async () => {}),
   navigate: vi.fn(),
+  buildBundle: vi.fn(),
+  importBundle: vi.fn(async () => {}),
 }));
 
 vi.mock("@fiscode/db", () => ({
   profileRepo: { exists: async () => false, upsert },
-  entityRepo: { create },
+  entityRepo: { create, list },
+  buildBundle,
+  importBundle,
 }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useNavigate: () => navigate,
+  useRouter: () => ({ invalidate: async () => {} }),
 }));
+
+import { emptyBundle, exampleBundle, exportBundle } from "@fiscode/csv";
 
 import { Route } from "./setup";
 
@@ -102,5 +110,46 @@ describe("setup form", () => {
     );
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ type: "sole_prop" }));
     expect(navigate).toHaveBeenCalledWith({ to: "/" });
+  });
+});
+
+describe("setup: restore from a backup", () => {
+  it("restores a backup into the empty app without filling in the form", async () => {
+    buildBundle.mockResolvedValue(emptyBundle());
+    render(<SetupPage />);
+    expect(screen.getByText("Restore from a backup")).toBeInTheDocument();
+
+    const csv = exportBundle(exampleBundle(), { scope: "full" });
+    fireEvent.change(document.querySelector('input[type="file"]')!, {
+      target: { files: [new File([csv], "fiscode-full-backup.csv", { type: "text/csv" })] },
+    });
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Restore this backup?");
+    // An empty app has nothing to keep, so there is no mode to choose.
+    expect(within(dialog).queryByRole("radio")).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Restore" }));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: "/" }));
+    expect(importBundle).toHaveBeenCalledWith(
+      expect.objectContaining({ profile: exampleBundle().profile }),
+      "import-restore",
+    );
+    // No profile was invented on the way.
+    expect(upsert).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("setup after a restore that brought no profile", () => {
+  it("does not create a second business entity when one is already there", async () => {
+    list.mockResolvedValueOnce([{ id: "ent_restored", type: "sole_prop" }]);
+    render(<SetupPage />);
+    await fillEveryField();
+    fireEvent.click(submitButton());
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: "/" }));
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(create).not.toHaveBeenCalled();
   });
 });
