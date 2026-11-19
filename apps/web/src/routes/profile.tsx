@@ -7,6 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/u
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
 import {
+  EntityOverlapError,
   cents,
   nonNegativeIntegerString,
   optionalUsdString,
@@ -150,6 +151,9 @@ function ProfileFormPanel({
     },
   });
 
+  // Set when the repo blocks an entity period that overlaps another one.
+  const [entityError, setEntityError] = useState<string | null>(null);
+
   const entityForm = useForm({
     defaultValues: {
       type: "" as "" | "sole_prop" | "single_member_llc",
@@ -158,13 +162,20 @@ function ProfileFormPanel({
     },
     validators: { onSubmit: entitySchema as never },
     onSubmit: async ({ value, formApi }) => {
-      await entityRepo.create({
-        type: value.type as "sole_prop" | "single_member_llc",
-        startDate: dateToIso(value.startDate!),
-        endDate: value.endDate ? dateToIso(value.endDate) : null,
-        notes: null,
-        deletedAt: null,
-      });
+      setEntityError(null);
+      try {
+        await entityRepo.create({
+          type: value.type as "sole_prop" | "single_member_llc",
+          startDate: dateToIso(value.startDate!),
+          endDate: value.endDate ? dateToIso(value.endDate) : null,
+          notes: null,
+          deletedAt: null,
+        });
+      } catch (err) {
+        if (!(err instanceof EntityOverlapError)) throw err;
+        setEntityError(err.message);
+        return;
+      }
       toast.success("Entity period added.");
       formApi.reset();
       router.invalidate();
@@ -172,7 +183,13 @@ function ProfileFormPanel({
   });
 
   async function endEntityNow(id: string) {
-    await entityRepo.update(id, { endDate: dateToIso(new Date()) });
+    try {
+      await entityRepo.update(id, { endDate: dateToIso(new Date()) });
+    } catch (err) {
+      if (!(err instanceof EntityOverlapError)) throw err;
+      toast.error(err.message);
+      return;
+    }
     toast.success("Entity period ended.");
     router.invalidate();
   }
@@ -505,6 +522,13 @@ function ProfileFormPanel({
               )}
             </TSFormField>
           </CardContent>
+          {entityError ? (
+            <CardContent>
+              <p role="alert" className="text-sm text-destructive">
+                {entityError}
+              </p>
+            </CardContent>
+          ) : null}
           <CardFooter className="justify-end">
             <entityForm.Subscribe
               selector={(s) => ({

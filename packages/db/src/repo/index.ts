@@ -36,6 +36,7 @@ import {
 } from "../schema/index.ts";
 import { getDb } from "../client.ts";
 import { and, asc, eq } from "drizzle-orm";
+import { EntityOverlapError, findEntityOverlap } from "@fiscode/core";
 
 export { profileRepo };
 export { importBundle, type ImportReason } from "./import.ts";
@@ -44,9 +45,59 @@ export { taxYearCacheRepo } from "./tax-year-cache.ts";
 export const clientRepo = makeCrudRepo<ClientInsert, ClientRow>(client, "client", {
   orderBy: "name",
 });
-export const entityRepo = makeCrudRepo<EntityInsert, EntityRow>(entity, "entity", {
+const entityCrud = makeCrudRepo<EntityInsert, EntityRow>(entity, "entity", {
   orderBy: "startDate",
 });
+
+/** Throws `EntityOverlapError` when the period would overlap another live one. */
+const assertNoEntityOverlap = async (
+  candidate: Pick<EntityRow, "startDate" | "endDate"> & { id?: string },
+): Promise<void> => {
+  const conflict = findEntityOverlap(await entityCrud.list(), candidate);
+  if (conflict) throw new EntityOverlapError(conflict);
+};
+
+/**
+ * Entity periods, with the one-entity-at-a-time rule on every write that can
+ * place a live period: `create`, `update` and `revertTo` reject with
+ * `EntityOverlapError` (from @fiscode/core) when the result would overlap
+ * another live period. See `findEntityOverlap` for what counts as an overlap.
+ *
+ * An import does not go through here. `importBundle` writes a file's rows as
+ * they are, because a restore must reproduce the file exactly, overlapping
+ * periods included. Such periods then stay until the user edits one of them:
+ * an edit that leaves it overlapping is rejected like any other.
+ */
+export const entityRepo = {
+  ...entityCrud,
+  async create(input: Parameters<typeof entityCrud.create>[0]): Promise<EntityRow> {
+    if (!input.deletedAt) {
+      await assertNoEntityOverlap({ startDate: input.startDate, endDate: input.endDate ?? null });
+    }
+    return entityCrud.create(input);
+  },
+  async update(
+    id: string,
+    patch: Parameters<typeof entityCrud.update>[1],
+  ): Promise<EntityRow | undefined> {
+    // Only a change to the dates, or bringing a deleted period back, can
+    // create an overlap. A notes or type edit is never blocked, so periods
+    // that came in overlapping from a file can still be edited in other ways.
+    const placesPeriod = "startDate" in patch || "endDate" in patch || "deletedAt" in patch;
+    if (placesPeriod) {
+      const before = (await entityCrud.listIncludingDeleted()).find((row) => row.id === id);
+      if (before) {
+        const after = { ...before, ...patch };
+        if (!after.deletedAt) await assertNoEntityOverlap(after);
+      }
+    }
+    return entityCrud.update(id, patch);
+  },
+  async revertTo(id: string, snapshot: EntityRow): Promise<EntityRow | undefined> {
+    if (!snapshot.deletedAt) await assertNoEntityOverlap({ ...snapshot, id });
+    return entityCrud.revertTo(id, snapshot);
+  },
+};
 export const spouseRepo = makeCrudRepo<SpouseInsert, SpouseRow>(spouse, "spouse", {
   orderBy: "startDate",
 });
