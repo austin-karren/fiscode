@@ -181,3 +181,27 @@ describe("dashboard titles and warnings", () => {
     }
   });
 });
+
+describe("dashboard home office warning", () => {
+  const derived = loaderData.derived as { homeOfficeAreaRejected?: number };
+
+  afterEach(() => {
+    delete derived.homeOfficeAreaRejected;
+  });
+
+  it("warns, in one line with a link to Home office, when a config's office is larger than its home", () => {
+    derived.homeOfficeAreaRejected = 1;
+    render(<Dashboard />);
+    const line = screen.getByText(/office larger than the home/).closest("[data-slot=alert]")!;
+    expect(line).toHaveTextContent(/deducts \$0/);
+    expect(within(line as HTMLElement).getByRole("link", { name: /Home office/ })).toHaveAttribute(
+      "href",
+      "/home-office",
+    );
+  });
+
+  it("says nothing when every config's area is fine", () => {
+    render(<Dashboard />);
+    expect(screen.queryByText(/office larger than the home/)).not.toBeInTheDocument();
+  });
+});

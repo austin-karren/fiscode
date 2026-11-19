@@ -100,6 +100,7 @@ function Dashboard() {
       ) : null}
 
       <ExcludedBeforeSeAlert derived={derived} />
+      <OfficeAreaAlert rejected={derived.homeOfficeAreaRejected} />
 
       {/* One primary figure, the year's total; the three taxes it adds up
           recede beside it. */}
@@ -349,6 +350,22 @@ function Row({
       </dt>
       <dd className="tabular-nums">{value}</dd>
     </div>
+  );
+}
+
+// A home office config whose office is larger than its home deducts $0
+// (d-data #53). One line, with the way to fix it.
+function OfficeAreaAlert({ rejected }: { rejected: number }) {
+  if (!rejected) return null;
+  return (
+    <Alert variant="warning">
+      <CircleAlert />
+      <AlertDescription>
+        {rejected === 1 ? "A home office config has" : `${rejected} home office configs have`} an
+        office larger than the home, so {rejected === 1 ? "it deducts" : "they deduct"} $0. Fix the
+        square feet in <Link to="/home-office">Home office</Link>.
+      </AlertDescription>
+    </Alert>
   );
 }
 
