@@ -9,73 +9,23 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as YearEndRouteImport } from './routes/year-end'
-import { Route as VehiclesRouteImport } from './routes/vehicles'
-import { Route as TimeRouteImport } from './routes/time'
-import { Route as TaxDataRouteImport } from './routes/tax-data'
-import { Route as SetupRouteImport } from './routes/setup'
-import { Route as ProfileRouteImport } from './routes/profile'
-import { Route as MileageRouteImport } from './routes/mileage'
-import { Route as IncomeRouteImport } from './routes/income'
-import { Route as HomeOfficeRouteImport } from './routes/home-office'
-import { Route as HistoryRouteImport } from './routes/history'
-import { Route as ExpensesRouteImport } from './routes/expenses'
-import { Route as ClientsRouteImport } from './routes/clients'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ClientsRouteImport } from './routes/clients'
+import { Route as ExpensesRouteImport } from './routes/expenses'
+import { Route as HistoryRouteImport } from './routes/history'
+import { Route as HomeOfficeRouteImport } from './routes/home-office'
+import { Route as IncomeRouteImport } from './routes/income'
+import { Route as MileageRouteImport } from './routes/mileage'
+import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as SetupRouteImport } from './routes/setup'
+import { Route as TaxDataRouteImport } from './routes/tax-data'
+import { Route as TimeRouteImport } from './routes/time'
+import { Route as VehiclesRouteImport } from './routes/vehicles'
+import { Route as YearEndRouteImport } from './routes/year-end'
 
-const YearEndRoute = YearEndRouteImport.update({
-  id: '/year-end',
-  path: '/year-end',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const VehiclesRoute = VehiclesRouteImport.update({
-  id: '/vehicles',
-  path: '/vehicles',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TimeRoute = TimeRouteImport.update({
-  id: '/time',
-  path: '/time',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TaxDataRoute = TaxDataRouteImport.update({
-  id: '/tax-data',
-  path: '/tax-data',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SetupRoute = SetupRouteImport.update({
-  id: '/setup',
-  path: '/setup',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProfileRoute = ProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MileageRoute = MileageRouteImport.update({
-  id: '/mileage',
-  path: '/mileage',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IncomeRoute = IncomeRouteImport.update({
-  id: '/income',
-  path: '/income',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HomeOfficeRoute = HomeOfficeRouteImport.update({
-  id: '/home-office',
-  path: '/home-office',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HistoryRoute = HistoryRouteImport.update({
-  id: '/history',
-  path: '/history',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ExpensesRoute = ExpensesRouteImport.update({
-  id: '/expenses',
-  path: '/expenses',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClientsRoute = ClientsRouteImport.update({
@@ -83,9 +33,59 @@ const ClientsRoute = ClientsRouteImport.update({
   path: '/clients',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const ExpensesRoute = ExpensesRouteImport.update({
+  id: '/expenses',
+  path: '/expenses',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HomeOfficeRoute = HomeOfficeRouteImport.update({
+  id: '/home-office',
+  path: '/home-office',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IncomeRoute = IncomeRouteImport.update({
+  id: '/income',
+  path: '/income',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MileageRoute = MileageRouteImport.update({
+  id: '/mileage',
+  path: '/mileage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SetupRoute = SetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TaxDataRoute = TaxDataRouteImport.update({
+  id: '/tax-data',
+  path: '/tax-data',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TimeRoute = TimeRouteImport.update({
+  id: '/time',
+  path: '/time',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VehiclesRoute = VehiclesRouteImport.update({
+  id: '/vehicles',
+  path: '/vehicles',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const YearEndRoute = YearEndRouteImport.update({
+  id: '/year-end',
+  path: '/year-end',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -201,81 +201,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/year-end': {
-      id: '/year-end'
-      path: '/year-end'
-      fullPath: '/year-end'
-      preLoaderRoute: typeof YearEndRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/vehicles': {
-      id: '/vehicles'
-      path: '/vehicles'
-      fullPath: '/vehicles'
-      preLoaderRoute: typeof VehiclesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/time': {
-      id: '/time'
-      path: '/time'
-      fullPath: '/time'
-      preLoaderRoute: typeof TimeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/tax-data': {
-      id: '/tax-data'
-      path: '/tax-data'
-      fullPath: '/tax-data'
-      preLoaderRoute: typeof TaxDataRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/setup': {
-      id: '/setup'
-      path: '/setup'
-      fullPath: '/setup'
-      preLoaderRoute: typeof SetupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/profile': {
-      id: '/profile'
-      path: '/profile'
-      fullPath: '/profile'
-      preLoaderRoute: typeof ProfileRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/mileage': {
-      id: '/mileage'
-      path: '/mileage'
-      fullPath: '/mileage'
-      preLoaderRoute: typeof MileageRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/income': {
-      id: '/income'
-      path: '/income'
-      fullPath: '/income'
-      preLoaderRoute: typeof IncomeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/home-office': {
-      id: '/home-office'
-      path: '/home-office'
-      fullPath: '/home-office'
-      preLoaderRoute: typeof HomeOfficeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/history': {
-      id: '/history'
-      path: '/history'
-      fullPath: '/history'
-      preLoaderRoute: typeof HistoryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/expenses': {
-      id: '/expenses'
-      path: '/expenses'
-      fullPath: '/expenses'
-      preLoaderRoute: typeof ExpensesRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/clients': {
@@ -285,11 +215,81 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClientsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/expenses': {
+      id: '/expenses'
+      path: '/expenses'
+      fullPath: '/expenses'
+      preLoaderRoute: typeof ExpensesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/home-office': {
+      id: '/home-office'
+      path: '/home-office'
+      fullPath: '/home-office'
+      preLoaderRoute: typeof HomeOfficeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/income': {
+      id: '/income'
+      path: '/income'
+      fullPath: '/income'
+      preLoaderRoute: typeof IncomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mileage': {
+      id: '/mileage'
+      path: '/mileage'
+      fullPath: '/mileage'
+      preLoaderRoute: typeof MileageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/setup': {
+      id: '/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof SetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tax-data': {
+      id: '/tax-data'
+      path: '/tax-data'
+      fullPath: '/tax-data'
+      preLoaderRoute: typeof TaxDataRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/time': {
+      id: '/time'
+      path: '/time'
+      fullPath: '/time'
+      preLoaderRoute: typeof TimeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vehicles': {
+      id: '/vehicles'
+      path: '/vehicles'
+      fullPath: '/vehicles'
+      preLoaderRoute: typeof VehiclesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/year-end': {
+      id: '/year-end'
+      path: '/year-end'
+      fullPath: '/year-end'
+      preLoaderRoute: typeof YearEndRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
