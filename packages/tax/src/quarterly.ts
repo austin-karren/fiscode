@@ -40,6 +40,7 @@ export const evenQuarterly = (
   }));
   return {
     method: "even",
+    noInstallmentsRequired: false,
     payments: payments as QuarterlyPlan["payments"],
   };
 };

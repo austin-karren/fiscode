@@ -135,6 +135,11 @@ export type QuarterPayment = {
 
 export type QuarterlyPlan = {
   method: QuarterlyMethod;
+  /**
+   * True when the tax left after withholding is under $1,000, so Form 2210
+   * requires no installments (lines 4 and 7) and every amount is $0.
+   */
+  noInstallmentsRequired: boolean;
   payments: [QuarterPayment, QuarterPayment, QuarterPayment, QuarterPayment];
 };
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cents, dollars } from "@fiscode/core";
 import {
+  installmentsRequired,
   paymentsAfterWithholding,
   regularInstallments,
   scheduleAiInstallments,
@@ -86,5 +87,17 @@ describe("paymentsAfterWithholding (Part III lines 11-18; withholding is 1/4 per
       dollars(6_300),
     );
     expect(p).toEqual([0, 0, 0, 0]);
+  });
+});
+
+describe("installmentsRequired (Form 2210 lines 4 and 7: under $1,000, no penalty)", () => {
+  it("no installments when the tax left after withholding is under $1,000", () => {
+    expect(installmentsRequired(dollars(999.99))).toBe(false);
+    expect(installmentsRequired(cents(0))).toBe(false);
+  });
+
+  it("installments are required at $1,000.00 and above", () => {
+    expect(installmentsRequired(dollars(1_000))).toBe(true);
+    expect(installmentsRequired(dollars(1_000.01))).toBe(true);
   });
 });

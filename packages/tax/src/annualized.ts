@@ -74,6 +74,7 @@ export const annualizedQuarterly = (
   }));
   return {
     method: "annualized",
+    noInstallmentsRequired: false,
     payments: payments as QuarterlyPlan["payments"],
   };
 };

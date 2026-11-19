@@ -26,9 +26,12 @@ const withIncomeOn = (date: string): Bundle => {
 
 describe("quarterly plan, Form 2210", () => {
   for (const method of ["annualized", "even"] as const) {
-    it(`${method}: example data, installments add up to the year target`, () => {
+    it(`${method}: example data, withholding leaves under $1,000, so none is required`, () => {
+      // Form 2210 line 7: "If less than $1,000, stop; you don't owe a penalty."
       const r = plan(exampleBundle(), method);
-      expect(sum(r.quarterly.payments.map((p) => p.requiredInstallment))).toBe(r.safeHarbor.floor);
+      expect(r.estimate.remainingOwed).toBeLessThan(1_000_00);
+      expect(r.quarterly.noInstallmentsRequired).toBe(true);
+      expect(r.quarterly.payments.map((p) => p.requiredInstallment)).toEqual([0, 0, 0, 0]);
     });
 
     it(`${method}: example data without the spouse adds up too, and nothing is withheld`, () => {
@@ -41,7 +44,7 @@ describe("quarterly plan, Form 2210", () => {
     });
   }
 
-  it("example data: the spouse's withholding ($6,300) covers the target, so nothing is left to pay", () => {
+  it("example data: the spouse's withholding ($6,300) covers the year, so nothing is left to pay", () => {
     const r = plan(exampleBundle(), "annualized");
     expect(r.estimate.spouseWithholding).toBeGreaterThanOrEqual(r.safeHarbor.floor);
     expect(r.quarterly.payments.map((p) => p.amount)).toEqual([0, 0, 0, 0]);

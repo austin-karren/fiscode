@@ -19,6 +19,19 @@ const baseInput = (overrides: Partial<TaxInput> = {}): TaxInput => ({
   ...overrides,
 });
 
+// Even quarters of the base input's year, for the annualized method.
+const annualPeriods = () =>
+  [
+    ["2026-03-31", 30_000, 1_250],
+    ["2026-05-31", 50_000, 2_083.33],
+    ["2026-08-31", 80_000, 3_333.33],
+    ["2026-12-31", 120_000, 5_000],
+  ].map(([endsAt, g, e]) => ({
+    endsAt: isoDate(endsAt as string),
+    cumulativeGross1099: dollars(g as number),
+    cumulativeDeductibleExpenses: dollars(e as number),
+  }));
+
 describe("estimateYear (sole prop, MFJ, UT)", () => {
   it("produces a plausible full-year estimate for the target user", () => {
     const { estimate, quarterly, safeHarbor } = estimateYear({
@@ -50,6 +63,58 @@ describe("estimateYear (sole prop, MFJ, UT)", () => {
     expect(safeHarbor.firstYear).toBe(true);
     expect(safeHarbor.priorYearTarget).toBeUndefined();
     expect(safeHarbor.floor).toBe(Math.round(estimate.totalLiability * 0.9));
+  });
+
+  // Form 2210 line 7: "Subtract line 6 from line 4. If less than $1,000, stop;
+  // you don't owe a penalty." Withholding is set so the tax left is exactly
+  // the boundary amount.
+  describe("the $1,000 no-penalty test (Form 2210 lines 4 and 7)", () => {
+    const leaving = (left: number) => {
+      const total = estimateYear({ entity: "sole_prop", method: "even", input: baseInput() })
+        .estimate.totalLiability;
+      return baseInput({ spouseFederalWithholding: cents(total - dollars(left)) });
+    };
+
+    for (const method of ["even", "annualized"] as const) {
+      const run = (left: number) =>
+        estimateYear({
+          entity: "sole_prop",
+          method,
+          input:
+            method === "annualized"
+              ? ({ ...leaving(left), periods: annualPeriods() } as never)
+              : leaving(left),
+        });
+
+      it(`${method}: $999.99 left after withholding → no installments`, () => {
+        const r = run(999.99);
+        expect(r.estimate.remainingOwed).toBe(dollars(999.99));
+        expect(r.quarterly.noInstallmentsRequired).toBe(true);
+        expect(r.quarterly.payments.map((p) => p.requiredInstallment)).toEqual([0, 0, 0, 0]);
+        expect(r.quarterly.payments.map((p) => p.amount)).toEqual([0, 0, 0, 0]);
+      });
+
+      it(`${method}: $1,000.00 and $1,000.01 left → installments are required`, () => {
+        for (const left of [1_000, 1_000.01]) {
+          const r = run(left);
+          expect(r.estimate.remainingOwed).toBe(dollars(left));
+          expect(r.quarterly.noInstallmentsRequired).toBe(false);
+          const req = r.quarterly.payments.reduce((a, p) => a + p.requiredInstallment, 0);
+          expect(req).toBe(r.safeHarbor.floor);
+        }
+      });
+    }
+
+    it("the reviewer's tiny demo ($4,000 of 1099 income) needs no installments", () => {
+      const r = estimateYear({
+        entity: "sole_prop",
+        method: "even",
+        input: baseInput({ gross1099: dollars(4_000), deductibleExpenses: cents(0) }),
+      });
+      expect(r.estimate.remainingOwed).toBeLessThan(dollars(1_000));
+      expect(r.quarterly.noInstallmentsRequired).toBe(true);
+      expect(r.quarterly.payments.map((p) => p.amount)).toEqual([0, 0, 0, 0]);
+    });
   });
 
   it("spouse withholding reduces remainingOwed but not totalLiability", () => {

@@ -1,10 +1,25 @@
 import { type Cents, cents, clampMinZero, mulRate, subCents } from "@fiscode/core";
 
 // Required estimated-tax installments and what is left to pay after
-// withholding, following Form 2210. The 2026 edition is not posted yet; the
-// line numbers and wording are from the 2025 edition:
-//   Form:         https://www.irs.gov/pub/irs-pdf/f2210.pdf
-//   Instructions: https://www.irs.gov/pub/irs-pdf/i2210.pdf
+// withholding, following Form 2210. Every line used here reads the same in
+// the 2025 final form and the 2026 draft (created 4/16/26; Schedule AI's QBI
+// line is renumbered 9 → 9a, no other change to these lines):
+//   2025 form:         https://www.irs.gov/pub/irs-pdf/f2210.pdf
+//   2026 draft form:   https://www.irs.gov/pub/irs-dft/f2210--dft.pdf
+//   Instructions:      https://www.irs.gov/pub/irs-pdf/i2210.pdf (2025; the
+//                      posted draft instructions are still the 2025 edition)
+
+/**
+ * Form 2210 line 7: "Subtract line 6 from line 4. If less than $1,000, stop;
+ * you don't owe a penalty." (Line 4 says the same of the tax before
+ * withholding, which line 7 already covers.) Under it, no installment is
+ * required. fiscode applies it to the tax it estimates after withholding,
+ * which includes Utah's; Form 2210 itself counts federal tax only.
+ */
+export const NO_PENALTY_THRESHOLD = cents(1_000_00);
+
+export const installmentsRequired = (taxAfterWithholding: Cents): boolean =>
+  taxAfterWithholding >= NO_PENALTY_THRESHOLD;
 
 export type Four<T> = [T, T, T, T];
 

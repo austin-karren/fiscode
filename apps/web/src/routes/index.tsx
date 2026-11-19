@@ -126,6 +126,12 @@ function Dashboard() {
               );
             })}
           </div>
+          {result.quarterly.noInstallmentsRequired ? (
+            <p className="mt-3 text-sm text-muted-foreground">
+              No estimated payments are needed: you owe less than $1,000 after withholding, so there
+              is no underpayment penalty.
+            </p>
+          ) : null}
           {upcoming && recommendedPrep ? (
             <p className="mt-3 text-sm text-muted-foreground">
               Next due <span className="font-mono">{upcoming.dueDate}</span>. Start preparing around{" "}
