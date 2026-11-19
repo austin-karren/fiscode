@@ -9,8 +9,8 @@ import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
 import {
   EntityPeriodError,
   cents,
-  endsBeforeStart,
-  findEntityOverlap,
+  EntityOverlapError,
+  canMoveEntityStart,
   ENTITY_TYPE_LABELS,
   FILING_STATUS_LABELS,
   QUARTERLY_METHOD_LABELS,
@@ -191,20 +191,16 @@ function ProfileFormPanel({
     firstEntity !== undefined &&
     firstEntity.startDate !== newStart;
   const [moveEntityStart, setMoveEntityStart] = useState(true);
-  // Why the repo would refuse the move, checked before it is offered (the
-  // repo's own check stays the backstop). An overlap that was already there
-  // does not count: the repo allows a period that only shrinks.
+  // Why the repo would refuse the move, checked before it is offered with
+  // the repo's own rule (`canMoveEntityStart`); the repo stays the backstop.
   const entityMoveBlocked = (newStart: string): string | null => {
     if (!firstEntity) return null;
-    const moved = { ...firstEntity, startDate: newStart };
-    if (endsBeforeStart(moved)) {
-      return `Your first entity period ends ${formatDate(firstEntity.endDate!)}, before ${formatDate(newStart)}, so it stays as it is. Edit it under Entity periods if you need to.`;
+    const problem = canMoveEntityStart(entities, firstEntity, newStart);
+    if (!problem) return null;
+    if (problem instanceof EntityOverlapError) {
+      return `Your first entity period stays as it is. ${problem.message}`;
     }
-    const conflict = findEntityOverlap(entities, moved);
-    if (conflict && conflict !== findEntityOverlap(entities, firstEntity)) {
-      return `Moving your first entity period to ${formatDate(newStart)} would overlap your ${labelFor(ENTITY_TYPE_LABELS, conflict.type)} period, so it stays as it is. Edit it under Entity periods if you need to.`;
-    }
-    return null;
+    return `Your first entity period ends ${formatDate(firstEntity.endDate!)}, before ${formatDate(newStart)}, so it stays as it is. Edit it under Entity periods if you need to.`;
   };
 
   // The new SE start when the dialog has something to say about the first

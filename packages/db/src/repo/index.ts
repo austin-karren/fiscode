@@ -36,13 +36,7 @@ import {
 } from "../schema/index.ts";
 import { getDb } from "../client.ts";
 import { and, asc, eq } from "drizzle-orm";
-import {
-  EntityDatesError,
-  EntityOverlapError,
-  EntityPeriodError,
-  endsBeforeStart,
-  findEntityOverlap,
-} from "@fiscode/core";
+import { EntityPeriodError, periodProblem } from "@fiscode/core";
 
 export { profileRepo };
 export { importBundle, type ImportReason } from "./import.ts";
@@ -57,24 +51,10 @@ const entityCrud = makeCrudRepo<EntityInsert, EntityRow>(entity, "entity", {
 
 type PeriodDates = Pick<EntityRow, "startDate" | "endDate">;
 
-// An open end is after every date; ISO dates compare as strings.
-const endOf = (p: PeriodDates) => p.endDate ?? "9999-12-31";
-
 /**
- * Throws when the period would break a rule: `EntityDatesError` for an end
- * before the start, `EntityOverlapError` for an overlap with another live one.
- *
- * `before` is the stored row when this is an edit of a live period. An overlap
- * with a period it already overlapped is "pre-existing": such pairs can come
- * from a file, or from before this rule existed.
- *
- * - A pre-existing overlap is let through when the edit only shortens the
- *   period (start not earlier, end not later than stored). The edit did not
- *   cause it, and this is what lets either of two overlapping periods be ended
- *   on any day.
- * - Any other overlap is rejected. That includes one a shortening creates:
- *   moving a period's start onto the day it ends, when the next period starts
- *   that same day, leaves two periods with one start day.
+ * Throws the rejection `periodProblem` (@fiscode/core) returns: the one rule,
+ * shared with the forms that check early. `before` is the stored row when
+ * this is an edit of a live period.
  *
  * Limit: the check reads, then the caller writes, as two steps. fiscode is one
  * user in one tab; two tabs saving at the same moment could both pass.
@@ -83,23 +63,8 @@ const assertPeriodAllowed = async (
   candidate: PeriodDates & { id?: string },
   before?: EntityRow,
 ): Promise<void> => {
-  if (endsBeforeStart(candidate)) throw new EntityDatesError(candidate);
-  const live = await entityCrud.list();
-  // Every conflict, not only the first: one may be old and another new.
-  const conflicts = live
-    .filter((other) => findEntityOverlap([other], candidate) !== null)
-    .sort((x, y) => (x.startDate < y.startDate ? -1 : x.startDate > y.startDate ? 1 : 0));
-  if (conflicts.length === 0) return;
-  const overlappedBefore = (other: EntityRow): boolean =>
-    before !== undefined && findEntityOverlap([other], { ...before, id: undefined }) !== null;
-  const shrinks =
-    before !== undefined &&
-    candidate.startDate >= before.startDate &&
-    endOf(candidate) <= endOf(before);
-  const added = conflicts.find((other) => !overlappedBefore(other));
-  if (added) throw new EntityOverlapError(added, { preexisting: false });
-  if (shrinks) return;
-  throw new EntityOverlapError(conflicts[0]!, { preexisting: true });
+  const problem = periodProblem(await entityCrud.list(), candidate, before);
+  if (problem) throw problem;
 };
 
 /**

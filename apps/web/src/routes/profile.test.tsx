@@ -221,6 +221,38 @@ describe("changing the SE start offers to move the first entity period", () => {
     expect(moveFirstStart).not.toHaveBeenCalled();
   });
 
+  it("r2 demo C: a stored overlap the move would grow is not offered, and says why", async () => {
+    loaded.entities = [
+      { ...soleProp, startDate: "2026-03-01" },
+      { ...soleProp, id: "ent_2", type: "single_member_llc", startDate: "2026-06-01" },
+    ];
+    render(<ProfilePage />);
+    await changeStartTo("02/02/2026");
+    expect(moveBox()).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /^Your first entity period stays as it is\. This period already overlaps your Single-member LLC period that started Jun 1, 2026/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("r2 demo D: shrinking out of one stored overlap is offered, ticked", async () => {
+    loaded.entities = [
+      { ...soleProp, startDate: "2026-01-05", endDate: "2026-12-31" },
+      {
+        ...soleProp,
+        id: "ent_2",
+        type: "single_member_llc",
+        startDate: "2026-02-01",
+        endDate: "2026-02-28",
+      },
+      { ...soleProp, id: "ent_3", type: "single_member_llc", startDate: "2026-06-01" },
+    ];
+    render(<ProfilePage />);
+    await changeStartTo("03/01/2026");
+    expect(moveBox()).toBeChecked();
+  });
+
   it("does not claim nothing changes while the box is shown", async () => {
     loaded.entities = [soleProp];
     render(<ProfilePage />);

@@ -302,6 +302,44 @@ describe("an end date before the start date", () => {
 });
 
 describe("entityRepo.moveFirstStart (Profile SE start follows into the first period)", () => {
+  it("r2 demo C: a stored overlap that the move grows is refused (preexisting)", async () => {
+    await importBundle(
+      {
+        ...emptyBundle(),
+        entities: [
+          row("a", "sole_prop", "2026-03-01", null),
+          row("b", "single_member_llc", "2026-06-01", null),
+        ],
+      },
+      "import-restore",
+    );
+    const result = await entityRepo.moveFirstStart("2026-02-02");
+    expect(result).toMatchObject({ moved: false, reason: "rejected" });
+    if (!result.moved && result.reason === "rejected") {
+      expect(result.error).toBeInstanceOf(EntityOverlapError);
+      expect((result.error as EntityOverlapError).preexisting).toBe(true);
+    }
+  });
+
+  it("r2 demo D: shrinking out of one stored overlap, still in another, is saved", async () => {
+    await importBundle(
+      {
+        ...emptyBundle(),
+        entities: [
+          row("a", "sole_prop", "2026-01-05", "2026-12-31"),
+          row("b", "single_member_llc", "2026-02-01", "2026-02-28"),
+          row("c", "single_member_llc", "2026-06-01", null),
+        ],
+      },
+      "import-restore",
+    );
+    expect(await entityRepo.moveFirstStart("2026-03-01")).toEqual({
+      moved: true,
+      id: "a",
+      from: "2026-01-05",
+    });
+  });
+
   it("moves the earliest live period's start and reports it", async () => {
     const first = await entityRepo.create(input("sole_prop", "2026-11-02", null));
     const result = await entityRepo.moveFirstStart("2026-03-02");

@@ -140,3 +140,54 @@ export class EntityDatesError extends EntityPeriodError {
     super(entityDatesMessage(period));
   }
 }
+
+/**
+ * Why a write of `candidate` would be rejected, or null when it is allowed.
+ * The one rule the entity repo enforces and a form checks early, so the two
+ * cannot disagree.
+ *
+ * `live` is every stored period (deleted ones are ignored). `before` is the
+ * stored row when this is an edit of a live period; an overlap with a period
+ * it already overlapped is "pre-existing" (such pairs come from a file, or
+ * from before this rule existed).
+ *
+ * - An end before the start: `EntityDatesError`.
+ * - An overlap the write adds: `EntityOverlapError` naming that period.
+ * - Only pre-existing overlaps: allowed when the edit only shortens the
+ *   period (start not earlier, end not later than stored), so either of two
+ *   overlapping periods can always be ended. Otherwise `EntityOverlapError`
+ *   (preexisting) naming the earliest.
+ * - Any overlap a shortening creates is still rejected: moving a start onto
+ *   the day it ends, when the next period starts that day, leaves two periods
+ *   with one start day.
+ */
+export const periodProblem = (
+  live: readonly EntityPeriod[],
+  candidate: Pick<EntityPeriod, "id" | "startDate" | "endDate">,
+  before?: Pick<EntityPeriod, "startDate" | "endDate">,
+): EntityPeriodError | null => {
+  if (endsBeforeStart(candidate)) return new EntityDatesError(candidate);
+  const endOf = (p: Pick<EntityPeriod, "endDate">) => p.endDate ?? "9999-12-31";
+  // Every conflict, not only the first: one may be old and another new.
+  const conflicts = live
+    .filter((other) => findEntityOverlap([other], candidate) !== null)
+    .toSorted((x, y) => (x.startDate < y.startDate ? -1 : x.startDate > y.startDate ? 1 : 0));
+  if (conflicts.length === 0) return null;
+  const overlappedBefore = (other: EntityPeriod): boolean =>
+    before !== undefined && findEntityOverlap([other], { ...before, id: undefined }) !== null;
+  const added = conflicts.find((other) => !overlappedBefore(other));
+  if (added) return new EntityOverlapError(added, { preexisting: false });
+  const shrinks =
+    before !== undefined &&
+    candidate.startDate >= before.startDate &&
+    endOf(candidate) <= endOf(before);
+  if (shrinks) return null;
+  return new EntityOverlapError(conflicts[0]!, { preexisting: true });
+};
+
+/** `periodProblem` for moving a stored period's start to `newStart`. */
+export const canMoveEntityStart = (
+  live: readonly EntityPeriod[],
+  period: EntityPeriod,
+  newStart: string,
+): EntityPeriodError | null => periodProblem(live, { ...period, startDate: newStart }, period);
