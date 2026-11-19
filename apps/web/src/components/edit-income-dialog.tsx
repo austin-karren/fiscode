@@ -24,6 +24,7 @@ import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { archivedSuffix, pickableParents } from "./parent-name";
+import { useToday } from "../lib/use-today";
 
 const KIND_OPTIONS = [
   { value: "recurring", label: "Recurring" },
@@ -51,9 +52,10 @@ export function EditIncomeDialog({
 }) {
   const [open, setOpen] = useState(false);
 
+  const today = useToday();
   const form = useForm({
     defaultValues: {
-      date: isoToDate(income.date) ?? new Date(),
+      date: isoToDate(income.date) ?? today,
       amount: formatUSD(cents(income.amountCents)).replace(/[$,]/g, ""),
       clientId: income.clientId ?? "",
       kind: (income.kind as "recurring" | "bonus" | "consulting" | "other") ?? "recurring",

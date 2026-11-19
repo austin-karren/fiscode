@@ -21,6 +21,7 @@ import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditTimeDialog } from "../components/edit-time-dialog";
 import { ParentName } from "../components/parent-name";
 import { softDeleteWithUndo } from "../lib/soft-delete";
+import { useToday } from "../lib/use-today";
 
 const timeSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -52,9 +53,10 @@ function TimePage() {
   // Only live clients can be picked for a new entry.
   const clients = allClients.filter((c) => !c.deletedAt);
 
+  const today = useToday();
   const form = useForm({
     defaultValues: {
-      date: new Date() as Date | undefined,
+      date: today as Date | undefined,
       hours: "",
       clientId: "",
       description: "",

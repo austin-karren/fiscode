@@ -4,7 +4,7 @@ import viteReact from "@vitejs/plugin-react";
 import sqlocal from "sqlocal/vite";
 import { defineConfig, type Plugin } from "vite";
 
-import { themeDetectorScript } from "../../packages/ui/src/lib/theme-script";
+import { themeDetectorScript } from "../../packages/ui/src/lib/theme-script.ts";
 
 // Required for sqlite-wasm's OPFS sync-access VFS (and SharedArrayBuffer).
 const ISOLATION_HEADERS = {

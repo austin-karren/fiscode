@@ -13,15 +13,13 @@ export const quarterPeriods = (year: number): Array<{ start: IsoDate; end: IsoDa
 export const evenQuarterly = (estimate: TaxEstimate, cfg: YearConfig): QuarterlyPlan => {
   const periods = quarterPeriods(estimate.year);
   const per = mulRate(estimate.remainingOwed, 0.25);
-  const payments = periods.map(
-    (p, i): QuarterPayment => ({
-      quarter: (i + 1) as 1 | 2 | 3 | 4,
-      periodStart: p.start,
-      periodEnd: p.end,
-      dueDate: shiftToBusinessDay(cfg.quarterlyDueDates[i]!),
-      amount: per,
-    }),
-  );
+  const payments = periods.map((p, i): QuarterPayment => ({
+    quarter: (i + 1) as 1 | 2 | 3 | 4,
+    periodStart: p.start,
+    periodEnd: p.end,
+    dueDate: shiftToBusinessDay(cfg.quarterlyDueDates[i]!),
+    amount: per,
+  }));
   return {
     method: "even",
     payments: payments as QuarterlyPlan["payments"],

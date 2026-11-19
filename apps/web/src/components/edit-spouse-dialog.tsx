@@ -22,6 +22,7 @@ import { optionalMoneyAmountOrZero } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { CONFIG_YEARS_BACK, DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
+import { useToday } from "../lib/use-today";
 
 const editSchema = z.object({
   startDate: z.date({ message: "Pick a start date" }),
@@ -36,9 +37,10 @@ const centsToDollarsStr = (c: number) => (c / 100).toFixed(2);
 export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
 
+  const today = useToday();
   const form = useForm({
     defaultValues: {
-      startDate: isoToDate(spouse.startDate) ?? new Date(),
+      startDate: isoToDate(spouse.startDate) ?? today,
       endDate: spouse.endDate ? isoToDate(spouse.endDate) : (undefined as Date | undefined),
       wages: centsToDollarsStr(spouse.annualW2WagesCents),
       fedWH: centsToDollarsStr(spouse.annualFederalWithholdingCents),
