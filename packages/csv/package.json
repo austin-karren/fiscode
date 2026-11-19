@@ -23,6 +23,7 @@
     "@fiscode/config": "workspace:*",
     "@types/papaparse": "catalog:",
     "typescript": "catalog:",
+    "vite": "^8.3.8",
     "vitest": "catalog:"
   }
 }

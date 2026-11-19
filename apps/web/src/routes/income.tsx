@@ -22,6 +22,7 @@ import { EditIncomeDialog } from "../components/edit-income-dialog";
 import { ParentName } from "../components/parent-name";
 import { moneyAmount } from "../lib/field-schemas";
 import { softDeleteWithUndo } from "../lib/soft-delete";
+import { useToday } from "../lib/use-today";
 
 const KIND_OPTIONS = [
   { value: "recurring", label: "Recurring" },
@@ -58,9 +59,10 @@ function IncomePage() {
   // Only live clients can be picked for a new entry.
   const clients = allClients.filter((c) => !c.deletedAt);
 
+  const today = useToday();
   const form = useForm({
     defaultValues: {
-      date: new Date() as Date | undefined,
+      date: today as Date | undefined,
       amount: "",
       clientId: "",
       kind: "recurring",

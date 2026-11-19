@@ -23,6 +23,7 @@ import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { archivedSuffix, pickableParents } from "./parent-name";
+import { useToday } from "../lib/use-today";
 
 const editSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -42,9 +43,10 @@ export function EditMileageDialog({
 }) {
   const [open, setOpen] = useState(false);
 
+  const today = useToday();
   const form = useForm({
     defaultValues: {
-      date: isoToDate(mileage.date) ?? new Date(),
+      date: isoToDate(mileage.date) ?? today,
       miles: String(mileage.businessMiles),
       vehicleId: mileage.vehicleId ?? "",
       purpose: mileage.purpose ?? "",
