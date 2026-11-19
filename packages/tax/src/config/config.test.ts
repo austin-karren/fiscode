@@ -102,6 +102,16 @@ describe("config 2025 — pinned values", () => {
   it("meals deductible fraction is 50%", () => {
     expect(c.meals.deductibleFraction).toBe(0.5);
   });
+
+  it("QBI phase-in band $50,000 / $100,000 MFJ (Rev. Proc. 2024-40 §.27); no minimum", () => {
+    expect(c.qbi.phaseInRange).toEqual({
+      single: dollars(50_000),
+      mfj: dollars(100_000),
+      mfs: dollars(50_000),
+      hoh: dollars(50_000),
+    });
+    expect(c.qbi.minimum).toBeNull();
+  });
 });
 
 // Every 2026 value below is quoted from a primary source; the URL sits
@@ -152,6 +162,16 @@ describe("config 2026 — pinned values (Rev. Proc. 2025-32, Notice 2026-10, Ann
       mfs: dollars(201_775),
       hoh: dollars(201_750),
     });
+  });
+
+  it("QBI phase-in band and the $400 minimum (Rev. Proc. 2025-32 §4.26, §2.12)", () => {
+    expect(c.qbi.phaseInRange).toEqual({
+      single: dollars(75_000),
+      mfj: dollars(150_000),
+      mfs: dollars(75_000),
+      hoh: dollars(75_000),
+    });
+    expect(c.qbi.minimum).toEqual({ deduction: dollars(400), qbiFloor: dollars(1_000) });
   });
 
   it("SS wage base $184,500", () => {

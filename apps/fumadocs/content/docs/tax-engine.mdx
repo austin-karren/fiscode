@@ -41,6 +41,8 @@ its primary source in a comment beside it; anything not yet checked is marked
 | Bracket tops, MFS                         | $12,400 / $50,400 / $105,700 / $201,775 / $256,225 / $384,350  | Table 4                                                                                                                     |
 | Bracket tops, HOH                         | $17,700 / $67,450 / $105,700 / $201,750 / $256,200 / $640,600  | Table 2                                                                                                                     |
 | QBI threshold                             | $201,750 single and HOH, $201,775 MFS, $403,500 MFJ            | Rev. Proc. 2025-32 §4.26                                                                                                    |
+| QBI phase-in band above the threshold     | $75,000; $150,000 MFJ                                          | Rev. Proc. 2025-32 §4.26; [IRC §199A(b)(3)(B)](https://www.law.cornell.edu/uscode/text/26/199A)                             |
+| QBI minimum deduction                     | $400 with $1,000 or more of QBI                                | IRC §199A(i); Rev. Proc. 2025-32 §2.12                                                                                      |
 | Social Security wage base                 | $184,500                                                       | [Schedule SE instructions](https://www.irs.gov/instructions/i1040sse)                                                       |
 | Business mileage                          | 72.5¢ Jan 1 – Jun 30; 76¢ from Jul 1                           | [Notice 2026-10](https://www.irs.gov/pub/irs-drop/n-26-10.pdf), [Announcement 2026-11](https://www.irs.gov/irb/2026-29_irb) |
 | Utah rate                                 | 4.45%                                                          | [Utah Code 59-10-104](https://le.utah.gov/xcode/title59/chapter10/C59-10-S104_2026050620260506.pdf)                         |
@@ -49,6 +51,13 @@ its primary source in a comment beside it; anything not yet checked is marked
 | Safe-harbor prior-year AGI threshold      | $150,000; $75,000 if MFS                                       | [2026 Form 1040-ES](https://www.irs.gov/pub/irs-pdf/f1040es.pdf)                                                            |
 
 The mileage rate changed mid-year, so each trip is deducted at the rate in force on its date.
+
+### QBI deduction
+
+20% of qualified business income, at most 20% of taxable income before the deduction. Above the
+threshold, with no W-2 wages or property, it shrinks in proportion to how far taxable income is
+into the phase-in band, and is $0 at the band's end. From 2026, anyone with $1,000 or more of QBI
+gets at least $400 ([IRC §199A(i)](https://www.law.cornell.edu/uscode/text/26/199A)).
 
 ### Utah income tax
 
@@ -61,8 +70,9 @@ come from Utah's draft 2026 TC-40 and may change when the final form is posted.
 
 Not modelled yet:
 
-- The 2026 QBI minimum deduction: $400 for $1,000 or more of QBI (Rev. Proc. 2025-32 §2.12).
-- The QBI phase-in above the threshold.
+- QBI for a specified service business (§199A(d)), W-2 wages and qualified property. The
+  estimate treats the business as non-SSTB with no employees and no property, so above the
+  threshold the deduction phases down to $0 across the band (then the $400 minimum applies).
 - Utah additions to and subtractions from income, itemized deductions, and the extra exemption
   for a dependent born in the year.
 

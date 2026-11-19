@@ -16,7 +16,12 @@ export type YearConfig = {
   brackets: Record<FilingStatus, Bracket[]>;
   qbi: {
     rate: number; // 0.20
+    /** The §199A(e)(2) threshold amount. */
     taxableIncomeLimit: Record<FilingStatus, Cents>;
+    /** Width of the §199A(b)(3)(B) phase-in band above the threshold. */
+    phaseInRange: Record<FilingStatus, Cents>;
+    /** §199A(i) minimum deduction (2026 on); null when it does not apply. */
+    minimum: { deduction: Cents; qbiFloor: Cents } | null;
   };
   /**
    * Business standard mileage rates, in dollars per mile, oldest first. Each
