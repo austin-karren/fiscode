@@ -13,6 +13,7 @@ import {
   yearsToTrack,
   type TaxYearSyncStatus,
 } from "../lib/tax-sync";
+import { formatDateTime } from "../lib/format-date";
 
 /**
  * Tax-data settings page. The ONLY surface that loudly reports sync errors —
@@ -116,13 +117,20 @@ function YearCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-2 text-sm">
-        <Row label="Source">
-          {status.remoteSource ?? (status.source === "hardcoded" ? "bundled with app" : "—")}
+        {/* The badge says where this year's figures come from now: downloaded
+            from the mirror (and cached) or built into the app. This row names
+            the downloaded file, whose own label says who published it. */}
+        <Row label="Data file">
+          {status.source === "remote"
+            ? (status.remoteSource ?? "—")
+            : status.source === "hardcoded"
+              ? "Built into the app (not downloaded yet)"
+              : "—"}
         </Row>
         <Row label="Last fetched">
           {status.fetchedAt ? (
-            <span className="font-mono text-xs">
-              {new Date(status.fetchedAt).toLocaleString()}{" "}
+            <span>
+              {formatDateTime(status.fetchedAt)}{" "}
               {status.isStale ? (
                 <span className="ms-1 text-amber-700 dark:text-amber-400">
                   (stale, &gt; 7 days)
@@ -155,7 +163,7 @@ function SourceBadge({ status }: { status: TaxYearSyncStatus }) {
     return (
       <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
         <CloudDownload className="h-3 w-3" />
-        Remote
+        Downloaded
       </span>
     );
   }
@@ -163,7 +171,7 @@ function SourceBadge({ status }: { status: TaxYearSyncStatus }) {
     return (
       <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
         <CloudOff className="h-3 w-3" />
-        Bundled
+        Built in
       </span>
     );
   }

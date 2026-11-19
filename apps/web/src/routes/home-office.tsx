@@ -11,7 +11,7 @@ import {
   FieldLabel,
   FieldTitle,
 } from "@fiscode/ui/components/field";
-import { HOME_OFFICE_METHOD_LABELS, labelOptions } from "@fiscode/core";
+import { HOME_OFFICE_METHOD_LABELS, labelFor, labelOptions } from "@fiscode/core";
 import { homeOfficeRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Home } from "lucide-react";
@@ -31,6 +31,7 @@ import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditHomeOfficeDialog } from "../components/edit-home-office-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { useToday } from "../lib/use-today";
+import { formatDate } from "../lib/format-date";
 
 const METHOD_OPTIONS = labelOptions(HOME_OFFICE_METHOD_LABELS);
 
@@ -247,12 +248,14 @@ function HomeOfficePage() {
             {rows.map((r) => (
               <DataTable.Row key={r.id}>
                 <DataTable.Cell>
-                  <span className="font-mono">{r.startDate}</span>
+                  <span className="whitespace-nowrap">{formatDate(r.startDate)}</span>
                 </DataTable.Cell>
                 <DataTable.Cell>
-                  <span className="font-mono">{r.endDate ?? "—"}</span>
+                  <span className="whitespace-nowrap">
+                    {r.endDate ? formatDate(r.endDate) : "—"}
+                  </span>
                 </DataTable.Cell>
-                <DataTable.Cell>{r.method}</DataTable.Cell>
+                <DataTable.Cell>{labelFor(HOME_OFFICE_METHOD_LABELS, r.method)}</DataTable.Cell>
                 <DataTable.Cell align="right">{r.officeSqft ?? "—"}</DataTable.Cell>
                 <DataTable.Cell align="right">{r.homeSqft ?? "—"}</DataTable.Cell>
                 <DataTable.Cell align="right">

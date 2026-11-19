@@ -12,8 +12,10 @@ import {
   ENTITY_TYPE_LABELS,
   FILING_STATUS_LABELS,
   QUARTERLY_METHOD_LABELS,
+  labelFor,
   labelOptions,
 } from "@fiscode/core";
+import { formatDate } from "../lib/format-date";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -460,10 +462,10 @@ function ProfileFormPanel({
             <ul className="space-y-1 text-sm">
               {entities.map((e) => (
                 <li key={e.id} className="flex items-center gap-3">
-                  <span className="font-mono">
-                    {e.startDate} – {e.endDate ?? "open"}
+                  <span className="whitespace-nowrap">
+                    {formatDate(e.startDate)} – {e.endDate ? formatDate(e.endDate) : "open"}
                   </span>
-                  <span>{e.type}</span>
+                  <span>{labelFor(ENTITY_TYPE_LABELS, e.type)}</span>
                   <div className="ms-auto inline-flex gap-1">
                     <EditEntityDialog entity={e} onSaved={() => router.invalidate()} />
                     {e.endDate ? null : (
@@ -474,7 +476,7 @@ function ProfileFormPanel({
                           </Button>
                         }
                         title="End this entity period today?"
-                        description={`This ${e.type} period (started ${e.startDate}) will close at today's date. You can edit the end date later from your data.`}
+                        description={`This ${labelFor(ENTITY_TYPE_LABELS, e.type)} period (started ${formatDate(e.startDate)}) will close at today's date. You can edit the end date later from your data.`}
                         confirmLabel="End it"
                         confirmVariant="destructive"
                         onConfirm={() => void endEntityNow(e.id)}
@@ -676,8 +678,8 @@ function ProfileFormPanel({
             <ul className="space-y-1 text-sm">
               {spouses.map((s) => (
                 <li key={s.id} className="flex items-center gap-3">
-                  <span className="font-mono">
-                    {s.startDate} – {s.endDate ?? "open"} · $
+                  <span>
+                    {formatDate(s.startDate)} – {s.endDate ? formatDate(s.endDate) : "open"} · $
                     {(s.annualW2WagesCents / 100).toLocaleString()}
                   </span>
                   <div className="ms-auto inline-flex gap-1">

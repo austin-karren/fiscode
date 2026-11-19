@@ -1,6 +1,8 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { expectNoRawValues } from "../test/raw-values";
+
 // The database is SQLite over OPFS and the router needs a browser history;
 // neither exists in jsdom. Both are replaced at the package boundary.
 vi.mock("@fiscode/db", () => ({ buildBundle: async () => ({}) }));
@@ -81,6 +83,29 @@ describe("year-end packet", () => {
       window.dispatchEvent(new Event("beforeprint"));
     });
     expect(within(printHeader()).getByText("Printed November 20, 2026")).toBeInTheDocument();
+  });
+
+  it("names the settings and categories in words, never stored keys", () => {
+    render(<YearEndPage />);
+    const packet = document.body;
+    expect(packet).toHaveTextContent("Single");
+    expect(packet).toHaveTextContent("Utah");
+    expect(packet).toHaveTextContent("Sole proprietor");
+    expect(packet).toHaveTextContent("Software & subscriptions");
+    expectNoRawValues(packet, ["UT", "SINGLE"]);
+  });
+
+  it("dates the before-start notice in words", () => {
+    loaderData.derived.excludedBeforeSeStart = { income: 1, expense: 0, mileage: 0 };
+    loaderData.derived.seStartDate = "2026-03-02";
+    try {
+      render(<YearEndPage />);
+      expect(screen.getByText(/dated before\s+Mar 2, 2026 are not counted/)).toBeInTheDocument();
+      expectNoRawValues(document.body);
+    } finally {
+      loaderData.derived.excludedBeforeSeStart = { income: 0, expense: 0, mileage: 0 };
+      loaderData.derived.seStartDate = "2026-01-01";
+    }
   });
 
   it("tells the reader to confirm tax figures and links to Tax data, with no developer copy", () => {

@@ -14,6 +14,7 @@ import {
   type LabelMap,
 } from "@fiscode/core";
 import type { Bundle, HistoryRow } from "@fiscode/db";
+import { formatDate, formatDateTime } from "./format-date";
 
 // Turns a history row (table name, op code, two JSON snapshots) into what a
 // person reads: when, what kind of record, what happened to it and what
@@ -67,12 +68,7 @@ const labelled =
 /** A stored `YYYY-MM-DD` as "Nov 2, 2026", the way the date fields show it. */
 export const formatDay = (v: unknown): string => {
   if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(v)) return NONE;
-  const [y, m, d] = v.slice(0, 10).split("-").map(Number);
-  return new Date(y!, m! - 1, d!).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return formatDate(v.slice(0, 10));
 };
 
 export const formatMinutes = (v: unknown): string => {
@@ -305,8 +301,7 @@ export const parseHistoryTime = (at: string): Date =>
   new Date(at.includes("T") ? at : `${at.replace(" ", "T")}Z`);
 
 /** A history timestamp in the reader's own time zone: "Nov 18, 2026, 2:04 PM". */
-export const formatHistoryTime = (at: Date): string =>
-  at.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+export const formatHistoryTime = (at: Date): string => formatDateTime(at);
 
 const DATA_TABLES = [
   "entities",
