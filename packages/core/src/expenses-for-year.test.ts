@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expensesCountedForYear } from "./expenses-for-year.ts";
+import { countedExpenseDate, expensesCountedForYear } from "./expenses-for-year.ts";
 
 type Row = { id: string; date: string; deletedAt: string | null; startupExpense?: boolean };
 
@@ -25,10 +25,28 @@ describe("expensesCountedForYear", () => {
       true,
     ],
     [
-      "startup expense dated in a prior year",
+      "startup expense dated in the prior year, business begins in this year: counts (§195(b))",
       row("a", "2025-12-31", { startupExpense: true }),
       "2026-03-01",
-      false,
+      true,
+    ],
+    [
+      "ticked startup but paid after a start in the prior year: an ordinary expense of its year",
+      row("a", "2026-02-01", { startupExpense: true }),
+      "2025-11-01",
+      true,
+    ],
+    [
+      "startup expense dated after the SE start is an ordinary expense of its own year",
+      row("a", "2026-05-01", { startupExpense: true }),
+      "2026-03-01",
+      true,
+    ],
+    [
+      "startup expense, SE start null: its own year",
+      row("a", "2026-02-01", { startupExpense: true }),
+      null,
+      true,
     ],
     [
       "deleted",
@@ -49,6 +67,27 @@ describe("expensesCountedForYear", () => {
     ["SE start in a later year", row("a", "2026-12-31"), "2027-01-01", false],
   ])("%s", (_, r, seStart, counted) => {
     expect(ids([r], 2026, seStart)).toEqual(counted ? ["a"] : []);
+  });
+
+  // Bug A: IRC §195(b)(1)(A) allows the deduction "for the taxable year in which the active trade
+  // or business begins" (https://www.law.cornell.edu/uscode/text/26/195).
+  it("bug A: a startup cost paid 2025-12-15, business begins 2026-02-01, counts in 2026 only", () => {
+    const rows = [row("s", "2025-12-15", { startupExpense: true })];
+    expect(ids(rows, 2025, "2026-02-01")).toEqual([]);
+    expect(ids(rows, 2026, "2026-02-01")).toEqual(["s"]);
+  });
+
+  it("a counted startup cost paid before the start takes effect on the SE start date", () => {
+    expect(countedExpenseDate(row("s", "2025-12-15", { startupExpense: true }), "2026-02-01")).toBe(
+      "2026-02-01",
+    );
+    expect(countedExpenseDate(row("e", "2026-05-01"), "2026-02-01")).toBe("2026-05-01");
+    expect(countedExpenseDate(row("s", "2026-05-01", { startupExpense: true }), "2026-02-01")).toBe(
+      "2026-05-01",
+    );
+    expect(countedExpenseDate(row("s", "2026-01-15", { startupExpense: true }), null)).toBe(
+      "2026-01-15",
+    );
   });
 
   it("keeps the rows that count, in their order, as the same objects", () => {

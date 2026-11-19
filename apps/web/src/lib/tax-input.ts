@@ -1,4 +1,11 @@
-import { addCents, cents, expensesCountedForYear, type Cents, yearOf } from "@fiscode/core";
+import {
+  addCents,
+  cents,
+  countedExpenseDate,
+  expensesCountedForYear,
+  type Cents,
+  yearOf,
+} from "@fiscode/core";
 import type { Bundle } from "@fiscode/csv";
 import type { AnnualizedInput, TaxInput } from "@fiscode/tax";
 import {
@@ -187,8 +194,9 @@ const tentativeProfitBetween = (
   )
     .filter((r) => within(r.date))
     .reduce((sum, r) => sum + r.amountCents, 0);
+  // By the date each expense counts on: a startup cost paid before the start counts on it.
   const expenses = expensesCountedForYear(bundle.expenses, year, seStartDate)
-    .filter((r) => within(r.date))
+    .filter((r) => within(countedExpenseDate(r, seStartDate)))
     .reduce((sum, r) => sum + r.amountCents, 0);
   const mileage = mileageDeduction(
     countedInYear(bundle.mileage, year, seStartDate).filter((m) => within(m.date)),
@@ -348,11 +356,15 @@ const countExcludedBeforeSeStart = (
     income: bundle.income.filter(
       (i) => i.deletedAt === null && i.sourceType === "1099" && isExcluded(i.date),
     ).length,
-    // Every live expense in the year that the core rule leaves out, so the
-    // banner always matches what "Direct expenses" counts.
-    expense:
-      bundle.expenses.filter((e) => e.deletedAt === null && inYear(e.date)).length -
-      expensesCountedForYear(bundle.expenses, year, seStartDate).length,
+    // Every live expense dated in the year that the core rule leaves out of it, so the
+    // banner always matches what "Direct expenses" counts. (A startup cost paid in an
+    // earlier year can count in this one; it is not "excluded" here.)
+    expense: (() => {
+      const counted = new Set(expensesCountedForYear(bundle.expenses, year, seStartDate));
+      return bundle.expenses.filter(
+        (e) => e.deletedAt === null && inYear(e.date) && !counted.has(e),
+      ).length;
+    })(),
     mileage: bundle.mileage.filter((m) => m.deletedAt === null && isExcluded(m.date)).length,
   };
 };
@@ -452,10 +464,11 @@ export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedIn
     const incomeRows = bundle.income.filter(
       (r) => r.deletedAt === null && r.sourceType === "1099" && r.date >= lower && r.date <= cutoff,
     );
-    // The year's counted expenses (startup ones included), up to the cutoff.
-    // Startup rows land in the first cumulative window that contains their date.
+    // The year's counted expenses (startup ones included), up to the cutoff, by the
+    // date each counts on: a startup cost paid before the start lands in the period
+    // that holds the SE start.
     const expRows = expensesCountedForYear(bundle.expenses, year, seStartDate).filter(
-      (r) => r.date <= cutoff,
+      (r) => countedExpenseDate(r, seStartDate) <= cutoff,
     );
     const cumGross = incomeRows.reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0));
     // Direct expenses plus mileage and home office through the cutoff, the same
