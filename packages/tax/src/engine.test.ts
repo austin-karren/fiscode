@@ -42,8 +42,9 @@ describe("estimateYear (sole prop, MFJ, UT)", () => {
     expect(quarterly.method).toBe("even");
     expect(quarterly.payments).toHaveLength(4);
     const sum = quarterly.payments.reduce<Cents>((acc, p) => (acc + p.amount) as Cents, cents(0));
-    // 4 × round(0.25 × X) can differ from X by ±2 cents.
-    expect(Math.abs(sum - estimate.remainingOwed)).toBeLessThanOrEqual(2);
+    // Form 2210: the four installments add up to the required annual payment
+    // (line 9), which for a first-year filer is 90% of this year's tax.
+    expect(sum).toBe(safeHarbor.floor);
 
     // First-year safe harbor: floor = 90% of current.
     expect(safeHarbor.firstYear).toBe(true);

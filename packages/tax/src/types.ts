@@ -127,6 +127,9 @@ export type QuarterPayment = {
   periodStart: IsoDate;
   periodEnd: IsoDate;
   dueDate: IsoDate;
+  /** The required installment for this due date (Form 2210 line 10). */
+  requiredInstallment: Cents;
+  /** What is left to pay by this due date after withholding (1/4 per quarter). */
   amount: Cents;
 };
 

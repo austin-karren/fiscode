@@ -68,6 +68,26 @@ Utah taxes income starting from federal AGI, not federal taxable income (TC-40 l
 income above the filing-status base, and never below zero. The 2026 exemption and base amounts
 come from Utah's draft 2026 TC-40 and may change when the final form is posted.
 
+### Quarterly estimates
+
+The plan follows [Form 2210](https://www.irs.gov/pub/irs-pdf/f2210.pdf) (2025 edition; the 2026
+one is not posted yet):
+
+- The year target is the required annual payment (line 9): the smaller of 90% of this year's tax
+  and the prior-year amount, which is the safe-harbor floor.
+- Regular method: each required installment is 25% of the target (line 10).
+- Annualized method (Schedule AI): each period's income, mileage, home office and other
+  expenses through that period are annualized and the year's tax figured on them. Each
+  installment is the smaller of the annualized amount, with any earlier reduction recaptured, and
+  the regular 25% plus whatever earlier regular installments left unused (lines 21-27). The four
+  always add up to the target.
+- Withholding counts as paid a quarter at a time
+  ([instructions](https://www.irs.gov/pub/irs-pdf/i2210.pdf)), so each card shows what is left to
+  pay after it.
+
+Not modelled for the quarterly plan: Schedule AI's prorated Social Security limit (Part II), and
+the state's own estimated-tax schedule. Utah's tax is included in the same target.
+
 Not modelled yet:
 
 - The QBI minimum assumes the owner materially participates: §199A(i) counts only QBI from an

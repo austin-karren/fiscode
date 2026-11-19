@@ -1,4 +1,12 @@
-import { type IsoDate, cents, isoDate, mulRate, shiftToBusinessDay, yearOf } from "@fiscode/core";
+import {
+  type Cents,
+  type IsoDate,
+  cents,
+  isoDate,
+  shiftToBusinessDay,
+  yearOf,
+} from "@fiscode/core";
+import { paymentsAfterWithholding, regularInstallments } from "./installments.ts";
 import type { QuarterPayment, QuarterlyPlan, TaxEstimate, YearConfig } from "./types.ts";
 
 // Uneven IRS quarters: Q1 Jan-Mar, Q2 Apr-May, Q3 Jun-Aug, Q4 Sep-Dec.
@@ -9,16 +17,26 @@ export const quarterPeriods = (year: number): Array<{ start: IsoDate; end: IsoDa
   { start: isoDate(`${year}-09-01`), end: isoDate(`${year}-12-31`) },
 ];
 
-/** Even-split quarterly: total / 4. */
-export const evenQuarterly = (estimate: TaxEstimate, cfg: YearConfig): QuarterlyPlan => {
+/**
+ * Regular installments (Form 2210 line 10): 25% of the required annual
+ * payment each quarter, then what is left to pay after the year's withholding
+ * (a quarter of it counted on each due date). See installments.ts.
+ */
+export const evenQuarterly = (
+  estimate: TaxEstimate,
+  cfg: YearConfig,
+  requiredAnnualPayment: Cents,
+): QuarterlyPlan => {
   const periods = quarterPeriods(estimate.year);
-  const per = mulRate(estimate.remainingOwed, 0.25);
+  const required = regularInstallments(requiredAnnualPayment);
+  const toPay = paymentsAfterWithholding(required, estimate.spouseWithholding);
   const payments = periods.map((p, i): QuarterPayment => ({
     quarter: (i + 1) as 1 | 2 | 3 | 4,
     periodStart: p.start,
     periodEnd: p.end,
     dueDate: shiftToBusinessDay(cfg.quarterlyDueDates[i]!),
-    amount: per,
+    requiredInstallment: required[i]!,
+    amount: toPay[i]!,
   }));
   return {
     method: "even",
@@ -53,6 +71,7 @@ export const zeroPayment = (year: number, q: 1 | 2 | 3 | 4, cfg: YearConfig): Qu
     periodStart: p.start,
     periodEnd: p.end,
     dueDate: shiftToBusinessDay(cfg.quarterlyDueDates[q - 1]!),
+    requiredInstallment: cents(0),
     amount: cents(0),
   };
 };

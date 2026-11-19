@@ -26,7 +26,6 @@ export const estimateYear = ({ entity, method, input }: EstimateArgs): EstimateR
   const cfg = getYearConfig(input.year);
   const strategy = strategyFor(entity);
   const estimate = strategy.compute(input, cfg);
-  const quarterly = strategy.quarterly(input, cfg, method);
   const safeHarbor = computeSafeHarbor(
     estimate,
     input.priorYearTotalTax,
@@ -34,5 +33,7 @@ export const estimateYear = ({ entity, method, input }: EstimateArgs): EstimateR
     cfg,
     input.filingStatus,
   );
+  // Form 2210 line 9: the required annual payment is the safe-harbor floor.
+  const quarterly = strategy.quarterly(input, cfg, method, safeHarbor.floor);
   return { estimate, quarterly, safeHarbor };
 };

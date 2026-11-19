@@ -44,9 +44,12 @@ const input = (overrides: Partial<AnnualizedInput> = {}): AnnualizedInput =>
 
 describe("annualizedQuarterly", () => {
   const cfg = config2026;
+  // Required annual payment for a first-year filer: 90% of the year's tax.
+  const required90 = () =>
+    Math.round(soleProprietorStrategy.compute(input(), cfg).totalLiability * 0.9) as never;
 
   it("returns four payments with the correct period/due-date metadata", () => {
-    const plan = annualizedQuarterly(input(), cfg, soleProprietorStrategy);
+    const plan = annualizedQuarterly(input(), cfg, soleProprietorStrategy, required90());
     expect(plan.method).toBe("annualized");
     expect(plan.payments).toHaveLength(4);
     expect(plan.payments[0]!.periodStart).toBe("2026-01-01");
@@ -56,19 +59,12 @@ describe("annualizedQuarterly", () => {
     expect(plan.payments[3]!.dueDate).toBe("2027-01-15");
   });
 
-  it("evenly-spread income → payments approximately equal (each ≈ 22.5% of annual)", () => {
-    // 30k / 50k / 80k / 120k cumulative is roughly linear (30k per quarter when
-    // adjusted for the uneven IRS periods: 3/2/3/4 months → 30/20/30/40 if even).
-    // Slight deviation expected because the test data isn't perfectly proportional.
-    const plan = annualizedQuarterly(input(), cfg, soleProprietorStrategy);
-    const total = plan.payments.reduce((sum, p) => sum + p.amount, 0);
-    // The cumulative-90% rule means at year end you've paid 90% of liability.
-    // The compute() on annualized period 4 produces the full-year liability;
-    // 90% × full-year ≈ sum of installments.
-    const yearEnd = soleProprietorStrategy.compute(input(), cfg);
-    const expected90 = Math.round(yearEnd.remainingOwed * 0.9);
-    // Allow ±4 cents for the 4× rounding of mulRate calls.
-    expect(Math.abs(total - expected90)).toBeLessThanOrEqual(4);
+  it("the four required installments add up to the required annual payment (Form 2210 line 9)", () => {
+    const plan = annualizedQuarterly(input(), cfg, soleProprietorStrategy, required90());
+    const total = plan.payments.reduce((sum, p) => sum + p.requiredInstallment, 0);
+    expect(total).toBe(required90());
+    // No withholding here, so what is left to pay equals the installment.
+    for (const p of plan.payments) expect(p.amount).toBe(p.requiredInstallment);
   });
 
   it("zero-income periods produce zero installments", () => {
@@ -96,7 +92,7 @@ describe("annualizedQuarterly", () => {
         },
       ],
     });
-    const plan = annualizedQuarterly(ann, cfg, soleProprietorStrategy);
+    const plan = annualizedQuarterly(ann, cfg, soleProprietorStrategy, required90());
     expect(plan.payments[0]!.amount).toBe(0);
     expect(plan.payments[1]!.amount).toBe(0);
     // Q3 catches up to the cumulative requirement; Q4 closes the rest.
@@ -131,7 +127,7 @@ describe("annualizedQuarterly", () => {
         },
       ],
     });
-    const plan = annualizedQuarterly(ann, cfg, soleProprietorStrategy);
+    const plan = annualizedQuarterly(ann, cfg, soleProprietorStrategy, required90());
     for (const p of plan.payments) {
       expect(p.amount).toBeGreaterThanOrEqual(0);
     }

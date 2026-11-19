@@ -11,3 +11,4 @@ export * from "./safe-harbor.ts";
 export * from "./sync/wire.ts";
 export * from "./sync/overlay.ts";
 export * from "./mileage.ts";
+export * from "./installments.ts";

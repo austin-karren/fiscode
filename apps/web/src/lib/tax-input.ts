@@ -47,20 +47,30 @@ const sumExpensesWithinYear = (
     cents(0),
   );
 
+// `through` (inclusive) limits the sums to an annualization period's end;
+// left out, they cover the whole year.
 const sumMileageDeductionWithinYear = (
   bundle: Bundle,
   year: number,
   seStartDate: string,
+  through = `${year}-12-31`,
 ): Cents => {
   const cfg = getYearConfig(year);
   // Each trip at the rate in force on its date (2026 changed on July 1).
   return mileageDeduction(
-    bundle.mileage.filter((m) => m.deletedAt === null && inSeRange(m.date, seStartDate, year)),
+    bundle.mileage.filter(
+      (m) => m.deletedAt === null && inSeRange(m.date, seStartDate, year) && m.date <= through,
+    ),
     cfg,
   );
 };
 
-const sumHomeOfficeWithinYear = (bundle: Bundle, year: number, seStartDate: string): Cents => {
+const sumHomeOfficeWithinYear = (
+  bundle: Bundle,
+  year: number,
+  seStartDate: string,
+  through = `${year}-12-31`,
+): Cents => {
   const cfg = getYearConfig(year);
   const activeForYear = bundle.homeOffice.filter(
     (h) => h.deletedAt === null && h.startDate.slice(0, 4) <= String(year),
@@ -71,7 +81,7 @@ const sumHomeOfficeWithinYear = (bundle: Bundle, year: number, seStartDate: stri
   const hoVal = activeForYear.reduce((acc, h) => {
     if (h.method !== "simplified") return acc;
     const sqft = Math.min(h.officeSqft ?? 0, cfg.homeOffice.simplifiedMaxSqft);
-    const monthsActive = monthsActiveIn(year, h.startDate, h.endDate, seStartDate);
+    const monthsActive = monthsActiveIn(year, h.startDate, h.endDate, seStartDate, through);
     if (sqft <= 0 || monthsActive <= 0) return acc;
     const annual = sqft * cfg.homeOffice.simplifiedRatePerSqft;
     const prorated = Math.round((annual * monthsActive) / 12);
@@ -91,9 +101,10 @@ const monthsActiveIn = (
   start: string,
   end: string | null,
   seStartDate: string,
+  through = `${year}-12-31`,
 ): number => {
   const yStart = `${year}-01-01`;
-  const yEnd = `${year}-12-31`;
+  const yEnd = through;
   if (start > yEnd) return 0;
   if (end !== null && end < yStart) return 0;
   const lowerBound = (seStartDate || yStart) > yStart ? seStartDate || yStart : yStart;
@@ -261,7 +272,14 @@ export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedIn
       (r) => r.date <= cutoff,
     );
     const cumGross = incomeRows.reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0));
-    const cumExp = expRows.reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0));
+    // Direct expenses plus mileage and home office through the cutoff, the same
+    // pieces deriveYear adds for the whole year (Schedule AI line 1 is the
+    // period's AGI, so every deduction counts by its date).
+    const cumExp = addCents(
+      expRows.reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0)),
+      sumMileageDeductionWithinYear(bundle, year, seStartDate, cutoff),
+      sumHomeOfficeWithinYear(bundle, year, seStartDate, cutoff),
+    );
     return { cumGross, cumExp };
   };
   const periods = endsDates.map((e) => {
