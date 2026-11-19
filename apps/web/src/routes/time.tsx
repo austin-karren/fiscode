@@ -263,17 +263,19 @@ function TimePage() {
               .sort((a, b) => (a.date > b.date ? -1 : 1))
               .map((t) => (
                 <DataTable.Row key={t.id}>
-                  <DataTable.Cell>
+                  <DataTable.Cell label="Date">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="whitespace-nowrap">{formatDate(t.date)}</span>
                       <PreSeStartBadge rowDate={t.date} seStartDate={profile?.seStartDate} />
                     </span>
                   </DataTable.Cell>
-                  <DataTable.Cell>
+                  <DataTable.Cell label="Client">
                     <ParentName parent={allClients.find((c) => c.id === t.clientId)} />
                   </DataTable.Cell>
-                  <DataTable.Cell>{t.description ?? "—"}</DataTable.Cell>
-                  <DataTable.Cell align="right">{formatMinutes(t.minutes)}</DataTable.Cell>
+                  <DataTable.Cell label="Description">{t.description ?? "—"}</DataTable.Cell>
+                  <DataTable.Cell label="Time" align="right">
+                    {formatMinutes(t.minutes)}
+                  </DataTable.Cell>
                   <DataTable.Cell align="right">
                     <div className="inline-flex gap-1">
                       <EditTimeDialog

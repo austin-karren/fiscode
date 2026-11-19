@@ -253,14 +253,16 @@ function VehiclesPage() {
             <DataTable.Body>
               {vehicles.map((v) => (
                 <DataTable.Row key={v.id}>
-                  <DataTable.Cell>{v.make}</DataTable.Cell>
-                  <DataTable.Cell>
+                  <DataTable.Cell label="Make">{v.make}</DataTable.Cell>
+                  <DataTable.Cell label="Model">
                     {v.model}
                     {v.deletedAt ? <ArchivedNote /> : null}
                   </DataTable.Cell>
-                  <DataTable.Cell>{v.year ?? "—"}</DataTable.Cell>
-                  <DataTable.Cell>{v.mpg ?? "—"}</DataTable.Cell>
-                  <DataTable.Cell>{labelFor(VEHICLE_METHOD_LABELS, v.method)}</DataTable.Cell>
+                  <DataTable.Cell label="Year">{v.year ?? "—"}</DataTable.Cell>
+                  <DataTable.Cell label="MPG">{v.mpg ?? "—"}</DataTable.Cell>
+                  <DataTable.Cell label="Method">
+                    {labelFor(VEHICLE_METHOD_LABELS, v.method)}
+                  </DataTable.Cell>
                   <DataTable.Cell align="right">
                     {v.deletedAt ? (
                       <Button variant="ghost" size="sm" onClick={() => unarchive(v)}>

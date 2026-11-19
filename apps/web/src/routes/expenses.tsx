@@ -341,7 +341,7 @@ function ExpensesPage() {
               .sort((a, b) => (a.date > b.date ? -1 : 1))
               .map((x) => (
                 <DataTable.Row key={x.id}>
-                  <DataTable.Cell>
+                  <DataTable.Cell label="Date">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="whitespace-nowrap">{formatDate(x.date)}</span>
                       {x.startupExpense ? (
@@ -355,7 +355,7 @@ function ExpensesPage() {
                       )}
                     </span>
                   </DataTable.Cell>
-                  <DataTable.Cell>
+                  <DataTable.Cell label="Category">
                     {labelFor(x.category)}
                     {x.flagForSection179 ? (
                       <Tooltip>
@@ -372,8 +372,10 @@ function ExpensesPage() {
                       </Tooltip>
                     ) : null}
                   </DataTable.Cell>
-                  <DataTable.Cell>{x.description ?? "—"}</DataTable.Cell>
-                  <DataTable.Cell align="right">{formatUSD(cents(x.amountCents))}</DataTable.Cell>
+                  <DataTable.Cell label="Description">{x.description ?? "—"}</DataTable.Cell>
+                  <DataTable.Cell label="Amount" align="right">
+                    {formatUSD(cents(x.amountCents))}
+                  </DataTable.Cell>
                   <DataTable.Cell align="right">
                     <div className="inline-flex gap-1">
                       <EditExpenseDialog

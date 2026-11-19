@@ -268,17 +268,19 @@ function MileagePage() {
               .sort((a, b) => (a.date > b.date ? -1 : 1))
               .map((m) => (
                 <DataTable.Row key={m.id}>
-                  <DataTable.Cell>
+                  <DataTable.Cell label="Date">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="whitespace-nowrap">{formatDate(m.date)}</span>
                       <PreSeStartBadge rowDate={m.date} seStartDate={profile?.seStartDate} />
                     </span>
                   </DataTable.Cell>
-                  <DataTable.Cell>
+                  <DataTable.Cell label="Vehicle">
                     <ParentName parent={vehicleParent(m.vehicleId)} />
                   </DataTable.Cell>
-                  <DataTable.Cell>{m.purpose ?? "—"}</DataTable.Cell>
-                  <DataTable.Cell align="right">{m.businessMiles}</DataTable.Cell>
+                  <DataTable.Cell label="Purpose">{m.purpose ?? "—"}</DataTable.Cell>
+                  <DataTable.Cell label="Miles" align="right">
+                    {m.businessMiles}
+                  </DataTable.Cell>
                   <DataTable.Cell align="right">
                     <div className="inline-flex gap-1">
                       <EditMileageDialog

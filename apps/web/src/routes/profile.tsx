@@ -546,7 +546,7 @@ function ProfileFormPanel({
           <CardContent>
             <ul className="space-y-1 text-sm">
               {entities.map((e) => (
-                <li key={e.id} className="flex items-center gap-3">
+                <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span className="whitespace-nowrap">
                     {formatDate(e.startDate)} – {e.endDate ? formatDate(e.endDate) : "open"}
                   </span>
