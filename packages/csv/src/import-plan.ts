@@ -109,6 +109,11 @@ export type ImportPlan = {
   current: RowCounts;
   /** Rows this import writes. `history` counts only entries that are not here yet. */
   written: RowCounts;
+  /**
+   * Append: entity periods among the added rows. An import writes them as the
+   * file has them, without the app's check for overlapping periods.
+   */
+  addedEntityPeriods: number;
   /** Append: rows in the file whose id is already here. They are left as they are. */
   skipped: number;
   /** Restore: rows here that are not in the file, so they are gone afterwards. */
@@ -137,6 +142,7 @@ export const planImport = (
   if (mode === "append") {
     const written: RowCounts = { live: 0, deleted: 0, history: newHistory };
     let skipped = 0;
+    let addedEntityPeriods = 0;
     if (incoming.profile) {
       if (existing.profile) skipped++;
       else written.live++;
@@ -144,15 +150,20 @@ export const planImport = (
     for (const table of ROW_TABLES) {
       const here = new Set(existing[table].map((r) => r.id));
       for (const row of incoming[table]) {
-        if (here.has(row.id)) skipped++;
-        else if (row.deletedAt === null) written.live++;
+        if (here.has(row.id)) {
+          skipped++;
+          continue;
+        }
+        if (row.deletedAt === null) written.live++;
         else written.deleted++;
+        if (table === "entities" && row.deletedAt === null) addedEntityPeriods++;
       }
     }
     return {
       mode,
       current,
       written,
+      addedEntityPeriods,
       skipped,
       removed: { live: 0, deleted: 0 },
       snapshot,
@@ -183,6 +194,7 @@ export const planImport = (
     mode,
     current,
     written: { live: fileCounts.live, deleted: fileCounts.deleted, history: newHistory },
+    addedEntityPeriods: 0,
     skipped: 0,
     removed,
     snapshot,
