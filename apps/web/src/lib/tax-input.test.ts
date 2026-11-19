@@ -278,6 +278,36 @@ describe("deriveYear — simplified part-year use (Pub 587 average monthly squar
     expect(withIncome([homeOffice("ho", "2026-06-17", null, 120)])).toBe(300_00);
   });
 
+  it("an area change splitting February 14/14 still counts February (review #58 r1)", () => {
+    // 100 sq ft Jan 1 – Feb 14, then 200 sq ft from Feb 15 (2026: February has 28 days).
+    // February: 14 + 14 = 28 days of use ≥ 15, so it counts, at the later config's 200 (a tie).
+    // Jan 100 + Feb 200 + Mar–Dec 10 × 200 = 2,300 sq-ft-months.
+    //   first config: 100 × $5 / 12 = $41.67 (4,166.67 → 4,167¢)
+    //   second:     2,200 × $5 / 12 = $916.67 (91,666.67 → 91,667¢) → $958.34
+    expect(
+      withIncome([
+        homeOffice("h1", "2026-01-01", "2026-02-14", 100),
+        homeOffice("h2", "2026-02-15", null, 200),
+      ]),
+    ).toBe(4_167 + 91_667);
+  });
+
+  it("business use that stops Feb 14 (no later config) leaves February at 0", () => {
+    // 100 sq ft Jan 1 – Feb 14 only: February has 14 days of use (< 15). Jan only: 100 × $5 / 12.
+    expect(withIncome([homeOffice("h1", "2026-01-01", "2026-02-14", 100)])).toBe(4_167);
+  });
+
+  it("a 15/16 split in July credits July once, to the config with more days", () => {
+    // 200 sq ft Jan 1 – Jul 15 (15 July days), 200 sq ft from Jul 16 (16 July days): July → second.
+    // First: Jan–Jun 6 × 200 = 1,200 → $500.00. Second: Jul–Dec 6 × 200 = 1,200 → $500.00.
+    expect(
+      withIncome([
+        homeOffice("h1", "2026-01-01", "2026-07-15", 200),
+        homeOffice("h2", "2026-07-16", null, 200),
+      ]),
+    ).toBe(1_000_00);
+  });
+
   it("a full year is unchanged: 150 sq ft → $750", () => {
     expect(withIncome([homeOffice("ho", "2026-01-01", null, 150)])).toBe(750_00);
   });
