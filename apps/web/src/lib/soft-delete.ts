@@ -58,3 +58,55 @@ export async function restoreRow<TRow extends SoftDeletableRow>({
   onChange();
   toast.success(message);
 }
+
+// Puts a row back to an earlier `snapshot` and shows a toast with Undo. Undo
+// returns the row to `current`, the row as it was just before. A row that
+// did not exist then cannot be removed again, so Undo deletes it instead.
+//
+// Used by the History screen's Restore.
+export async function revertWithUndo<TRow extends SoftDeletableRow>({
+  repo,
+  snapshot,
+  current,
+  message,
+  undoneMessage = "Undone.",
+  onChange,
+}: {
+  repo: RestorableRepo<TRow>;
+  snapshot: TRow;
+  current: TRow | undefined;
+  message: string;
+  undoneMessage?: string;
+  onChange: () => void;
+}): Promise<void> {
+  await repo.revertTo(snapshot.id, snapshot);
+  onChange();
+  toast(message, {
+    duration: UNDO_TOAST_MS,
+    action: {
+      label: "Undo",
+      onClick: async () => {
+        try {
+          if (current) await repo.revertTo(current.id, current);
+          else await repo.softDelete(snapshot.id);
+        } catch (err) {
+          undoFailed(err);
+          return;
+        }
+        onChange();
+        toast.success(undoneMessage);
+      },
+    },
+  });
+}
+
+// An Undo that throws changed nothing (each write is one transaction); say so
+// and keep the toast up until it is read.
+export function undoFailed(err: unknown): void {
+  console.error(err);
+  toast.error("Undo failed. Nothing was changed.", {
+    description: err instanceof Error ? err.message : String(err),
+    duration: Infinity,
+    closeButton: true,
+  });
+}
