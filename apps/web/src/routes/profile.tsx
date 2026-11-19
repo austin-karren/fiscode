@@ -48,6 +48,7 @@ import {
 import { EditSpouseDialog } from "../components/edit-spouse-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { softDeleteWithUndo } from "../lib/soft-delete";
+import { SectionTitle } from "../components/section-title";
 
 const FILING_OPTIONS = labelOptions(FILING_STATUS_LABELS);
 
@@ -352,8 +353,8 @@ function ProfileFormPanel({
       <EnterToSubmitForm onSubmit={handleProfileSubmit}>
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-              Profile
+            <CardTitle>
+              <SectionTitle>Profile</SectionTitle>
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-4 pb-2 @md:grid-cols-2">
@@ -533,9 +534,11 @@ function ProfileFormPanel({
       >
         <Card>
           <CardHeader>
-            <CardTitle className="inline-flex items-center gap-1.5 text-sm font-medium uppercase text-muted-foreground">
-              Entity periods
-              <InfoTooltip text={GLOSSARY.entityType} />
+            <CardTitle>
+              <SectionTitle>
+                Entity periods
+                <InfoTooltip text={GLOSSARY.entityType} />
+              </SectionTitle>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -673,9 +676,11 @@ function ProfileFormPanel({
       >
         <Card>
           <CardHeader>
-            <CardTitle className="inline-flex items-center gap-1.5 text-sm font-medium uppercase text-muted-foreground">
-              Spouse income blocks
-              <InfoTooltip text={GLOSSARY.spouseBlock} />
+            <CardTitle>
+              <SectionTitle>
+                Spouse income blocks
+                <InfoTooltip text={GLOSSARY.spouseBlock} />
+              </SectionTitle>
             </CardTitle>
           </CardHeader>
           {filesJointly ? (

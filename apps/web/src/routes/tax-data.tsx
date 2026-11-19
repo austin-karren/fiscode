@@ -14,6 +14,7 @@ import {
   type TaxYearSyncStatus,
 } from "../lib/tax-sync";
 import { formatDateTime } from "../lib/format-date";
+import { SectionTitle } from "../components/section-title";
 
 /**
  * Tax-data settings page. The ONLY surface that loudly reports sync errors —
@@ -110,9 +111,7 @@ function YearCard({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between text-sm font-medium">
-          <span className="font-mono uppercase tracking-wide text-muted-foreground">
-            Tax year {status.year}
-          </span>
+          <SectionTitle>Tax year {status.year}</SectionTitle>
           <SourceBadge status={status} />
         </CardTitle>
       </CardHeader>
@@ -186,7 +185,9 @@ function SourceBadge({ status }: { status: TaxYearSyncStatus }) {
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline gap-3">
-      <span className="w-28 shrink-0 text-xs uppercase text-muted-foreground">{label}</span>
+      <span className="w-28 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
       <span className="flex-1">{children}</span>
     </div>
   );

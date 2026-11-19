@@ -26,6 +26,7 @@ import { softDeleteWithUndo } from "../lib/soft-delete";
 import { useToday } from "../lib/use-today";
 import { formatDate } from "../lib/format-date";
 import { INCOME_KIND_LABELS, labelFor } from "@fiscode/core";
+import { SectionTitle } from "../components/section-title";
 
 const KIND_OPTIONS = [
   { value: "recurring", label: "Recurring" },
@@ -141,8 +142,8 @@ function IncomePage() {
       >
         <Card ref={addCard}>
           <CardHeader>
-            <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-              Add entry
+            <CardTitle>
+              <SectionTitle>Add entry</SectionTitle>
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1.2fr_1.2fr_1fr_1.8fr]">

@@ -24,6 +24,7 @@ import { InfoTooltip } from "../components/info-tooltip";
 import { UtahPrepaymentLine } from "../components/utah-prepayment-line";
 import { formatDate } from "../lib/format-date";
 import { US_STATE_BY_CODE } from "../lib/us-states";
+import { SectionTitle } from "../components/section-title";
 
 // "Single filer · Utah · annualized installments": the profile's settings
 // that shape this estimate, in words. "Single" alone reads like an adjective
@@ -79,6 +80,8 @@ function Dashboard() {
   });
   const today = todayIso();
   const upcoming = nextDueQuarter(result.quarterly, today);
+  // The $1,000 rule (packages/tax): no federal estimated payment is required.
+  const noPayment = result.quarterly.noInstallmentsRequired === true;
   const recommendedPrep = upcoming
     ? recommendedPrepDate(upcoming.dueDate, profile.prepLeadDays)
     : undefined;
@@ -126,16 +129,19 @@ function Dashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="inline-flex items-center gap-1.5 text-sm font-medium uppercase text-muted-foreground">
-            IRS quarterly payments (federal)
-            <InfoTooltip text={GLOSSARY.unevenQuarters} />
+          <CardTitle>
+            <SectionTitle>
+              IRS quarterly payments (federal)
+              <InfoTooltip text={GLOSSARY.unevenQuarters} />
+            </SectionTitle>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-2 @md:grid-cols-4">
             {result.quarterly.payments.map((p) => {
               const past = p.dueDate < today;
-              const isNext = upcoming?.quarter === p.quarter;
+              // Under the $1,000 rule no quarter is due, so none is "next".
+              const isNext = !noPayment && upcoming?.quarter === p.quarter;
               return (
                 <div
                   key={p.quarter}
@@ -151,22 +157,30 @@ function Dashboard() {
                   </p>
                   <p className="mt-1 text-lg font-semibold tabular-nums">{formatUSD(p.amount)}</p>
                   <p className="mt-1 text-xs">
-                    {past ? "Was due" : "Due"} {formatDate(p.dueDate)}
+                    {past
+                      ? `Was due ${formatDate(p.dueDate)}`
+                      : noPayment
+                        ? "No payment required"
+                        : `Due ${formatDate(p.dueDate)}`}
                   </p>
                 </div>
               );
             })}
           </div>
-          {result.quarterly.noInstallmentsRequired ? (
-            <p className="mt-3 text-sm text-muted-foreground">
-              No IRS estimated payments are needed: you owe the IRS less than $1,000 after federal
-              withholding, so there is no federal underpayment penalty.
+          {noPayment ? (
+            <p className="mt-3 text-sm">
+              <span className="font-medium">No payment required.</span>{" "}
+              <span className="text-muted-foreground">
+                You owe the IRS less than $1,000 after federal withholding, so there is no federal
+                underpayment penalty.
+              </span>
             </p>
           ) : null}
           {result.statePrepayment ? (
             <UtahPrepaymentLine prepayment={result.statePrepayment} />
           ) : null}
-          {upcoming && recommendedPrep ? (
+          {/* Under the $1,000 rule there is nothing to prepare for. */}
+          {!noPayment && upcoming && recommendedPrep ? (
             <p className="mt-3 text-sm text-muted-foreground">
               Next due {formatDate(upcoming.dueDate)}. Start preparing around{" "}
               {formatDate(recommendedPrep)}.
@@ -177,9 +191,11 @@ function Dashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="inline-flex items-center gap-1.5 text-sm font-medium uppercase text-muted-foreground">
-            Safe harbor
-            <InfoTooltip text={GLOSSARY.safeHarbor} />
+          <CardTitle>
+            <SectionTitle>
+              Safe harbor (federal)
+              <InfoTooltip text={GLOSSARY.safeHarbor} />
+            </SectionTitle>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -204,19 +220,23 @@ function Dashboard() {
             </Field>
           </div>
           {result.safeHarbor.firstYear ? (
-            <p className="mt-3 text-sm text-yellow-800 dark:text-yellow-300">
-              First-year filing: pay-as-you-go target is 90% of current-year tax. Owing the full
-              balance at filing is allowed, but underpayment penalty risk applies if you pay too
-              little throughout the year.
-            </p>
+            <Alert variant="warning" className="mt-3">
+              <CircleAlert />
+              <AlertTitle>First-year filing</AlertTitle>
+              <AlertDescription>
+                The pay-as-you-go target is 90% of current-year tax. Owing the full balance at
+                filing is allowed, but underpayment penalty risk applies if you pay too little
+                throughout the year.
+              </AlertDescription>
+            </Alert>
           ) : null}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-            Year-to-date inputs
+          <CardTitle>
+            <SectionTitle>Year-to-date inputs</SectionTitle>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -272,7 +292,7 @@ function StatCard({
   return (
     <Card className={primary ? "@md:col-span-3 @xl:col-span-1" : undefined}>
       <CardContent className="pt-6">
-        <p className="inline-flex items-center gap-1.5 text-xs uppercase text-muted-foreground">
+        <p className="inline-flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
           {label}
           {tooltip ? <InfoTooltip text={tooltip} /> : null}
         </p>

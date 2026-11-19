@@ -124,3 +124,60 @@ describe("dashboard hierarchy", () => {
     }
   });
 });
+
+describe("dashboard titles and warnings", () => {
+  const quarterly = loaderData.result.quarterly as { noInstallmentsRequired?: boolean };
+
+  afterEach(() => {
+    delete quarterly.noInstallmentsRequired;
+  });
+
+  it("under the $1,000 rule: upcoming tiles say 'No payment required', none is Next, no prep date", () => {
+    quarterly.noInstallmentsRequired = true;
+    render(<Dashboard />);
+    const tile = (q: number) =>
+      screen.getByText(new RegExp(`^Q${q} ·`)).parentElement!.parentElement!;
+    // Today is Jul 1, 2026 (fake clock): Q1 and Q2 are past, Q3 and Q4 upcoming.
+    expect(tile(1)).toHaveTextContent("Was due Apr 15, 2026");
+    for (const q of [3, 4]) {
+      expect(tile(q)).toHaveTextContent("No payment required");
+      expect(tile(q)).not.toHaveTextContent(/Due /);
+    }
+    expect(screen.queryByText("Next")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Start preparing/)).not.toBeInTheDocument();
+  });
+
+  it("states the $1,000 rule once, as its own sentence", () => {
+    quarterly.noInstallmentsRequired = true;
+    render(<Dashboard />);
+    expect(screen.getAllByText(/less than \$1,000 after federal withholding/)).toHaveLength(1);
+    const line = screen.getByText(/less than \$1,000/).closest("p")!;
+    expect(line).toHaveTextContent(/^No payment required\. You owe the IRS less than \$1,000/);
+  });
+
+  it("names the next due date and when to start preparing when a payment is required", () => {
+    render(<Dashboard />);
+    expect(screen.getByText(/Next due Sep 15, 2026\. Start preparing around/)).toBeInTheDocument();
+    expect(screen.queryByText("No payment required")).not.toBeInTheDocument();
+  });
+
+  it("labels the safe harbor figures as federal", () => {
+    render(<Dashboard />);
+    expect(screen.getByRole("heading", { name: /Safe harbor \(federal\)/ })).toBeInTheDocument();
+  });
+
+  it("shows the first-year note as a warning box, static: not an interrupting alert", () => {
+    render(<Dashboard />);
+    const note = screen.getByText("First-year filing").closest("[data-slot=alert]");
+    expect(note).toHaveTextContent(/pay-as-you-go target is 90% of current-year tax/);
+    expect(note).not.toHaveAttribute("role");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("titles each section with the same tracked, muted label", () => {
+    render(<Dashboard />);
+    for (const name of [/IRS quarterly payments/, /Safe harbor/, /Year-to-date inputs/i]) {
+      expect(screen.getByRole("heading", { name })).toHaveClass("uppercase", "tracking-wide");
+    }
+  });
+});

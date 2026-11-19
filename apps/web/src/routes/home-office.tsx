@@ -38,6 +38,7 @@ import { EditHomeOfficeDialog } from "../components/edit-home-office-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { useToday } from "../lib/use-today";
 import { formatDate } from "../lib/format-date";
+import { SectionTitle } from "../components/section-title";
 
 const METHOD_OPTIONS = labelOptions(HOME_OFFICE_METHOD_LABELS);
 
@@ -107,8 +108,8 @@ function HomeOfficePage() {
       >
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-              Add config
+            <CardTitle>
+              <SectionTitle>Add config</SectionTitle>
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1fr_1fr_1fr]">

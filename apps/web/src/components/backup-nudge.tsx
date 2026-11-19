@@ -1,11 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@fiscode/ui/components/card";
+import { SectionTitle } from "./section-title";
 
 export function BackupNudge() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-          Backup nudge
+        <CardTitle>
+          <SectionTitle>Back up your data</SectionTitle>
         </CardTitle>
       </CardHeader>
       <CardContent>

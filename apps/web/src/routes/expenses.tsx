@@ -43,6 +43,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@fiscode/ui/components/
 import { GLOSSARY } from "../lib/tax-glossary";
 import { useToday } from "../lib/use-today";
 import { formatDate } from "../lib/format-date";
+import { SectionTitle } from "../components/section-title";
 
 const CATEGORIES = Object.entries(EXPENSE_CATEGORY_LABELS);
 
@@ -153,8 +154,8 @@ function ExpensesPage() {
       >
         <Card ref={addCard}>
           <CardHeader>
-            <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-              Add expense
+            <CardTitle>
+              <SectionTitle>Add expense</SectionTitle>
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1fr_1.5fr_2fr_auto]">
