@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { create } = vi.hoisted(() => ({ create: vi.fn(async () => undefined) }));
@@ -12,11 +12,14 @@ vi.mock("@fiscode/db", () => ({
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
-  useLoaderData: () => ({ expenses: [], profile: null }),
+  useLoaderData: () => loaded,
   useRouter: () => ({ invalidate: vi.fn() }),
 }));
 
 import { Route } from "./expenses";
+
+// What the loader returns; a test may give it rows.
+const loaded: { expenses: unknown[]; profile: null } = { expenses: [], profile: null };
 
 const ExpensesPage = Route.options.component!;
 
@@ -92,5 +95,48 @@ describe("expense form choice cards", () => {
     render(<ExpensesPage />);
     const ids = [...document.querySelectorAll("[id]")].map((el) => el.id);
     expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
+  });
+});
+
+describe("adding a run of expenses", () => {
+  const row = {
+    id: "ex_demo",
+    date: "2026-03-05",
+    amountCents: 12000,
+    category: "travel",
+    clientId: null,
+    description: "Demo conference travel",
+    reason: null,
+    flagForSection179: false,
+    startupExpense: false,
+    notes: null,
+    deletedAt: null,
+  };
+  const addCard = () => screen.getByText("Add expense").closest("[data-slot=card]") as HTMLElement;
+
+  afterEach(() => {
+    loaded.expenses = [];
+  });
+
+  it("Duplicate fills the form; after Add the date and category stay, the rest clears, Amount has focus", async () => {
+    loaded.expenses = [row];
+    render(<ExpensesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    const card = within(addCard());
+    expect(card.getByLabelText("Amount")).toHaveValue("120.00");
+    expect(card.getByLabelText("Description")).toHaveValue("Demo conference travel");
+    await waitFor(() => expect(card.getByLabelText("Date")).toHaveFocus());
+
+    fireEvent.click(card.getByRole("button", { name: "Add" }));
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ date: "2026-03-05", amountCents: 12000 }),
+      ),
+    );
+    await waitFor(() => expect(card.getByLabelText("Amount")).toHaveValue(""));
+    expect(card.getByLabelText("Description")).toHaveValue("");
+    expect(card.getByLabelText("Date")).toHaveTextContent("Mar 5, 2026");
+    expect(card.getByRole("combobox", { name: "Category" })).toHaveTextContent("Travel");
+    await waitFor(() => expect(card.getByLabelText("Amount")).toHaveFocus());
   });
 });

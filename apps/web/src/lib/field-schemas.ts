@@ -73,6 +73,14 @@ export const hoursWorked = z.string().transform((s, ctx): number => {
   return hours;
 });
 
+/**
+ * Stored minutes as the hours text the time form takes: the nearest quarter
+ * hour, at least 0.25. A row imported with odd minutes (83) would otherwise
+ * fill the form with "1.3833333333333333", which the form then refuses.
+ */
+export const hoursField = (minutes: number): string =>
+  String(Math.max(1, Math.round(minutes / 15)) / 4);
+
 // ─── Whole numbers ──────────────────────────────────────────────────────────
 
 const inRange = (raw: string, ctx: z.RefinementCtx, range: WholeRange, message: string) => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   dependentsCount,
+  hoursField,
   hoursWorked,
   leadDays,
   moneyAmount,
@@ -167,5 +168,18 @@ describe("whole-number fields", () => {
   it("says the allowed range", () => {
     expect(messageOf(tripMiles, "0")).toBe("Enter a whole number from 1 to 9,999");
     expect(messageOf(optionalSqft, "-1")).toBe("Enter a whole number from 0 to 99,999");
+  });
+});
+
+describe("hoursField", () => {
+  it.each([
+    [60, "1"],
+    [75, "1.25"],
+    [83, "1.5"], // 1.38 h rounds to the nearest quarter
+    [7, "0.25"], // never below the smallest entry the form takes
+    [1440, "24"],
+  ])("shows %i minutes as %s hours, a value the time form takes", (minutes, text) => {
+    expect(hoursField(minutes)).toBe(text);
+    expect(hoursWorked.safeParse(text).success).toBe(true);
   });
 });
