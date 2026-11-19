@@ -182,7 +182,8 @@ function ProfileFormPanel({
         });
       } catch (err) {
         if (!(err instanceof EntityPeriodError)) throw err;
-        setEntityError(entityPeriodFieldError(err));
+        // Taken with the saved periods: it lapses once one of them changes.
+        setEntityError(entityPeriodFieldError(err, entities));
         return;
       }
       toast.success("Entity period added.");
@@ -512,7 +513,7 @@ function ProfileFormPanel({
               form={entityForm}
               name="startDate"
               validators={{ onBlur: efs.startDate }}
-              error={periodErrorFor(entityError, "startDate")}
+              error={periodErrorFor(entityError, "startDate", entities)}
             >
               {(field) => (
                 <FormItem>
@@ -522,7 +523,11 @@ function ProfileFormPanel({
                       yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
-                      onValueChange={(d) => field.handleChange(d)}
+                      onValueChange={(d) => {
+                        // A new date is a new attempt; the old refusal no longer applies.
+                        setEntityError(null);
+                        field.handleChange(d);
+                      }}
                     />
                   </FormControl>
                   <FormMessage role="alert" />
@@ -532,7 +537,7 @@ function ProfileFormPanel({
             <TSFormField
               form={entityForm}
               name="endDate"
-              error={periodErrorFor(entityError, "endDate")}
+              error={periodErrorFor(entityError, "endDate", entities)}
             >
               {(field) => (
                 <FormItem>
@@ -542,7 +547,10 @@ function ProfileFormPanel({
                       yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
-                      onValueChange={(d) => field.handleChange(d)}
+                      onValueChange={(d) => {
+                        setEntityError(null);
+                        field.handleChange(d);
+                      }}
                       disableFuture={false}
                     />
                   </FormControl>

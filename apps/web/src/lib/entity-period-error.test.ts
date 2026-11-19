@@ -26,6 +26,25 @@ describe("entityPeriodFieldError", () => {
     expect(entityPeriodFieldError(err).field).toBe("endDate");
   });
 
+  it("keeps the message while the saved periods are as they were when it was refused", () => {
+    const periods = [soleProp];
+    const error = entityPeriodFieldError(new EntityOverlapError(soleProp as never), periods);
+    expect(periodErrorFor(error, "startDate", [{ ...soleProp }])).toBe(error.message);
+  });
+
+  it("drops the message once another period was ended or edited", () => {
+    const error = entityPeriodFieldError(new EntityOverlapError(soleProp as never), [soleProp]);
+    const ended = { ...soleProp, endDate: "2024-12-31" };
+    expect(periodErrorFor(error, "startDate", [ended])).toBeUndefined();
+  });
+
+  it("drops the message once another period was deleted", () => {
+    const error = entityPeriodFieldError(new EntityOverlapError(soleProp as never), [soleProp]);
+    expect(periodErrorFor(error, "startDate", [])).toBeUndefined();
+    const archived = { ...soleProp, deletedAt: FIXED };
+    expect(periodErrorFor(error, "startDate", [archived])).toBeUndefined();
+  });
+
   it("gives each field only its own message", () => {
     const error = { field: "endDate", message: "Demo message" } as const;
     expect(periodErrorFor(error, "endDate")).toBe("Demo message");
