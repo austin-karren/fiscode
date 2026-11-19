@@ -126,21 +126,34 @@ const homeOfficePieces = (
   }
   candidates.sort((x, y) => (x.from < y.from ? -1 : x.from > y.from ? 1 : 0));
   const pieces: HomeOfficePiece[] = [];
-  let simplifiedSoFar = 0;
+  // Allowable simplified square feet already counted in each month (Jan = 0).
+  const simplifiedSqftByMonth = Array.from({ length: 12 }, () => 0);
   candidates.forEach((c, i) => {
     const next = candidates.slice(i + 1).find((n) => n.from <= c.to);
     const to = next ? dayBefore(next.from) : c.to;
     if (to < c.from) return;
     const monthsActive = (daysBetweenInclusive(c.from, to) / yearDays) * 12;
     if (c.h.method === "simplified") {
-      const sqft = Math.min(c.h.officeSqft ?? 0, cfg.homeOffice.simplifiedMaxSqft);
-      const annual = sqft * cfg.homeOffice.simplifiedRatePerSqft;
-      // The $1,500 cap holds across simplified configs.
-      const amount = Math.min(
-        cfg.homeOffice.simplifiedCap - simplifiedSoFar,
-        Math.round((annual * monthsActive) / 12),
-      );
-      simplifiedSoFar += amount;
+      // Pub 587 (2025), "Part-year use or area changes (for simplified method only)",
+      // https://www.irs.gov/pub/irs-pdf/p587.pdf: "your deduction is limited to the average
+      // monthly allowable square footage. You calculate the average monthly allowable square
+      // footage by adding the amount of allowable square feet you used in each month and dividing
+      // the sum by 12. ... you cannot take more than 300 square feet into account for any 1 month.
+      // Additionally, if your qualified business use was less than 15 days in a month, you must
+      // use -0- for that month."
+      const sqft = c.h.officeSqft ?? 0;
+      let sqftMonthsAdded = 0;
+      for (let month = 0; month < 12; month++) {
+        if (daysInMonthWithin(year, month, c.from, to) < 15) continue;
+        // At most 300 sq ft a month, across every simplified config.
+        const add = Math.min(
+          sqft,
+          cfg.homeOffice.simplifiedMaxSqft - simplifiedSqftByMonth[month]!,
+        );
+        simplifiedSqftByMonth[month]! += add;
+        sqftMonthsAdded += add;
+      }
+      const amount = Math.round((sqftMonthsAdded * cfg.homeOffice.simplifiedRatePerSqft) / 12);
       pieces.push({ method: "simplified", amount: cents(amount), from: c.from, to });
     } else {
       const amount = actualHomeOfficeExpenses({ ...c.h, monthsActive }).amount;
@@ -231,6 +244,16 @@ const limitedHomeOffice = (
     else carryover += c.disallowed;
   }
   return { allowed: cents(allowed), lost: cents(lost), carryover: cents(carryover), areaRejected };
+};
+
+// Days of [from, to] that fall in `month` (0 = January) of `year`.
+const daysInMonthWithin = (year: number, month: number, from: string, to: string): number => {
+  const mm = String(month + 1).padStart(2, "0");
+  const first = `${year}-${mm}-01`;
+  const last = new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10);
+  const start = from > first ? from : first;
+  const end = to < last ? to : last;
+  return start > end ? 0 : daysBetweenInclusive(start, end);
 };
 
 // The ISO date before `iso` (UTC, so no timezone moves the day).

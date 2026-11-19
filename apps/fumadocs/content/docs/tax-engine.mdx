@@ -70,10 +70,16 @@ come from Utah's draft 2026 TC-40 and may change when the final form is posted.
 
 ### Home office
 
-Two methods, each prorated by the days the office is in use within the year, and never before the
-self-employment start date:
+Two methods, each counted only for the days the office is in use within the year, and never
+before the self-employment start date:
 
-- **Simplified:** $5 per square foot, at most 300 sq ft ($1,500 a year).
+- **Simplified:** $5 per square foot, at most 300 sq ft ($1,500 a year). Part of a year, or a
+  change of area, uses the average monthly allowable square footage
+  ([Pub 587](https://www.irs.gov/pub/irs-pdf/p587.pdf), "Part-year use or area changes"): "adding
+  the amount of allowable square feet you used in each month and dividing the sum by 12", with at
+  most 300 sq ft in any month, and "if your qualified business use was less than 15 days in a
+  month, you must use -0- for that month". Pub 587's Example 1, 420 sq ft from July 20, gives 125
+  sq ft, so $625.
 - **Actual** ([Form 8829](https://www.irs.gov/pub/irs-dft/f8829--dft.pdf), 2026 draft; lines
   match the [2025 instructions](https://www.irs.gov/instructions/i8829)): the business percentage
   is office area ÷ home area (line 3, "Divide line 1 by line 2"). The monthly rent or mortgage
@@ -118,10 +124,9 @@ interest only, not the principal.
 
 Not modelled yet:
 
-- **Simplified part-year use by months.** fiscode prorates the simplified method by days. Pub 587
-  ("Part-year use or area changes") averages the allowable square footage over the 12 months and
-  counts a month only with 15 or more days of business use. Pub 587's Example 1 (business use
-  from July 20, 300 allowable sq ft) comes to $625. fiscode's day count gives $678.08.
+- **An area change in the same home** is entered as two configs, so the income limit treats it
+  like a move: each config is limited by the profit dated within its own days. Pub 587 treats it
+  as one home with one limit.
 - **One simplified home a year.** "If you had more than one home during the year that you used
   for business, you can use the simplified method for only one home" (instructions). fiscode
   accepts two simplified configs in a year and caps them together at $1,500.

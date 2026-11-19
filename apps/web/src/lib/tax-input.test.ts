@@ -233,6 +233,56 @@ describe("deriveYear — mileage deduction", () => {
   });
 });
 
+describe("deriveYear — simplified part-year use (Pub 587 average monthly square footage)", () => {
+  // Pub 587 (2025), "Part-year use or area changes (for simplified method only)",
+  // https://www.irs.gov/pub/irs-pdf/p587.pdf: add the allowable square feet used in each month
+  // (at most 300 a month; 0 for a month with less than 15 days of use) and divide by 12.
+  const withIncome = (offices: ReturnType<typeof homeOffice>[]) =>
+    deriveYear(
+      // $5,000 on the 28th of every month, so no office's own days lack income (no limit binds).
+      makeBundle({
+        income: Array.from({ length: 12 }, (_, m) =>
+          income(`i${m}`, `2026-${String(m + 1).padStart(2, "0")}-28`, 5_000_00),
+        ),
+        homeOffice: offices,
+      }),
+      2026,
+    ).homeOfficeDeduction;
+
+  it("Pub 587 Example 1 (Jay): 420 sq ft from Jul 20 → 125 sq ft average → $625", () => {
+    // July has 12 days of use (< 15): 0. Aug–Dec: 300 each. (5 × 300) / 12 = 125. 125 × $5 = $625.
+    // (Day count gave 300 × $5 × 165/365 = $678.08.)
+    expect(withIncome([homeOffice("ho", "2026-07-20", null, 420)])).toBe(625_00);
+  });
+
+  it("Pub 587 Example 2 (Jessie): 100 sq ft from Apr 20, 330 sq ft from Aug 5 → 150 → $750", () => {
+    // April: 11 days (0). May–Jul: 100. August: 4 days of 100 (0), 27 days of 330 → 300.
+    // (3 × 100 + 5 × 300) / 12 = 150. 150 × $5 = $750.
+    expect(
+      withIncome([
+        homeOffice("h1", "2026-04-20", "2026-08-04", 100),
+        { ...homeOffice("h2", "2026-08-05", null, 330) },
+      ]),
+    ).toBe(750_00);
+  });
+
+  it("Pub 587 Example 3 (Guadalupe), the simplified home: 300 sq ft Jan 1 – Jul 16 → 175 → $875", () => {
+    // July has 16 days (≥ 15): 300. Jan–Jul: 7 × 300 / 12 = 175. 175 × $5 = $875.
+    expect(withIncome([homeOffice("ho", "2026-01-01", "2026-07-16", 300)])).toBe(875_00);
+  });
+
+  it("a month counts with exactly 15 days, not with 14", () => {
+    // Office from Jun 16 (15 days in June) vs Jun 17 (14 days), 120 sq ft.
+    // Jun 16: Jun–Dec = 7 months × 120 / 12 = 70 → $350. Jun 17: Jul–Dec = 6 × 120 / 12 = 60 → $300.
+    expect(withIncome([homeOffice("ho", "2026-06-16", null, 120)])).toBe(350_00);
+    expect(withIncome([homeOffice("ho", "2026-06-17", null, 120)])).toBe(300_00);
+  });
+
+  it("a full year is unchanged: 150 sq ft → $750", () => {
+    expect(withIncome([homeOffice("ho", "2026-01-01", null, 150)])).toBe(750_00);
+  });
+});
+
 describe("deriveYear — home-office simplified", () => {
   it("annual: 150 sqft × $5/sqft for a full year = $750", () => {
     const b = makeBundle({
@@ -260,11 +310,9 @@ describe("deriveYear — home-office simplified", () => {
       income: [income("i0", "2026-05-02", 10_000_00)],
       homeOffice: [homeOffice("ho", "2026-04-01", "2026-09-30", 100)],
     });
-    // Annual = 100 × $5 = $500.
-    // Months active = (183 / 365) × 12 = 6.0164…
-    // Prorated = round($500 × 6.0164 / 12) = round(250.68) ≈ $250.68 → 25068
-    const expected = Math.round((500 * 100 * 6.016438356164383) / 12);
-    expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(expected);
+    // Pub 587 months: Apr–Sep, 6 full months × 100 sq ft = 600; / 12 = 50 sq ft × $5 = $250.00.
+    // (Day count gave $250.68.)
+    expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(250_00);
   });
 
   it("clamps to seStartDate for mid-year SE start", () => {
@@ -273,10 +321,9 @@ describe("deriveYear — home-office simplified", () => {
       income: [income("i0", "2026-07-02", 10_000_00)],
       homeOffice: [homeOffice("ho", "2026-01-01", null, 100)],
     });
-    // Active days = Jul 1 → Dec 31 = 184 days; 184/365 × 12 = 6.0493...
-    // Annual = $500. Prorated ≈ $252.05 = 25205¢
-    const expected = Math.round((500 * 100 * ((184 / 365) * 12)) / 12);
-    expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(expected);
+    // Pub 587 months from the SE start: Jul–Dec, 6 × 100 / 12 = 50 sq ft × $5 = $250.00.
+    // (Day count gave $252.05.)
+    expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(250_00);
   });
 
   it("actual method with no monthly costs stored deducts $0", () => {
@@ -374,15 +421,16 @@ describe("deriveYear — home-office actual (Form 8829)", () => {
     });
     const d = deriveYear(b, 2026);
     expect(d.homeOfficeDeduction).toBeLessThanOrEqual(1_000_00);
-    // old home: $371.92 lost; new home: $1,000 allowed, $46.53 carried
+    // old home: Jan–Jun 6 × 150 / 12 = 75 sq ft × $5 = $375.00 lost; new home: $1,000 allowed, $46.53 carried
     expect(d.homeOfficeDeduction).toBe(1_000_00);
-    expect(d.homeOfficeLost).toBe(37_192);
+    expect(d.homeOfficeLost).toBe(375_00);
     expect(d.homeOfficeCarryover).toBe(4_653);
   });
 
   it("the same move typed two ways gives the same figures (r4: amount over owned days)", () => {
     // "ends Jun 30 / starts Jul 1" and "ends Jul 1 / starts Jul 1": the old home owns Jan 1 – Jun 30
-    // either way (181 days, $371.92); $3,000 earned Feb 10 → old home in full, new home carried.
+    // either way (Jan–Jun by Pub 587 months, $375.00); $3,000 earned Feb 10 → old home in full,
+    // new home carried.
     const entered = (oldEnd: string) =>
       deriveYear(
         makeBundle({
@@ -396,7 +444,7 @@ describe("deriveYear — home-office actual (Form 8829)", () => {
       );
     const a = entered("2026-06-30");
     const b = entered("2026-07-01");
-    expect(a.homeOfficeDeduction).toBe(37_192);
+    expect(a.homeOfficeDeduction).toBe(375_00);
     expect(a.homeOfficeCarryover).toBe(104_653);
     expect(b.homeOfficeDeduction).toBe(a.homeOfficeDeduction);
     expect(b.homeOfficeLost).toBe(a.homeOfficeLost);
@@ -495,8 +543,8 @@ describe("deriveYear — home-office actual (Form 8829)", () => {
     expect(d.homeOfficeLost).toBe(550_00);
   });
 
-  // A move: simplified 150 sq ft Jan 1 – Jun 30 (181 days), then actual from Jul 1 (184 days).
-  //   simplified: $750 × 181/365 = $371.92 (37,191.78 → 37,192¢)
+  // A move: simplified 150 sq ft Jan 1 – Jun 30, then actual from Jul 1 (184 days).
+  //   simplified (Pub 587 months): 6 × 150 / 12 = 75 sq ft × $5 = $375.00
   //   actual:     $2,076 × 184/365 = $1,046.53 (104,653¢)
   // Two homes: each is limited by the profit of its own period (i8829 Line 8, Pub 587).
   const move = [
@@ -507,23 +555,23 @@ describe("deriveYear — home-office actual (Form 8829)", () => {
   it("a move, income earned in the new home (Nov 10): old home $0 limit, new home in full", () => {
     const b = makeBundle({ income: [income("i1", "2026-11-10", 3_000_00)], homeOffice: move });
     const d = deriveYear(b, 2026);
-    // old home: profit $0 → $371.92 lost (simplified); new home: profit $3,000 ≥ $1,046.53
+    // old home: profit $0 → $375.00 lost (simplified); new home: profit $3,000 ≥ $1,046.53
     expect(d.homeOfficeDeduction).toBe(104_653);
-    expect(d.homeOfficeLost).toBe(37_192);
+    expect(d.homeOfficeLost).toBe(375_00);
     expect(d.homeOfficeCarryover).toBe(0);
   });
 
   it("a move, income earned in the old home (Feb 10): old home in full, new home carried", () => {
     const b = makeBundle({ income: [income("i1", "2026-02-10", 3_000_00)], homeOffice: move });
     const d = deriveYear(b, 2026);
-    // old home: profit $3,000 ≥ $371.92; new home: profit $0 → $1,046.53 carried (actual)
-    expect(d.homeOfficeDeduction).toBe(37_192);
+    // old home: profit $3,000 ≥ $375.00; new home: profit $0 → $1,046.53 carried (actual)
+    expect(d.homeOfficeDeduction).toBe(375_00);
     expect(d.homeOfficeLost).toBe(0);
     expect(d.homeOfficeCarryover).toBe(104_653);
   });
 
   it("a move: each home's profit counts its own expenses and mileage", () => {
-    // Old home: $500 income − $300 expense (Mar) = $200 → $200 allowed, $171.92 lost.
+    // Old home: $500 income − $300 expense (Mar) = $200 → $200 allowed, $175.00 lost.
     // New home: $5,000 income (Sep) − 100 mi × $0.76 (Aug) = $4,924 ≥ $1,046.53.
     const b = makeBundle({
       income: [income("i1", "2026-02-10", 500_00), income("i2", "2026-09-10", 5_000_00)],
@@ -533,7 +581,7 @@ describe("deriveYear — home-office actual (Form 8829)", () => {
     });
     const d = deriveYear(b, 2026);
     expect(d.homeOfficeDeduction).toBe(200_00 + 104_653);
-    expect(d.homeOfficeLost).toBe(17_192);
+    expect(d.homeOfficeLost).toBe(175_00);
     expect(d.homeOfficeCarryover).toBe(0);
   });
 });
@@ -680,9 +728,9 @@ describe("buildAnnualizedInput — cumulative periods", () => {
     });
     const ann = buildAnnualizedInput(b, 2026);
     // Q1 (to Mar 31): mileage 100 × $0.725 = $72.50
-    //   home office 150 sqft × $5 = $750/yr × 90 of 365 days = $184.93
-    //   → $257.43 (no direct expenses)
-    expect(ann.periods[0].cumulativeDeductibleExpenses).toBe(257_43);
+    //   home office (Pub 587 months) Jan–Mar 3 × 150 / 12 = 37.5 sq ft × $5 = $187.50
+    //   → $260.00 (no direct expenses)
+    expect(ann.periods[0].cumulativeDeductibleExpenses).toBe(260_00);
     // Q3 (to Aug 31) includes the July trip at $0.76
     // Q4 (to Dec 31) equals the year: mileage $148.50 + home office $750.00
     expect(ann.periods[3].cumulativeDeductibleExpenses).toBe(898_50);
