@@ -312,3 +312,55 @@ describe("buildBundle — empty DB", () => {
     expect(b.mileage).toEqual([]);
   });
 });
+
+describe("importBundle — history-restore (a past snapshot from the History screen)", () => {
+  const fullExport = async () =>
+    exportBundle(await buildBundle({ includeDeleted: true }), { scope: "full" });
+
+  const snapshots = async () =>
+    (await historyRepo.listAll()).filter((h) => h.entity === "__import_snapshot");
+
+  it("puts back the state a file restore replaced, and records history-restore", async () => {
+    await clientRepo.create({
+      name: "Prior",
+      type: null,
+      notes: null,
+      defaultRateCents: null,
+      defaultCommissionRate: null,
+      deletedAt: null,
+    });
+    const priorExport = await fullExport();
+    await importBundle(fullBundle(), "import-restore");
+    const [fileRestore] = await snapshots();
+
+    await importBundle(JSON.parse(fileRestore!.beforeJson!) as Bundle, "history-restore");
+
+    expect(await fullExport()).toBe(priorExport);
+    expect((await snapshots()).map((s) => s.entityId)).toEqual([
+      "import-restore",
+      "history-restore",
+    ]);
+    // The new snapshot holds what the history restore replaced, so it can be undone too.
+    const last = (await snapshots())[1]!;
+    expect(
+      JSON.parse(last.beforeJson!)
+        .clients.map((c: { name: string }) => c.name)
+        .sort(),
+    ).toEqual(["Acme", "Zeta"]);
+  });
+
+  it("is all or nothing, like a file restore", async () => {
+    await importBundle(fullBundle(), "import-restore");
+    const before = await fullExport();
+    const snapshotsBefore = await snapshots();
+    const broken: Bundle = {
+      ...emptyBundle(),
+      income: [income("in_dup", "2026-02-01", 1), income("in_dup", "2026-02-02", 2)],
+    };
+
+    await expect(importBundle(broken, "history-restore")).rejects.toThrow();
+
+    expect(await fullExport()).toBe(before);
+    expect(await snapshots()).toEqual(snapshotsBefore);
+  });
+});

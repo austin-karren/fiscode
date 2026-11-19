@@ -18,12 +18,14 @@ import {
 } from "../schema/index.ts";
 import { buildBundle } from "./index.ts";
 
-export type ImportReason = "import-restore" | "import-append";
+export type ImportReason = "import-restore" | "import-append" | "history-restore";
 
 /**
  * Apply a Bundle to the DB, all or nothing.
  *
  * - `import-restore`: every data table is emptied and reloaded from the bundle.
+ * - `history-restore`: the same as `import-restore`, for a past snapshot put
+ *   back from the History screen, so the log can tell it from a file restore.
  * - `import-append`: nothing is removed. The caller (CSV's `applyImport`) has
  *   already resolved id collisions, so rows that are not here yet are inserted.
  *
@@ -72,7 +74,7 @@ export const importBundle = async (bundle: Bundle, reason: ImportReason): Promis
     queries.push(db.insert(historyTable).values(row).onConflictDoNothing());
   }
 
-  if (reason === "import-restore") {
+  if (reason === "import-restore" || reason === "history-restore") {
     // Empty every data table. History is intact.
     queries.push(
       db.delete(profile),

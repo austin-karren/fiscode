@@ -206,6 +206,22 @@ describe("deriveYear — mileage deduction", () => {
     expect(d.mileageDeduction).toBe(7_250);
     expect(d.excludedBeforeSeStart.mileage).toBe(1);
   });
+
+  it("counts as excluded exactly the live in-year expenses that Direct expenses leaves out", () => {
+    const b = makeBundle({
+      profile: { ...makeBundle().profile!, seStartDate: "2026-04-01" },
+      expenses: [
+        expense("pre", "2026-03-31", 33_00), // before SE start: excluded
+        { ...expense("startup", "2026-02-01", 45_00), startupExpense: true }, // counted
+        expense("ok", "2026-04-01", 250_00), // counted
+        { ...expense("gone", "2026-03-01", 10_00), deletedAt: FIXED }, // deleted: neither
+        { ...expense("old", "2025-12-31", 7_00), startupExpense: true }, // prior year: neither
+      ],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.directExpenses).toBe(295_00);
+    expect(d.excludedBeforeSeStart.expense).toBe(1);
+  });
 });
 
 describe("deriveYear — home-office simplified", () => {
