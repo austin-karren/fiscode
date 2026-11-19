@@ -32,7 +32,9 @@ describe("actualHomeOfficeExpenses (Form 8829 lines 1-7, 18-24)", () => {
   });
 
   it("missing area or costs give $0 without a flag", () => {
-    expect(actualHomeOfficeExpenses({ ...renter, homeSqft: null, monthsActive: 12 }).amount).toBe(0);
+    expect(actualHomeOfficeExpenses({ ...renter, homeSqft: null, monthsActive: 12 }).amount).toBe(
+      0,
+    );
     expect(actualHomeOfficeExpenses({ ...renter, officeSqft: 0, monthsActive: 12 }).amount).toBe(0);
     // Only utilities: 20,000 × 12 × 10% = 24,000¢
     expect(
@@ -47,9 +49,9 @@ describe("actualHomeOfficeExpenses (Form 8829 lines 1-7, 18-24)", () => {
 
   it("office equal to the home is 100%", () => {
     // 173,000 × 12 = 2,076,000¢
-    expect(
-      actualHomeOfficeExpenses({ ...renter, officeSqft: 2000, monthsActive: 12 }).amount,
-    ).toBe(2_076_000);
+    expect(actualHomeOfficeExpenses({ ...renter, officeSqft: 2000, monthsActive: 12 }).amount).toBe(
+      2_076_000,
+    );
   });
 });
 

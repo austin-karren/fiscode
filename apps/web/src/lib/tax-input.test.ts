@@ -98,9 +98,9 @@ const homeOffice = (
   method,
   officeSqft: sqft,
   homeSqft: 2000,
-  monthlyRentMortgageCents: null,
-  monthlyUtilitiesCents: null,
-  monthlyInsuranceCents: null,
+  monthlyRentMortgageCents: null as number | null,
+  monthlyUtilitiesCents: null as number | null,
+  monthlyInsuranceCents: null as number | null,
   regularExclusiveAck: true,
   notes: null,
   createdAt: FIXED,
@@ -236,6 +236,7 @@ describe("deriveYear — mileage deduction", () => {
 describe("deriveYear — home-office simplified", () => {
   it("annual: 150 sqft × $5/sqft for a full year = $750", () => {
     const b = makeBundle({
+      income: [income("i0", "2026-01-02", 10_000_00)],
       homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
     });
     const d = deriveYear(b, 2026);
@@ -245,6 +246,7 @@ describe("deriveYear — home-office simplified", () => {
 
   it("clamps sqft at the simplified-method cap of 300", () => {
     const b = makeBundle({
+      income: [income("i0", "2026-01-02", 10_000_00)],
       homeOffice: [homeOffice("ho", "2026-01-01", null, 500)],
     });
     // 300 × $5 = $1500 (also equals the simplified cap)
@@ -254,6 +256,7 @@ describe("deriveYear — home-office simplified", () => {
   it("prorates day-by-day across a partial year", () => {
     // April 1 → Sep 30 inclusive = 183 days (30+31+30+31+31+30) in 2026 (non-leap).
     const b = makeBundle({
+      income: [income("i0", "2026-01-02", 10_000_00)],
       homeOffice: [homeOffice("ho", "2026-04-01", "2026-09-30", 100)],
     });
     // Annual = 100 × $5 = $500.
@@ -266,6 +269,7 @@ describe("deriveYear — home-office simplified", () => {
   it("clamps to seStartDate for mid-year SE start", () => {
     const b = makeBundle({
       profile: { ...makeBundle().profile!, seStartDate: "2026-07-01" },
+      income: [income("i0", "2026-07-02", 10_000_00)],
       homeOffice: [homeOffice("ho", "2026-01-01", null, 100)],
     });
     // Active days = Jul 1 → Dec 31 = 184 days; 184/365 × 12 = 6.0493...
@@ -294,6 +298,7 @@ describe("deriveYear — home-office simplified", () => {
     const b = makeBundle({
       profile: { ...makeBundle().profile!, seStartDate: "2024-01-01" },
       entities: [entity("e1", "2024-01-01", null, "sole_prop")],
+      income: [income("i0", "2024-01-02", 10_000_00)],
       homeOffice: [homeOffice("ho", "2024-01-01", null, 100)],
     });
     // Full year, leap. Active days = 366; months = (366/366)×12 = 12.
@@ -374,11 +379,34 @@ describe("deriveYear — home-office actual (Form 8829)", () => {
     expect(d.homeOfficeDisallowed).toBe(1_376_00);
   });
 
-  it("the simplified method is unchanged by the limit", () => {
+  it("the simplified method is unchanged under the limit", () => {
     const b = makeBundle({
+      income: [income("i0", "2026-01-02", 10_000_00)],
       homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
     });
     expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(75_000);
+  });
+
+  it("the simplified method is limited too: $0 income deducts $0 (Pub 587)", () => {
+    // Review of #49's walk: $123.29 of home office was deducted with no counted income.
+    const b = makeBundle({
+      homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBe(0);
+    expect(d.homeOfficeDisallowed).toBe(75_000);
+  });
+
+  it("the simplified method is capped at tentative profit: $500 income − $300 expenses", () => {
+    const b = makeBundle({
+      income: [income("i0", "2026-01-02", 500_00)],
+      expenses: [expense("e1", "2026-01-03", 300_00)],
+      homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
+    });
+    const d = deriveYear(b, 2026);
+    // $750 simplified, limited to $200; $550 not allowed
+    expect(d.homeOfficeDeduction).toBe(200_00);
+    expect(d.homeOfficeDisallowed).toBe(550_00);
   });
 });
 
@@ -503,8 +531,22 @@ describe("buildAnnualizedInput — cumulative periods", () => {
     expect(ann.periods[1].cumulativeGross1099).toBe(20_000_00);
   });
 
+  it("each period's home office is limited by that period's own income", () => {
+    const b = makeBundle({
+      income: [income("nov", "2026-11-02", 10_000_00)],
+      homeOffice: [actualOffice("2026-01-01")],
+    });
+    const ann = buildAnnualizedInput(b, 2026);
+    // Q1–Q3: no income yet, so no home office
+    expect(ann.periods[0].cumulativeDeductibleExpenses).toBe(0);
+    expect(ann.periods[2].cumulativeDeductibleExpenses).toBe(0);
+    // Q4 equals the year: $2,076.00, under the $10,000 tentative profit
+    expect(ann.periods[3].cumulativeDeductibleExpenses).toBe(207_600);
+  });
+
   it("each period carries mileage (dated rates) and home office through its end, like the year", () => {
     const b = makeBundle({
+      income: [income("i0", "2026-01-02", 10_000_00)],
       mileage: [mileage("feb", "2026-02-10", 100), mileage("jul", "2026-07-10", 100)],
       homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
     });
