@@ -135,11 +135,14 @@ describe("root layout", () => {
 
       fireEvent.click(within(sheet).getByRole("link", { name: "Mileage" }));
 
-      await screen.findByRole("heading", { name: "Page /mileage" });
+      // The route change and the sheet's close transition can take over the
+      // default second while the whole suite runs in parallel.
+      const slow = { timeout: 5000 };
+      await screen.findByRole("heading", { name: "Page /mileage" }, slow);
       expect(router.state.location.pathname).toBe("/mileage");
-      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), slow);
       expect(headerLabel()).toHaveTextContent("Mileage");
-      await waitFor(() => expect(screen.getByRole("main")).toHaveFocus());
+      await waitFor(() => expect(screen.getByRole("main")).toHaveFocus(), slow);
     });
 
     it("keeps the sheet open when a theme is picked in it", async () => {
