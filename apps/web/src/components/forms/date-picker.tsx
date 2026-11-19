@@ -44,8 +44,11 @@ export function pickableRange({
   let min = new Date(today.getFullYear() - yearsBack, 0, 1);
   // Period-end fields may run to the end of this year, as before.
   let max = disableFuture ? startOfDay(today) : new Date(today.getFullYear(), 11, 31);
-  if (value && value < min) min = new Date(value.getFullYear(), 0, 1);
-  if (value && value > max) max = new Date(value.getFullYear(), 11, 31);
+  // Days are compared, not instants: a form's default of "now" has a time of
+  // day and must not count as later than today.
+  const day = value ? startOfDay(value) : undefined;
+  if (day && day < min) min = new Date(day.getFullYear(), 0, 1);
+  if (day && day > max) max = new Date(day.getFullYear(), 11, 31);
   return { min, max };
 }
 
@@ -154,7 +157,7 @@ export function DatePicker({
           onPick={(d) => {
             onValueChange(d);
             onBlur?.();
-            if (d) setOpen(false);
+            setOpen(false);
           }}
         />
       </PopoverContent>
@@ -182,10 +185,6 @@ function DatePickerPanel({
   const errorId = useId();
 
   const check = (): Date | undefined => {
-    if (text.trim() === "") {
-      setError(undefined);
-      return undefined;
-    }
     const typed = parseTypedDate(text);
     if (!typed) {
       setError("Enter a date like 03/14/2025 or 2025-03-14.");
@@ -214,12 +213,17 @@ function DatePickerPanel({
           onChange={(event) => setText(event.target.value)}
           // Leaving the box only checks it. It must not save: Escape and a
           // click outside also blur it, and those cancel.
-          onBlur={check}
+          onBlur={() => {
+            if (text.trim() === "") setError(undefined);
+            else check();
+          }}
           onKeyDown={(event) => {
             if (event.key !== "Enter") return;
             // The popover is portaled out of the form but React still bubbles
             // the key to it, where Enter in a text input submits.
             event.preventDefault();
+            // An emptied box clears the field.
+            if (text.trim() === "") return onPick(undefined);
             const typed = check();
             if (typed) onPick(typed);
           }}
@@ -232,6 +236,9 @@ function DatePickerPanel({
       </div>
       <Calendar
         mode="single"
+        // Picking the selected day again keeps it. Focus opens on that day,
+        // so Enter there has to mean "this one", not "none".
+        required
         selected={value}
         defaultMonth={value}
         startMonth={min}

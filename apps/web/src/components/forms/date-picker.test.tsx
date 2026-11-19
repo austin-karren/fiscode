@@ -36,6 +36,10 @@ describe("pickableRange", () => {
     expect(range({ value: new Date(2028, 4, 3) }).max).toEqual(new Date(2028, 11, 31));
   });
 
+  it("does not take a value with a time of day today as later than today", () => {
+    expect(range({ value: new Date(2026, 10, 18, 23, 59) })).toEqual(range({}));
+  });
+
   it("is not moved by a stored value inside it", () => {
     expect(range({ value: new Date(2020, 4, 3) })).toEqual(range({}));
   });
@@ -109,6 +113,20 @@ describe("DatePicker range", () => {
     expect(dayButton(new Date(2026, 10, 19))).toBeDisabled();
   });
 
+  it("offers nothing after today when the value is now, with its time of day", async () => {
+    setup({ value: new Date() });
+    await openWithKeyboard();
+    expect(dayButton(new Date(2026, 10, 18))).toBeEnabled();
+    expect(dayButton(new Date(2026, 10, 19))).toBeDisabled();
+    expect(yearOptions()).toHaveLength(11);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Type a date" }), {
+      target: { value: "11/19/2026" },
+    });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Type a date" }), { key: "Enter" });
+    expect(screen.getByRole("alert")).toHaveTextContent("to Nov 18, 2026.");
+  });
+
   it("stops at January 1 of the first year", async () => {
     setup({ value: new Date(2016, 0, 1) });
     await openWithKeyboard();
@@ -177,6 +195,29 @@ describe("DatePicker keyboard", () => {
     await waitFor(() => expect(trigger()).toHaveFocus());
   });
 
+  it("keeps the day and closes when the selected day is picked again", async () => {
+    const { onValueChange } = setup({ value: new Date(2026, 9, 10) });
+    await openWithKeyboard();
+    await waitFor(() => expect(focusedDay()).toBe(dayKey(new Date(2026, 9, 10))));
+
+    fireEvent.click(document.activeElement!);
+
+    expect(onValueChange).toHaveBeenCalledTimes(1);
+    expect(onValueChange).toHaveBeenCalledWith(new Date(2026, 9, 10));
+    await waitFor(() => expect(document.querySelector("[data-slot=calendar]")).toBeNull());
+  });
+
+  it("does not let focus rest on a day after today", async () => {
+    setup({ value: new Date() });
+    await openWithKeyboard();
+    await waitFor(() => expect(focusedDay()).toBe(dayKey(new Date(2026, 10, 18))));
+    for (const key of ["ArrowRight", "ArrowDown", "End", "PageDown"]) {
+      fireEvent.keyDown(document.activeElement!, { key });
+      expect(document.activeElement).toBeEnabled();
+      expect(new Date(focusedDay()!) <= new Date(2026, 10, 18)).toBe(true);
+    }
+  });
+
   it("closes on Escape without a change or a blur, with focus back on the field", async () => {
     const { onValueChange, onBlur } = setup({ value: new Date(2026, 9, 10) });
     await openWithKeyboard();
@@ -209,6 +250,15 @@ describe("DatePicker typed date", () => {
     enter();
     expect(onValueChange).toHaveBeenCalledWith(new Date(2025, 2, 14));
     expect(onBlur).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(document.querySelector("[data-slot=calendar]")).toBeNull());
+  });
+
+  it("clears the field when the box is emptied and Enter is pressed", async () => {
+    const { onValueChange } = setup({ value: new Date(2026, 9, 10) });
+    await openWithKeyboard();
+    type("");
+    enter();
+    expect(onValueChange).toHaveBeenCalledWith(undefined);
     await waitFor(() => expect(document.querySelector("[data-slot=calendar]")).toBeNull());
   });
 
