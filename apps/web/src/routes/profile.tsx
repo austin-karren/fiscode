@@ -36,6 +36,11 @@ import { InfoTooltip } from "../components/info-tooltip";
 import { SetupRequiredEmpty } from "../components/empty-states/setup-required";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditEntityDialog } from "../components/edit-entity-dialog";
+import {
+  entityPeriodFieldError,
+  periodErrorFor,
+  type EntityPeriodFieldError,
+} from "../lib/entity-period-error";
 import { EditSpouseDialog } from "../components/edit-spouse-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
 
@@ -155,7 +160,8 @@ function ProfileFormPanel({
   });
 
   // Set when the repo blocks an entity period: an overlap, or an end before the start.
-  const [entityError, setEntityError] = useState<string | null>(null);
+  // Set when the repo blocks the dates; shown on the field it is about.
+  const [entityError, setEntityError] = useState<EntityPeriodFieldError | null>(null);
 
   const entityForm = useForm({
     defaultValues: {
@@ -176,7 +182,7 @@ function ProfileFormPanel({
         });
       } catch (err) {
         if (!(err instanceof EntityPeriodError)) throw err;
-        setEntityError(err.message);
+        setEntityError(entityPeriodFieldError(err));
         return;
       }
       toast.success("Entity period added.");
@@ -502,7 +508,12 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={entityForm} name="startDate" validators={{ onBlur: efs.startDate }}>
+            <TSFormField
+              form={entityForm}
+              name="startDate"
+              validators={{ onBlur: efs.startDate }}
+              error={periodErrorFor(entityError, "startDate")}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Start</FormLabel>
@@ -514,11 +525,15 @@ function ProfileFormPanel({
                       onValueChange={(d) => field.handleChange(d)}
                     />
                   </FormControl>
-                  <FormMessage />
+                  <FormMessage role="alert" />
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={entityForm} name="endDate">
+            <TSFormField
+              form={entityForm}
+              name="endDate"
+              error={periodErrorFor(entityError, "endDate")}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>End (optional)</FormLabel>
@@ -531,18 +546,11 @@ function ProfileFormPanel({
                       disableFuture={false}
                     />
                   </FormControl>
-                  <FormMessage />
+                  <FormMessage role="alert" />
                 </FormItem>
               )}
             </TSFormField>
           </CardContent>
-          {entityError ? (
-            <CardContent>
-              <p role="alert" className="text-sm text-destructive">
-                {entityError}
-              </p>
-            </CardContent>
-          ) : null}
           <CardFooter className="justify-end">
             <entityForm.Subscribe
               selector={(s) => ({
