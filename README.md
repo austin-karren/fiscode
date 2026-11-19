@@ -2,7 +2,8 @@
 
 A fast, **local-only** tax estimator and time tracker for 1099 /
 self-employed work. Hosted at <https://fiscode.app> (docs at
-<https://docs.fiscode.app>) and installable as a PWA.
+<https://docs.fiscode.app>). The web app runs in your browser and keeps your
+data on your device; installing and offline use are the desktop app's job.
 
 **fiscode is not a tax filing tool.** It is an estimator and organizer that
 gets you most of the way to a quarterly estimate and a year-end packet. A tax
@@ -44,7 +45,6 @@ sync, docs site, native desktop).
 - **shadcn/ui** + **Tailwind v4**
 - **Drizzle** + **SQLocal** (sqlite-wasm over OPFS)
 - **Papaparse** for CSV
-- **vite-plugin-pwa**
 - **vitest**, **oxlint + oxfmt**
 
 ## Docs
@@ -106,14 +106,14 @@ docker run --rm -p 3000:3000 fiscode-docs
 
 ### Part 3 — Electrobun desktop
 
-Runs Bun as the desktop shell process. That's where `bun:sqlite` becomes the obvious swap-in for `sqlite-wasm` (same SQLite file on disk, native bindings, no WASM overhead). The browser PWA stays on `sqlite-wasm + OPFS` because there is no Bun runtime in a browser tab. No Dockerfile — it ships as a native installer.
+Runs Bun as the desktop shell process. That's where `bun:sqlite` becomes the obvious swap-in for `sqlite-wasm` (same SQLite file on disk, native bindings, no WASM overhead). The browser app stays on `sqlite-wasm + OPFS` because there is no Bun runtime in a browser tab. No Dockerfile — it ships as a native installer.
 
 ## Layout
 
 ```
 fiscode/
 ├── apps/
-│   ├── web/         # the PWA (UI only)
+│   ├── web/         # the browser app (UI only)
 │   ├── fumadocs/    # docs site (TanStack Start + fumadocs-mdx/ui, port 4000)
 │   └── desktop/     # stub: Electrobun wrapper (part 3)
 └── packages/
