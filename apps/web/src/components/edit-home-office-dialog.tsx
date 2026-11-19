@@ -13,11 +13,11 @@ import { Input } from "@fiscode/ui/components/input";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { homeOfficeRepo } from "@fiscode/db";
 import type { HomeOfficeRow } from "@fiscode/csv";
-import { optionalNonNegativeIntegerString } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { optionalSqft } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
@@ -32,8 +32,8 @@ const editSchema = z.object({
   startDate: z.date({ message: "Pick a start date" }),
   endDate: z.date().optional(),
   method: z.enum(["simplified", "actual"], { message: "Pick a method" }),
-  officeSqft: optionalNonNegativeIntegerString,
-  homeSqft: optionalNonNegativeIntegerString,
+  officeSqft: optionalSqft,
+  homeSqft: optionalSqft,
 });
 
 export function EditHomeOfficeDialog({
@@ -137,13 +137,18 @@ export function EditHomeOfficeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="officeSqft">
+            <TSFormField
+              form={form}
+              name="officeSqft"
+              validators={{ onBlur: editSchema.shape.officeSqft }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Office sqft</FormLabel>
                   <FormControl>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
@@ -153,13 +158,18 @@ export function EditHomeOfficeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="homeSqft">
+            <TSFormField
+              form={form}
+              name="homeSqft"
+              validators={{ onBlur: editSchema.shape.homeSqft }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Home sqft</FormLabel>
                   <FormControl>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}

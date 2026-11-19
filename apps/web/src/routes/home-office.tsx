@@ -11,13 +11,13 @@ import {
   FieldLabel,
   FieldTitle,
 } from "@fiscode/ui/components/field";
-import { optionalNonNegativeIntegerString } from "@fiscode/core";
 import { homeOfficeRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Home } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { optionalSqft } from "../lib/field-schemas";
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
@@ -42,8 +42,8 @@ const METHOD_OPTIONS = [
 const fs = {
   startDate: z.date({ message: "Pick a start date" }),
   method: z.enum(["simplified", "actual"], { message: "Pick a method" }),
-  officeSqft: optionalNonNegativeIntegerString,
-  homeSqft: optionalNonNegativeIntegerString,
+  officeSqft: optionalSqft,
+  homeSqft: optionalSqft,
   regularExclusiveAck: z.boolean().refine((v) => v === true, "Acknowledge regular & exclusive use"),
 };
 const homeOfficeSchema = z.object(fs);
@@ -136,13 +136,14 @@ function HomeOfficePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="officeSqft">
+            <TSFormField form={form} name="officeSqft" validators={{ onBlur: fs.officeSqft }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>Office sqft</FormLabel>
                   <FormControl>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
@@ -152,13 +153,14 @@ function HomeOfficePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="homeSqft">
+            <TSFormField form={form} name="homeSqft" validators={{ onBlur: fs.homeSqft }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>Home sqft</FormLabel>
                   <FormControl>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}

@@ -21,7 +21,8 @@ const archivedVehicle = {
   deletedAt: "2026-02-01T00:00:00.000Z",
 };
 
-const { softDelete, revertTo, invalidate, loaded } = vi.hoisted(() => ({
+const { create, softDelete, revertTo, invalidate, loaded } = vi.hoisted(() => ({
+  create: vi.fn(async () => undefined),
   // A test sets `loaded.vehicles` to load something other than the default pair.
   loaded: { vehicles: undefined as unknown[] | undefined },
   softDelete: vi.fn(async () => true),
@@ -35,7 +36,7 @@ vi.mock("@fiscode/db", () => ({
   vehicleRepo: {
     list: async () => [],
     listIncludingDeleted: async () => [],
-    create: vi.fn(),
+    create,
     update: vi.fn(),
     softDelete,
     revertTo,
@@ -108,5 +109,33 @@ describe("archiving a vehicle", () => {
     expect(screen.getByText("No active vehicles")).toBeInTheDocument();
     expect(screen.getByText(/Show archived/, { selector: "p, div" })).toBeInTheDocument();
     expect(screen.queryByText("No vehicles yet")).not.toBeInTheDocument();
+  });
+});
+
+describe("vehicle year", () => {
+  const submit = (year: string) => {
+    renderPage();
+    fireEvent.change(screen.getByLabelText("Make"), { target: { value: "Demo" } });
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "Hatch" } });
+    const input = screen.getByLabelText("Year");
+    fireEvent.change(input, { target: { value: year } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    return input;
+  };
+
+  it.each(["20233", "abc", "1e3"])("does not save %j", async (year) => {
+    const input = submit(year);
+    expect(
+      await screen.findByText(/^Enter a 4-digit year from 1900 to \d{4}$/),
+    ).toBeInTheDocument();
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("saves a 4-digit year", async () => {
+    submit("2023");
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ year: 2023 })),
+    );
   });
 });

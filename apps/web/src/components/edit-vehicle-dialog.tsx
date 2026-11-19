@@ -13,19 +13,19 @@ import { Input } from "@fiscode/ui/components/input";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { vehicleRepo } from "@fiscode/db";
 import type { VehicleRow } from "@fiscode/csv";
-import { optionalIntegerString, optionalNonNegativeIntegerString } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { optionalMpg, optionalVehicleYear } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 
 const editSchema = z.object({
   make: z.string().min(1, "Make is required"),
   model: z.string().min(1, "Model is required"),
-  year: optionalIntegerString,
-  mpg: optionalNonNegativeIntegerString,
+  year: optionalVehicleYear,
+  mpg: optionalMpg,
 });
 
 export function EditVehicleDialog({
@@ -110,13 +110,14 @@ export function EditVehicleDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="year">
+            <TSFormField form={form} name="year" validators={{ onBlur: editSchema.shape.year }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>Year</FormLabel>
                   <FormControl>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
@@ -126,13 +127,14 @@ export function EditVehicleDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="mpg">
+            <TSFormField form={form} name="mpg" validators={{ onBlur: editSchema.shape.mpg }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>MPG</FormLabel>
                   <FormControl>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}

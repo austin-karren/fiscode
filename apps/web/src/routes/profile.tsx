@@ -6,16 +6,12 @@ import { FieldCheckbox } from "../components/forms/field-checkbox";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
-import {
-  cents,
-  nonNegativeIntegerString,
-  optionalUsdString,
-  positiveIntegerString,
-} from "@fiscode/core";
+import { cents } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { dependentsCount, leadDays, optionalMoneyAmountOrZero } from "../lib/field-schemas";
 import { ConfirmDialog } from "@fiscode/ui/components/confirm-dialog";
 
 import { Page } from "../components/page";
@@ -56,12 +52,12 @@ const profileSchema = z.object({
   state: z.string().min(2, "Pick a state").max(2, "Pick a state"),
   seStartDate: z.date({ message: "Pick a start date" }),
   // Dependents: non-negative integer. Blank input rejected; "0" accepted.
-  dependents: nonNegativeIntegerString,
+  dependents: dependentsCount,
   quarterlyMethod: z.enum(["annualized", "even"], {
     message: "Pick a quarterly method",
   }),
   // Prep lead days: must be ≥ 1 (otherwise no lead time at all).
-  prepLeadDays: positiveIntegerString,
+  prepLeadDays: leadDays,
   tracksRoth: z.boolean(),
   usesRetirement: z.boolean(),
 });
@@ -78,9 +74,9 @@ const spouseSchema = z.object({
   endDate: z.date().optional(),
   // Spouse $ inputs: blank → 0; otherwise must parse as USD. Catches typos
   // that previously silently became $0 of withholding.
-  wages: optionalUsdString,
-  fedWH: optionalUsdString,
-  stateWH: optionalUsdString,
+  wages: optionalMoneyAmountOrZero,
+  fedWH: optionalMoneyAmountOrZero,
+  stateWH: optionalMoneyAmountOrZero,
 });
 const sfs = spouseSchema.shape;
 
@@ -222,7 +218,7 @@ function ProfileFormPanel({
       await spouseRepo.create({
         startDate: dateToIso(value.startDate!),
         endDate: value.endDate ? dateToIso(value.endDate) : null,
-        // optionalUsdString returns number | null; null = blank input → $0.
+        // A blank amount parses to null and is stored as $0.
         annualW2WagesCents: parsed.wages ?? cents(0),
         annualFederalWithholdingCents: parsed.fedWH ?? cents(0),
         annualStateWithholdingCents: parsed.stateWH ?? cents(0),
@@ -303,14 +299,18 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={profileForm} name="dependents">
+            <TSFormField
+              form={profileForm}
+              name="dependents"
+              validators={{ onBlur: profileSchema.shape.dependents }}
+            >
               {(field) => (
                 <FormItem>
                   <LabelWithTooltip tooltip={GLOSSARY.dependents}>Dependents</LabelWithTooltip>
                   <FormControl>
                     <Input
-                      type="number"
-                      min={0}
+                      type="text"
+                      inputMode="numeric"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
@@ -338,7 +338,11 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={profileForm} name="prepLeadDays">
+            <TSFormField
+              form={profileForm}
+              name="prepLeadDays"
+              validators={{ onBlur: profileSchema.shape.prepLeadDays }}
+            >
               {(field) => (
                 <FormItem>
                   <LabelWithTooltip tooltip={GLOSSARY.prepLeadDays}>
@@ -346,8 +350,8 @@ function ProfileFormPanel({
                   </LabelWithTooltip>
                   <FormControl>
                     <Input
-                      type="number"
-                      min={1}
+                      type="text"
+                      inputMode="numeric"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
@@ -572,7 +576,7 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={spouseForm} name="wages">
+            <TSFormField form={spouseForm} name="wages" validators={{ onBlur: sfs.wages }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>Annual W-2 wages</FormLabel>
@@ -588,7 +592,7 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={spouseForm} name="fedWH">
+            <TSFormField form={spouseForm} name="fedWH" validators={{ onBlur: sfs.fedWH }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>Fed withholding</FormLabel>
@@ -604,7 +608,7 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={spouseForm} name="stateWH">
+            <TSFormField form={spouseForm} name="stateWH" validators={{ onBlur: sfs.stateWH }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>State withholding</FormLabel>

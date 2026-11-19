@@ -13,18 +13,19 @@ import { Input } from "@fiscode/ui/components/input";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { clientRepo } from "@fiscode/db";
 import type { ClientRow } from "@fiscode/csv";
-import { cents, formatUSD, parseUSD } from "@fiscode/core";
+import { cents, formatUSD } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { optionalMoneyAmount } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 
 const editSchema = z.object({
   name: z.string().min(1, "Name is required"),
   type: z.string(),
-  defaultRate: z.string(),
+  defaultRate: optionalMoneyAmount,
 });
 
 export function EditClientDialog({ client, onSaved }: { client: ClientRow; onSaved: () => void }) {
@@ -44,7 +45,7 @@ export function EditClientDialog({ client, onSaved }: { client: ClientRow; onSav
       await clientRepo.update(client.id, {
         name: value.name.trim(),
         type: value.type.trim() || null,
-        defaultRateCents: value.defaultRate ? (parseUSD(value.defaultRate) ?? null) : null,
+        defaultRateCents: optionalMoneyAmount.parse(value.defaultRate),
       });
       toast.success("Client updated.");
       setOpen(false);
@@ -104,7 +105,11 @@ export function EditClientDialog({ client, onSaved }: { client: ClientRow; onSav
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="defaultRate">
+            <TSFormField
+              form={form}
+              name="defaultRate"
+              validators={{ onBlur: editSchema.shape.defaultRate }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Default rate</FormLabel>

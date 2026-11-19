@@ -3,13 +3,13 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
-import { positiveNumericString } from "@fiscode/core";
 import { clientRepo, profileRepo, timeRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Clock } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { hoursWorked } from "../lib/field-schemas";
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
@@ -24,8 +24,7 @@ import { softDeleteWithUndo } from "../lib/soft-delete";
 
 const timeSchema = z.object({
   date: z.date({ message: "Pick a date" }),
-  // Hours: positive finite number (0.25 step). NaN, blanks, negatives rejected.
-  hours: positiveNumericString,
+  hours: hoursWorked,
   clientId: z.string(),
   description: z.string(),
 });
@@ -125,9 +124,8 @@ function TimePage() {
                   <FormLabel>Hours</FormLabel>
                   <FormControl>
                     <Input
-                      type="number"
-                      step="0.25"
-                      min="0.25"
+                      type="text"
+                      inputMode="decimal"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}

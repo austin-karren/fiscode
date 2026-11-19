@@ -13,11 +13,11 @@ import { Input } from "@fiscode/ui/components/input";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { mileageRepo } from "@fiscode/db";
 import type { MileageRow, VehicleRow } from "@fiscode/csv";
-import { positiveIntegerString } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { tripMiles } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
@@ -26,7 +26,7 @@ import { archivedSuffix, pickableParents } from "./parent-name";
 
 const editSchema = z.object({
   date: z.date({ message: "Pick a date" }),
-  miles: positiveIntegerString,
+  miles: tripMiles,
   vehicleId: z.string(),
   purpose: z.string(),
 });
@@ -100,14 +100,14 @@ export function EditMileageDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="miles">
+            <TSFormField form={form} name="miles" validators={{ onBlur: editSchema.shape.miles }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>Business miles</FormLabel>
                   <FormControl>
                     <Input
-                      type="number"
-                      min={1}
+                      type="text"
+                      inputMode="numeric"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}

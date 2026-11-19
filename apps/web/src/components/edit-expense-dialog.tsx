@@ -14,11 +14,12 @@ import { FieldCheckbox } from "./forms/field-checkbox";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { expenseRepo } from "@fiscode/db";
 import type { ExpenseRow } from "@fiscode/csv";
-import { cents, formatUSD, parseUSD } from "@fiscode/core";
+import { cents, formatUSD } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { moneyAmount } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
@@ -28,7 +29,7 @@ import { GLOSSARY } from "../lib/tax-glossary";
 
 const editSchema = z.object({
   date: z.date({ message: "Pick a date" }),
-  amount: z.string().refine((v) => parseUSD(v) !== undefined, "Enter a valid amount"),
+  amount: moneyAmount,
   category: z.string(),
   description: z.string(),
   flagForSection179: z.boolean(),
@@ -57,7 +58,7 @@ export function EditExpenseDialog({
     },
     validators: { onSubmit: editSchema },
     onSubmit: async ({ value }) => {
-      const parsed = parseUSD(value.amount)!;
+      const parsed = moneyAmount.parse(value.amount);
       await expenseRepo.update(expense.id, {
         date: dateToIso(value.date!),
         amountCents: parsed,
@@ -108,7 +109,7 @@ export function EditExpenseDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="amount">
+            <TSFormField form={form} name="amount" validators={{ onBlur: editSchema.shape.amount }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>Amount</FormLabel>

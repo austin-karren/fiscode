@@ -13,11 +13,11 @@ import { Input } from "@fiscode/ui/components/input";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { timeRepo } from "@fiscode/db";
 import type { ClientRow, TimeEntryRow } from "@fiscode/csv";
-import { positiveNumericString } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { hoursWorked } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
@@ -26,7 +26,7 @@ import { archivedSuffix, pickableParents } from "./parent-name";
 
 const editSchema = z.object({
   date: z.date({ message: "Pick a date" }),
-  hours: positiveNumericString,
+  hours: hoursWorked,
   clientId: z.string(),
   description: z.string(),
 });
@@ -100,15 +100,14 @@ export function EditTimeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="hours">
+            <TSFormField form={form} name="hours" validators={{ onBlur: editSchema.shape.hours }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>Hours</FormLabel>
                   <FormControl>
                     <Input
-                      type="number"
-                      step="0.25"
-                      min="0.25"
+                      type="text"
+                      inputMode="decimal"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}

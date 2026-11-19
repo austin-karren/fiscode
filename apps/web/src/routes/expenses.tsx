@@ -13,7 +13,7 @@ import {
   FieldTitle,
 } from "@fiscode/ui/components/field";
 import { expenseRepo, profileRepo } from "@fiscode/db";
-import { cents, formatUSD, parseUSD } from "@fiscode/core";
+import { cents, formatUSD } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { Receipt } from "lucide-react";
 import { toast } from "sonner";
@@ -30,6 +30,7 @@ import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditExpenseDialog } from "../components/edit-expense-dialog";
+import { moneyAmount } from "../lib/field-schemas";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@fiscode/ui/components/tooltip";
 import { GLOSSARY } from "../lib/tax-glossary";
@@ -53,7 +54,7 @@ const labelFor = (code: string) => CATEGORIES.find(([c]) => c === code)?.[1] ?? 
 
 const expenseFormSchema = z.object({
   date: z.date({ message: "Pick a date" }),
-  amount: z.string().refine((v) => parseUSD(v) !== undefined, "Enter a valid amount"),
+  amount: moneyAmount,
   category: z.string(),
   description: z.string(),
   flagForSection179: z.boolean(),
@@ -85,7 +86,7 @@ function ExpensesPage() {
     },
     validators: { onSubmit: expenseFormSchema },
     onSubmit: async ({ value, formApi }) => {
-      const parsed = parseUSD(value.amount)!;
+      const parsed = moneyAmount.parse(value.amount);
       await expenseRepo.create({
         date: dateToIso(value.date!),
         amountCents: parsed,
