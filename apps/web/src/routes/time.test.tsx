@@ -47,6 +47,27 @@ describe("time entry hours", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it("saves on Enter once a rejected value is corrected, without leaving the field", async () => {
+    render(<TimePage />);
+    const input = screen.getByLabelText("Hours");
+    input.focus();
+    fireEvent.change(input, { target: { value: "1.33" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(
+      await screen.findByText("Enter hours in quarter-hour steps, like 1.25"),
+    ).toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "1.25" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ minutes: 75 })),
+    );
+    expect(
+      screen.queryByText("Enter hours in quarter-hour steps, like 1.25"),
+    ).not.toBeInTheDocument();
+    expect(input).toHaveFocus();
+  });
+
   it("leaves the step rule to the form, not the browser", () => {
     render(<TimePage />);
     const input = screen.getByLabelText("Hours");

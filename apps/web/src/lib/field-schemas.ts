@@ -12,6 +12,7 @@ import { z } from "zod";
 
 const PLAIN_DECIMAL = /^(\d+\.?\d*|\.\d+)$/;
 const PLAIN_INTEGER = /^\d+$/;
+const GROUPED_THOUSANDS = /^\d{1,3}(,\d{3})+(\.\d*)?$/;
 
 const fail = (ctx: z.RefinementCtx, message: string) => {
   ctx.addIssue({ code: "custom", message });
@@ -24,8 +25,10 @@ const fail = (ctx: z.RefinementCtx, message: string) => {
 const AMOUNT_CEILING_DOLLARS = 100_000_000;
 
 const parseAmount = (raw: string, ctx: z.RefinementCtx, allowZero: boolean) => {
-  // "$1,234.56" is fine: the symbol, commas and spaces are dropped.
-  const cleaned = raw.replace(/[$,\s]/g, "");
+  // "$1,234.56" is fine: the symbol and spaces are dropped, and so are commas
+  // that group thousands. "12,50" is not read as 1250.
+  const unsigned = raw.replace(/[$\s]/g, "");
+  const cleaned = GROUPED_THOUSANDS.test(unsigned) ? unsigned.replace(/,/g, "") : unsigned;
   const hint = allowZero
     ? "Enter an amount of 0 or more, like 12.50"
     : "Enter an amount greater than 0, like 12.50";

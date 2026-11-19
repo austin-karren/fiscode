@@ -35,6 +35,7 @@ describe("moneyAmount", () => {
     ["0.01", 1],
     [".5", 50],
     ["$1,234.56", 123456],
+    ["1,234,567", 123456700],
     [" 40 ", 4000],
     ["99999999.99", 9999999999],
   ])("accepts %j as %i cents", (input, cents) => {
@@ -52,6 +53,10 @@ describe("moneyAmount", () => {
     ["0x10", GREATER_THAN_0],
     ["Infinity", GREATER_THAN_0],
     ["1.2.3", GREATER_THAN_0],
+    ["12,50", GREATER_THAN_0],
+    ["1,2", GREATER_THAN_0],
+    ["1,2345", GREATER_THAN_0],
+    [",500", GREATER_THAN_0],
     ["12.345", TWO_DECIMALS],
     ["999999999999", BELOW_CEILING],
     ["100000000", BELOW_CEILING],
