@@ -74,7 +74,7 @@ describe("expensesCountedForYear", () => {
   });
 
   // Bug A: IRC §195(b)(1)(A) allows the deduction "for the taxable year in which the active trade
-  // or business begins" (https://www.law.cornell.edu/uscode/text/26/195).
+  // or business begins" (https://www.govinfo.gov/link/uscode/26/195).
   it("bug A: a startup cost paid 2025-12-15, business begins 2026-02-01, counts in 2026 only", () => {
     const rows = [{ ...row("s", "2025-12-15", { startupExpense: true }), amountCents: 90_000 }];
     // Not a per-row expense in either year; deducted as §195 startup costs in 2026.
