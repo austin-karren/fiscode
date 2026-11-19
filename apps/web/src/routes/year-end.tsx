@@ -165,7 +165,7 @@ function YearEndPage() {
         </Alert>
       ) : null}
 
-      <Card className="p-4 print:break-inside-avoid print:border-0 print:shadow-none">
+      <Card className="p-4 print:break-inside-avoid print:overflow-visible print:p-0 print:ring-0">
         <dl className="grid gap-2 @md:grid-cols-2">
           <Row label="Filing status" tooltip={GLOSSARY.filingStatus}>
             {profile.filingStatus.toUpperCase()}
@@ -205,7 +205,7 @@ function YearEndPage() {
         </dl>
       </Card>
 
-      <Card className="p-4 print:break-inside-avoid print:border-0 print:shadow-none">
+      <Card className="p-4 print:break-inside-avoid print:overflow-visible print:p-0 print:ring-0">
         <h2 className="mb-3 text-sm font-medium uppercase text-muted-foreground">
           Expense breakdown
         </h2>
@@ -231,7 +231,7 @@ function YearEndPage() {
         </table>
       </Card>
 
-      <Card className="p-4 print:break-inside-avoid print:border-0 print:shadow-none">
+      <Card className="p-4 print:break-inside-avoid print:overflow-visible print:p-0 print:ring-0">
         <h2 className="mb-3 text-sm font-medium uppercase text-muted-foreground">
           Tax config used
         </h2>
