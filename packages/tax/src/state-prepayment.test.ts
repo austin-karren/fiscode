@@ -42,18 +42,27 @@ describe("Utah prepayment (TC-546)", () => {
     });
   });
 
-  it("subtracts Utah withholding only", () => {
-    // 1,557.03 − 500.00 Utah withholding = 1,057.03; federal withholding ignored
+  // Withholding comes from a spouse block, which counts on a joint return only (#55).
+  const mfjMinimum = () => run({ filingStatus: "mfj" }).statePrepayment!.minimum;
+
+  it("subtracts Utah withholding only (joint return)", () => {
+    // MFJ minimum − 200.00 Utah withholding; federal withholding ignored
     const r = run({
-      spouseStateWithholding: dollars(500),
+      filingStatus: "mfj",
+      spouseStateWithholding: dollars(200),
       spouseFederalWithholding: dollars(9_999),
     });
-    expect(r.statePrepayment?.minimum).toBe(dollars(1_057.03));
+    expect(r.statePrepayment?.minimum).toBe(mfjMinimum() - dollars(200));
   });
 
-  it("is $0 when Utah withholding covers it", () => {
-    const r = run({ spouseStateWithholding: dollars(1_557.03) });
+  it("is $0 when Utah withholding covers it (joint return)", () => {
+    const r = run({ filingStatus: "mfj", spouseStateWithholding: mfjMinimum() });
     expect(r.statePrepayment?.minimum).toBe(0);
+  });
+
+  it("ignores a spouse's Utah withholding on a single return", () => {
+    const r = run({ spouseStateWithholding: dollars(500) });
+    expect(r.statePrepayment?.minimum).toBe(dollars(1_557.03));
   });
 
   it("no Utah prepayment for another state", () => {
