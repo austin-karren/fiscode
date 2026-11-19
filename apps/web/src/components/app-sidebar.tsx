@@ -11,69 +11,43 @@ import {
   SidebarMenuItem,
   SidebarRail,
   SidebarSeparator,
+  useSidebar,
 } from "@fiscode/ui/components/sidebar";
 import { Link, useLocation } from "@tanstack/react-router";
-import {
-  BookOpen,
-  Briefcase,
-  Car,
-  Clock,
-  CloudDownload,
-  Coins,
-  FileSpreadsheet,
-  Gauge,
-  Github,
-  History,
-  Home,
-  Receipt,
-  UserCircle2,
-} from "lucide-react";
+import { BookOpen, Github } from "lucide-react";
+
+import { useRef } from "react";
+
+import { MAIN_ID, NAV_GROUPS, isNavItemActive } from "../lib/nav";
 
 const EXTERNAL_LINKS = [
   { href: "https://docs.fiscode.app", label: "Docs", icon: BookOpen },
   { href: "https://github.com/austin-karren/fiscode", label: "GitHub", icon: Github },
 ] as const;
 
-const NAV_GROUPS = [
-  {
-    label: "Overview",
-    items: [{ to: "/", label: "Dashboard", icon: Gauge, exact: true }],
-  },
-  {
-    label: "Track",
-    items: [
-      { to: "/income", label: "Income", icon: Coins },
-      { to: "/expenses", label: "Expenses", icon: Receipt },
-      { to: "/mileage", label: "Mileage", icon: Car },
-      { to: "/time", label: "Time", icon: Clock },
-    ],
-  },
-  {
-    label: "Configure",
-    items: [
-      { to: "/clients", label: "Clients", icon: Briefcase },
-      { to: "/vehicles", label: "Vehicles", icon: Car },
-      { to: "/home-office", label: "Home office", icon: Home },
-      { to: "/profile", label: "Profile", icon: UserCircle2 },
-    ],
-  },
-  {
-    label: "Reports",
-    items: [
-      { to: "/year-end", label: "Year-end", icon: FileSpreadsheet },
-      { to: "/history", label: "History", icon: History },
-    ],
-  },
-  {
-    label: "Settings",
-    items: [{ to: "/tax-data", label: "Tax data", icon: CloudDownload }],
-  },
-] as const;
-
 export function AppSidebar() {
   const { pathname } = useLocation();
+  const { isMobile, setOpenMobile } = useSidebar();
+  // On a phone the nav is a sheet over the page: picking a destination closes
+  // it, otherwise the new page stays hidden behind it. Focus then goes to the
+  // new page instead of back to the button that opened the sheet.
+  const pickedDestination = useRef(false);
+  const closeSheet = isMobile
+    ? () => {
+        pickedDestination.current = true;
+        setOpenMobile(false);
+      }
+    : undefined;
+  const focusAfterSheet = () => {
+    if (!pickedDestination.current) return true;
+    pickedDestination.current = false;
+    // Focused by hand: handed an element that is not tabbable itself, the
+    // dialog would focus the first control inside it instead.
+    document.getElementById(MAIN_ID)?.focus();
+    return false;
+  };
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" mobileFinalFocus={focusAfterSheet}>
       {/* Match the main app header (h-12) so the separator below this row
           aligns with the one beneath the main header. The wordmark + short
           mark are stacked — "fiscode" sits in normal flow and "fs" overlays
@@ -99,24 +73,28 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarSeparator className="mx-0" />
-      <SidebarContent>
+      {/* The groups scroll when the window is short, in the icon rail too, and
+          show a thin scrollbar so the pinned footer does not read as covering
+          them. */}
+      <SidebarContent
+        role="navigation"
+        aria-label="Main"
+        className="[scrollbar-width:thin]! group-data-[collapsible=icon]:overflow-x-hidden group-data-[collapsible=icon]:overflow-y-auto"
+      >
         {NAV_GROUPS.map((group) => (
           <SidebarGroup key={group.label}>
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => {
-                  const isActive =
-                    "exact" in item && item.exact
-                      ? pathname === item.to
-                      : pathname.startsWith(item.to);
+                  const isActive = isNavItemActive(item, pathname);
                   return (
                     <SidebarMenuItem key={item.to}>
                       <SidebarMenuButton
                         isActive={isActive}
                         tooltip={item.label}
                         render={
-                          <Link to={item.to}>
+                          <Link to={item.to} onClick={closeSheet}>
                             <item.icon />
                             <span>{item.label}</span>
                           </Link>
@@ -134,7 +112,7 @@ export function AppSidebar() {
           icon mode — the links shrink to icon-only via SidebarMenuButton's
           collapsible behavior; the tagline fades out with the wordmark's
           asymmetric timing (out fast on collapse, in late on expand). */}
-      <SidebarFooter className="gap-0">
+      <SidebarFooter className="gap-0 border-t border-sidebar-border">
         <SidebarGroup className="py-1">
           <SidebarGroupLabel>Reference</SidebarGroupLabel>
           <SidebarGroupContent>
