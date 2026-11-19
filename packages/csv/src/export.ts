@@ -1,5 +1,5 @@
 import Papa from "papaparse";
-import { countedExpenseDate } from "@fiscode/core";
+import { countedExpenseDate, isPreStartStartupCost, startupDeductionBetween } from "@fiscode/core";
 import type { Bundle } from "./bundle-types.ts";
 import { CSV_COLUMNS, type CsvRow, type RecordType } from "./schema.ts";
 import { BOM, buildProvenance, EOL } from "./provenance.ts";
@@ -249,7 +249,11 @@ const filterYearly = (bundle: Bundle, year: number): Bundle => {
   };
   // The yearly file is for an accountant, not a backup. Someone who sums its
   // amount column must get the same total the app shows, so deleted rows stay
-  // out, as does the edit log. The full export carries both.
+  // out, as does the edit log. The full export carries both. One exception:
+  // §195 startup costs (paid before the SE start) appear at their full amount in
+  // the year the business begins, while the year's deduction is limited and the
+  // rest amortized; a `#` note above the expenses (`startupNote`) gives both
+  // amounts so the file reconciles with the app.
   const live = <T extends { deletedAt: string | null }>(rows: T[]): T[] =>
     rows.filter((r) => r.deletedAt === null);
   return {
@@ -296,7 +300,12 @@ export const exportBundle = (bundle: Bundle, options: ExportOptions): string => 
     ),
   };
   let out = BOM + buildProvenance(options);
+  const note =
+    options.scope === "yearly" && options.year !== undefined
+      ? startupNote(bundle, options.year)
+      : undefined;
   for (const section of SECTIONS) {
+    if (note && section.recordType === "expense") out += note + EOL;
     const sectionRows = rows.filter((r) => r.record_type === section.recordType).sort(byRowOrder);
     // Deleted rows get a table of their own, after the live one and titled so
     // nobody adds them up. The importer reads it like any other table: the
@@ -353,5 +362,33 @@ export const exportFileName = (
   options.scope === "yearly" && options.year !== undefined
     ? `fiscode-${options.year}-tax-year.csv`
     : `fiscode-full-backup-${today}.csv`;
+
+const dollarsText = (cents: number): string => `$${(cents / 100).toFixed(2)}`;
+
+/**
+ * The yearly file's note on §195 startup costs, or undefined when none is
+ * deducted in `year`. Written as a `#` comment line (the importer skips those),
+ * with no commas so a spreadsheet keeps it in one cell. In the year the business
+ * begins the startup rows are in the file at their full amount; in later years
+ * only the amortization is deducted and no startup row is in the file.
+ */
+const startupNote = (bundle: Bundle, year: number): string | undefined => {
+  const seStart = bundle.profile?.seStartDate;
+  if (!seStart) return undefined;
+  const total = bundle.expenses
+    .filter((e) => isPreStartStartupCost(e, seStart))
+    .reduce((sum, e) => sum + e.amountCents, 0);
+  const deducted = startupDeductionBetween(
+    bundle.expenses,
+    seStart,
+    `${year}-01-01`,
+    `${year}-12-31`,
+  );
+  if (total === 0 || deducted === 0) return undefined;
+  const startYear = seStart.slice(0, 4);
+  return startYear === String(year)
+    ? `# Startup costs (Section 195): the startup rows below total ${dollarsText(total)} paid before the business began on ${seStart}; ${dollarsText(deducted)} of it is deductible in ${year}; the rest is amortized over 180 months (IRC 195(b)).`
+    : `# Startup costs (Section 195): ${dollarsText(deducted)} of the ${dollarsText(total)} paid before the business began on ${seStart} is amortized in ${year} (IRC 195(b)); the startup rows are in the ${startYear} file.`;
+};
 
 export { bundleToRows };

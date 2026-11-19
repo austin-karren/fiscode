@@ -174,3 +174,38 @@ describe("startupDeductionBetween (§195(b) limit and amortization)", () => {
     expect(startupDeductionBetween([startup(300_000)], null, "2025-01-01", "2025-12-31")).toBe(0);
   });
 });
+
+describe("startupDeductionBetween: cumulative rounding (review #65 r2)", () => {
+  it("the 16 calendar years of a $12,000 Mar 2026 start add up to exactly $12,000.00", () => {
+    const rows = [
+      {
+        date: "2025-12-15",
+        deletedAt: null as string | null,
+        startupExpense: true,
+        amountCents: 1_200_000,
+      },
+    ];
+    let sum = 0;
+    for (let y = 2026; y <= 2042; y++) {
+      sum += startupDeductionBetween(rows, "2026-03-02", `${y}-01-01`, `${y}-12-31`);
+    }
+    expect(sum).toBe(1_200_000);
+  });
+
+  it("$10,000 paid, 180 months of $27.78: the years still add up exactly", () => {
+    // first 5,000; remainder 5,000 / 180 = 27.777… a month (never a whole cent).
+    const rows = [
+      {
+        date: "2025-06-01",
+        deletedAt: null as string | null,
+        startupExpense: true,
+        amountCents: 1_000_000,
+      },
+    ];
+    let sum = 0;
+    for (let y = 2025; y <= 2042; y++) {
+      sum += startupDeductionBetween(rows, "2025-07-15", `${y}-01-01`, `${y}-12-31`);
+    }
+    expect(sum).toBe(1_000_000);
+  });
+});

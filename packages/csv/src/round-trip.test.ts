@@ -267,6 +267,36 @@ describe("CSV round-trip", () => {
     ).toEqual(["ex_startup"]);
   });
 
+  it("yearly export notes the §195 amounts so the file reconciles with the app (review #65 r2)", () => {
+    // $12,000 paid 2025-12-15, SE start 2026-03-02: 2026 deducts $5,388.89, 2027 $466.67.
+    const bundle = fullBundle();
+    bundle.profile = { ...bundle.profile!, seStartDate: "2026-03-02" };
+    bundle.expenses = [
+      {
+        ...bundle.expenses[0]!,
+        id: "ex_startup",
+        date: "2025-12-15",
+        amountCents: 1_200_000,
+        startupExpense: true,
+      },
+    ];
+    const y2026 = exportBundle(bundle, { scope: "yearly", year: 2026 });
+    expect(y2026).toContain(
+      "# Startup costs (Section 195): the startup rows below total $12000.00 paid before the business began on 2026-03-02; $5388.89 of it is deductible in 2026; the rest is amortized over 180 months (IRC 195(b)).",
+    );
+    const y2027 = exportBundle(bundle, { scope: "yearly", year: 2027 });
+    expect(y2027).toContain(
+      "# Startup costs (Section 195): $466.67 of the $12000.00 paid before the business began on 2026-03-02 is amortized in 2027 (IRC 195(b)); the startup rows are in the 2026 file.",
+    );
+    // No note where nothing is deducted, or in the full export.
+    expect(exportBundle(bundle, { scope: "yearly", year: 2025 })).not.toContain("Section 195");
+    expect(exportBundle(bundle, { scope: "full" })).not.toContain("Section 195");
+    // The note is a comment: the yearly file still imports, with the startup row.
+    const parsed = parseCsv(y2026);
+    expect(parsed.validationErrors).toEqual([]);
+    expect(parsed.bundle.expenses.map((e) => e.id)).toEqual(["ex_startup"]);
+  });
+
   it("yearly export filters dated records to that year and includes spans that overlap", () => {
     const bundle = fullBundle();
     const csv = exportBundle(bundle, {

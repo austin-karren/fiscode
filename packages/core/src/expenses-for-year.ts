@@ -67,15 +67,25 @@ export const startupDeductionBetween = (
     .reduce((sum, e) => sum + e.amountCents, 0);
   if (total <= 0) return 0;
   const first = Math.max(0, Math.min(total, 500_000 - Math.max(0, total - 5_000_000)));
-  const monthly = (total - first) / 180;
-  const within = (d: string) => d >= from && d <= to;
+  const amortized = total - first;
   const startMonth = Number(seStartDate.slice(0, 4)) * 12 + Number(seStartDate.slice(5, 7)) - 1;
-  let months = 0;
-  for (let k = 0; k < 180; k++) {
-    const counted = k === 0 ? seStartDate : isoFirstOfMonth(startMonth + k);
-    if (within(counted)) months++;
-  }
-  return Math.round((within(seStartDate) ? first : 0) + monthly * months);
+  // Everything deducted through `date`, rounded once. A window takes the difference, so
+  // the windows over the 180 months add up to the total exactly, with no rounding drift.
+  const through = (date: string): number => {
+    if (date < seStartDate) return 0;
+    let months = 0;
+    for (let k = 0; k < 180; k++) {
+      const counted = k === 0 ? seStartDate : isoFirstOfMonth(startMonth + k);
+      if (counted <= date) months++;
+    }
+    return first + Math.round((amortized * months) / 180);
+  };
+  return through(to) - through(dayBeforeIso(from));
+};
+
+const dayBeforeIso = (iso: string): string => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d! - 1)).toISOString().slice(0, 10);
 };
 
 /**

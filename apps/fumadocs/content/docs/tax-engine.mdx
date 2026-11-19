@@ -75,8 +75,12 @@ or business begins."
   month on. Each year gets its months, and each quarterly period gets the months it covers.
 - Example, $12,000 paid before a March 2, 2026 start: $5,000 + 10 months × $38.89 = $5,388.89 in
   2026, then $466.67 a year, ending in February 2041.
-- The year-end packet shows the year's deduction and the total paid on its own line. The yearly CSV
-  carries the startup rows in the year the business begins.
+- The year-end packet shows the year's deduction and the total paid on its own line.
+- The yearly CSV carries the startup rows, at their full amount, in the year the business begins.
+  Above the expenses, a `#` note line gives the full amount and the amount deductible that year.
+  Each later year's file has a note with that year's amortization. So the amount column reconciles
+  with the app.
+- Each year's amount is rounded on the running total, so the years add up to exactly what was paid.
 - A startup-ticked expense paid on or after the SE start is an ordinary expense of its own year.
 
 Not modelled: organizational costs (§248), which have their own $5,000 deduction.
