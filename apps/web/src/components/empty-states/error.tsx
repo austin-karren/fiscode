@@ -9,7 +9,11 @@ import {
 import { Button } from "@fiscode/ui/components/button";
 import { TriangleAlert } from "lucide-react";
 
-export function ErrorEmpty({ error, reset }: { error: Error; reset?: () => void }) {
+// The router hands over whatever was thrown, which need not be an Error.
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : error == null ? "" : String(error);
+
+export function ErrorEmpty({ error, reset }: { error: unknown; reset?: () => void }) {
   return (
     <Empty className="border-destructive/40">
       <EmptyHeader>
@@ -17,7 +21,7 @@ export function ErrorEmpty({ error, reset }: { error: Error; reset?: () => void 
           <TriangleAlert />
         </EmptyMedia>
         <EmptyTitle>Something went wrong</EmptyTitle>
-        <EmptyDescription>{error.message || "An unexpected error occurred."}</EmptyDescription>
+        <EmptyDescription>{messageOf(error) || "An unexpected error occurred."}</EmptyDescription>
       </EmptyHeader>
       {reset ? (
         <EmptyContent>
