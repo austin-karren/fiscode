@@ -125,27 +125,47 @@ const homeOfficePieces = (
     candidates.push({ h, ...window });
   }
   candidates.sort((x, y) => (x.from < y.from ? -1 : x.from > y.from ? 1 : 0));
-  const pieces: HomeOfficePiece[] = [];
-  let simplifiedSoFar = 0;
-  candidates.forEach((c, i) => {
-    const next = candidates.slice(i + 1).find((n) => n.from <= c.to);
-    const to = next ? dayBefore(next.from) : c.to;
-    if (to < c.from) return;
-    const monthsActive = (daysBetweenInclusive(c.from, to) / yearDays) * 12;
+  // Each config's owned days: a later start owns shared days.
+  const owned = candidates
+    .map((c, i) => {
+      const next = candidates.slice(i + 1).find((n) => n.from <= c.to);
+      return { ...c, to: next ? dayBefore(next.from) : c.to };
+    })
+    .filter((c) => c.from <= c.to);
+
+  // Pub 587 (2025), "Part-year use or area changes (for simplified method only)",
+  // https://www.irs.gov/pub/irs-pdf/p587.pdf: "your deduction is limited to the average monthly
+  // allowable square footage. You calculate the average monthly allowable square footage by adding
+  // the amount of allowable square feet you used in each month and dividing the sum by 12. ... you
+  // cannot take more than 300 square feet into account for any 1 month. Additionally, if your
+  // qualified business use was less than 15 days in a month, you must use -0- for that month."
+  // The 15-day test is on the month's business use across the simplified configs (an area change
+  // continues the same use: Pub 587 Example 2). A qualifying month uses the square feet of the
+  // config with the most days in it (a tie goes to the later one), at most 300, credited to it.
+  const simplified = owned.filter((c) => c.h.method === "simplified");
+  const sqftMonths = simplified.map(() => 0);
+  for (let month = 0; month < 12; month++) {
+    const days = simplified.map((c) => daysInMonthWithin(year, month, c.from, c.to));
+    if (days.reduce((sum, d) => sum + d, 0) < 15) continue;
+    let pick = 0;
+    days.forEach((d, i) => {
+      if (d > 0 && d >= days[pick]!) pick = i;
+    });
+    sqftMonths[pick]! += Math.min(
+      simplified[pick]!.h.officeSqft ?? 0,
+      cfg.homeOffice.simplifiedMaxSqft,
+    );
+  }
+
+  const pieces: HomeOfficePiece[] = owned.map((c) => {
     if (c.h.method === "simplified") {
-      const sqft = Math.min(c.h.officeSqft ?? 0, cfg.homeOffice.simplifiedMaxSqft);
-      const annual = sqft * cfg.homeOffice.simplifiedRatePerSqft;
-      // The $1,500 cap holds across simplified configs.
-      const amount = Math.min(
-        cfg.homeOffice.simplifiedCap - simplifiedSoFar,
-        Math.round((annual * monthsActive) / 12),
-      );
-      simplifiedSoFar += amount;
-      pieces.push({ method: "simplified", amount: cents(amount), from: c.from, to });
-    } else {
-      const amount = actualHomeOfficeExpenses({ ...c.h, monthsActive }).amount;
-      pieces.push({ method: "actual", amount, from: c.from, to });
+      const sqftMonthsCredited = sqftMonths[simplified.indexOf(c)]!;
+      const amount = Math.round((sqftMonthsCredited * cfg.homeOffice.simplifiedRatePerSqft) / 12);
+      return { method: "simplified", amount: cents(amount), from: c.from, to: c.to };
     }
+    const monthsActive = (daysBetweenInclusive(c.from, c.to) / yearDays) * 12;
+    const amount = actualHomeOfficeExpenses({ ...c.h, monthsActive }).amount;
+    return { method: "actual", amount, from: c.from, to: c.to };
   });
   return { pieces, areaRejected };
 };
@@ -231,6 +251,16 @@ const limitedHomeOffice = (
     else carryover += c.disallowed;
   }
   return { allowed: cents(allowed), lost: cents(lost), carryover: cents(carryover), areaRejected };
+};
+
+// Days of [from, to] that fall in `month` (0 = January) of `year`.
+const daysInMonthWithin = (year: number, month: number, from: string, to: string): number => {
+  const mm = String(month + 1).padStart(2, "0");
+  const first = `${year}-${mm}-01`;
+  const last = new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10);
+  const start = from > first ? from : first;
+  const end = to < last ? to : last;
+  return start > end ? 0 : daysBetweenInclusive(start, end);
 };
 
 // The ISO date before `iso` (UTC, so no timezone moves the day).
