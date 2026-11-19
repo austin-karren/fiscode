@@ -24,7 +24,8 @@ const rowForArchived = {
 };
 const rowForLive = { ...rowForArchived, id: "inc_2", date: "2026-03-01", clientId: "c_live" };
 
-const { update, softDelete, revertTo, invalidate } = vi.hoisted(() => ({
+const { create, update, softDelete, revertTo, invalidate } = vi.hoisted(() => ({
+  create: vi.fn(async () => undefined),
   update: vi.fn(async () => undefined),
   softDelete: vi.fn(async () => true),
   revertTo: vi.fn(async () => undefined),
@@ -34,7 +35,7 @@ const { update, softDelete, revertTo, invalidate } = vi.hoisted(() => ({
 // The database is SQLite over OPFS and the router needs a browser history;
 // neither exists in jsdom. Both are replaced at the package boundary.
 vi.mock("@fiscode/db", () => ({
-  incomeRepo: { list: async () => [], create: vi.fn(), update, softDelete, revertTo },
+  incomeRepo: { list: async () => [], create, update, softDelete, revertTo },
   clientRepo: { list: async () => [], listIncludingDeleted: async () => [] },
   profileRepo: { get: async () => null },
 }));
@@ -126,5 +127,47 @@ describe("income row delete", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(revertTo).toHaveBeenCalledWith("inc_2", rowForLive));
+  });
+});
+
+describe("adding a run of entries", () => {
+  const addCard = () => screen.getByText("Add entry").closest("[data-slot=card]") as HTMLElement;
+
+  it("Duplicate fills the add form with that row, and focuses its date", async () => {
+    renderPage();
+    fireEvent.click(within(rowFor("Mar 1, 2026")).getByRole("button", { name: "Duplicate" }));
+
+    const card = within(addCard());
+    expect(card.getByLabelText("Amount")).toHaveValue("1200.00");
+    expect(card.getByLabelText("Description")).toHaveValue("Demo consulting");
+    expect(card.getByRole("combobox", { name: "Client" })).toHaveTextContent("Demo Live Co");
+    expect(card.getByLabelText("Date")).toHaveTextContent("Mar 1, 2026");
+    await waitFor(() => expect(card.getByLabelText("Date")).toHaveFocus());
+  });
+
+  it("Duplicate leaves out a client that has been archived", () => {
+    renderPage();
+    fireEvent.click(within(rowFor("Jan 15, 2026")).getByRole("button", { name: "Duplicate" }));
+    expect(within(addCard()).getByRole("combobox", { name: "Client" })).not.toHaveTextContent(
+      "Demo Archived Co",
+    );
+  });
+
+  it("after Add, keeps the date, client and kind, clears the rest, and focuses Amount", async () => {
+    renderPage();
+    fireEvent.click(within(rowFor("Mar 1, 2026")).getByRole("button", { name: "Duplicate" }));
+    fireEvent.click(within(addCard()).getByRole("button", { name: "Add" }));
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ date: "2026-03-01", clientId: "c_live", amountCents: 120000 }),
+    );
+    const card = within(addCard());
+    await waitFor(() => expect(card.getByLabelText("Amount")).toHaveValue(""));
+    expect(card.getByLabelText("Description")).toHaveValue("");
+    expect(card.getByLabelText("Date")).toHaveTextContent("Mar 1, 2026");
+    expect(card.getByRole("combobox", { name: "Client" })).toHaveTextContent("Demo Live Co");
+    expect(card.getByRole("combobox", { name: "Kind" })).toHaveTextContent("Consulting");
+    await waitFor(() => expect(card.getByLabelText("Amount")).toHaveFocus());
   });
 });

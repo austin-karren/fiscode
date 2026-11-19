@@ -5,7 +5,21 @@ import { expectNoRawValues } from "../test/raw-values";
 
 // The database is SQLite over OPFS and the router needs a browser history;
 // neither exists in jsdom. Both are replaced at the package boundary.
-vi.mock("@fiscode/db", () => ({ buildBundle: async () => ({}) }));
+// `db.bundle` stands in for buildBundle, which leaves archived rows out; the
+// repos' listIncludingDeleted keep them, as the real ones do.
+const { db } = vi.hoisted(() => ({
+  db: {
+    bundle: {} as Record<string, unknown>,
+    clients: [] as unknown[],
+    vehicles: [] as unknown[],
+  },
+}));
+
+vi.mock("@fiscode/db", () => ({
+  buildBundle: async () => db.bundle,
+  clientRepo: { listIncludingDeleted: async () => db.clients },
+  vehicleRepo: { listIncludingDeleted: async () => db.vehicles },
+}));
 
 const loaderData = {
   profile: { filingStatus: "single", state: "UT" },
@@ -31,6 +45,44 @@ const loaderData = {
     excludedBeforeSeStart: { income: 0, expense: 0, mileage: 0 },
   },
   totalsByCategory: { software_subs: 8950 },
+  names: {
+    clients: [{ id: "c_demo", name: "Demo Client Co" }],
+    vehicles: [{ id: "v_demo", year: 2020, make: "Demo", model: "Wagon" }],
+  },
+  lists: {
+    income: [
+      {
+        id: "i1",
+        date: "2026-03-02",
+        clientId: "c_demo",
+        kind: "consulting",
+        description: "Demo engagement",
+        amountCents: 100_000,
+      },
+      {
+        id: "i2",
+        date: "2026-04-01",
+        clientId: null,
+        kind: "bonus",
+        description: null,
+        amountCents: 50_000,
+      },
+    ],
+    clientTotals: [
+      { clientId: "c_demo", amountCents: 100_000 },
+      { clientId: null, amountCents: 50_000 },
+    ],
+    mileage: [
+      {
+        id: "m1",
+        date: "2026-07-15",
+        vehicleId: "v_demo",
+        purpose: "Demo client visit",
+        businessMiles: 40,
+        ratePerMile: 0.76,
+      },
+    ],
+  },
 };
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
@@ -42,6 +94,8 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
     </a>
   ),
 }));
+
+import { exampleBundle } from "@fiscode/csv";
 
 import { Route } from "./year-end";
 
@@ -108,6 +162,27 @@ describe("year-end packet", () => {
     }
   });
 
+  it("lists 1099 income per client, every income row, and the mileage log", () => {
+    render(<YearEndPage />);
+    const card = (title: string) =>
+      screen.getByRole("heading", { name: title }).closest("[data-slot=card]") as HTMLElement;
+
+    const byClient = card("1099 income by client");
+    expect(byClient).toHaveTextContent("Demo Client Co$1,000.00");
+    expect(byClient).toHaveTextContent("No client$500.00");
+    expect(byClient).toHaveTextContent("Total 1099 income$1,500.00");
+
+    const income = card("1099 income");
+    expect(income).toHaveTextContent("Mar 2, 2026Demo Client CoConsultingDemo engagement$1,000.00");
+    expect(income).toHaveTextContent("Apr 1, 2026No clientBonus—$500.00");
+
+    const log = card("Mileage log");
+    expect(log).toHaveTextContent("Jul 15, 20262020 Demo WagonDemo client visit40$0.760/mi");
+    expect(log).toHaveTextContent("Total ($0.00 deduction)40");
+
+    for (const c of [byClient, income, log]) expectNoRawValues(c);
+  });
+
   it("tells the reader to confirm tax figures and links to Tax data, with no developer copy", () => {
     render(<YearEndPage />);
     expect(
@@ -116,5 +191,20 @@ describe("year-end packet", () => {
     expect(screen.getByRole("link", { name: "Tax data" })).toHaveAttribute("href", "/tax-data");
     expect(document.body).not.toHaveTextContent(/todo: verify/i);
     expect(document.body).not.toHaveTextContent(/tax package source/i);
+  });
+});
+
+describe("year-end loader", () => {
+  it("names an archived client and vehicle in the lists, not 'Unknown'", async () => {
+    const example = exampleBundle();
+    const [archivedClient, ...liveClients] = example.clients;
+    const ARCHIVED = "2026-10-01T00:00:00.000Z";
+    db.bundle = { ...example, clients: liveClients, vehicles: [] };
+    db.clients = [{ ...archivedClient!, deletedAt: ARCHIVED }, ...liveClients];
+    db.vehicles = example.vehicles.map((v) => ({ ...v, deletedAt: ARCHIVED }));
+
+    const loader = Route.options.loader as unknown as () => Promise<{ names: unknown }>;
+    const data = await loader();
+    expect(data.names).toEqual({ clients: db.clients, vehicles: db.vehicles });
   });
 });

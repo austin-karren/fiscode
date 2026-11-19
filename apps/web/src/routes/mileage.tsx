@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
@@ -13,7 +14,7 @@ import { tripMiles } from "../lib/field-schemas";
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
-import { DatePicker, dateToIso } from "../components/forms/date-picker";
+import { DatePicker, dateToIso, isoToDate } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { NoDataEmpty } from "../components/empty-states/no-data";
@@ -51,13 +52,17 @@ function MileagePage() {
   const vehicles = allVehicles.filter((v) => !v.deletedAt);
 
   const today = useToday();
+  const empty = {
+    date: today as Date | undefined,
+    miles: "",
+    vehicleId: "",
+    purpose: "",
+  };
+  // The add card, and its first value field: focus targets after Add and Duplicate.
+  const addCard = useRef<HTMLDivElement>(null);
+  const firstValue = useRef<HTMLInputElement>(null);
   const form = useForm({
-    defaultValues: {
-      date: today as Date | undefined,
-      miles: "",
-      vehicleId: "",
-      purpose: "",
-    },
+    defaultValues: empty,
     validators: { onSubmit: mileageSchema },
     onSubmit: async ({ value, formApi }) => {
       const parsed = mileageSchema.parse(value);
@@ -70,10 +75,33 @@ function MileagePage() {
         deletedAt: null,
       });
       toast.success("Mileage logged.");
-      formApi.reset();
+      // A run of trips shares the date and the vehicle: keep those, clear the rest.
+      formApi.reset(
+        { ...empty, date: value.date, vehicleId: value.vehicleId },
+        { keepDefaultValues: true },
+      );
       router.invalidate();
+      firstValue.current?.focus();
     },
   });
+
+  // Fills the add form with a row's values, and puts focus on its date, the
+  // value a copy most often changes.
+  const duplicate = (row: (typeof mileage)[number]) => {
+    form.reset(
+      {
+        date: isoToDate(row.date) ?? today,
+        miles: String(row.businessMiles),
+        // An archived vehicle cannot be picked for a new trip.
+        vehicleId: vehicles.some((v) => v.id === row.vehicleId) ? (row.vehicleId ?? "") : "",
+        purpose: row.purpose ?? "",
+      },
+      { keepDefaultValues: true },
+    );
+    // The first form control is the date field's trigger; FormControl gives each
+    // control an id ending in "-form-item". Focus also scrolls it into view.
+    addCard.current?.querySelector<HTMLElement>('[id$="-form-item"]')?.focus();
+  };
 
   const remove = (row: (typeof mileage)[number]) =>
     softDeleteWithUndo({
@@ -102,7 +130,7 @@ function MileagePage() {
           void form.handleSubmit();
         }}
       >
-        <Card>
+        <Card ref={addCard}>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
               Log mileage
@@ -132,6 +160,7 @@ function MileagePage() {
                   </LabelWithTooltip>
                   <FormControl>
                     <Input
+                      ref={firstValue}
                       type="text"
                       inputMode="numeric"
                       value={field.state.value}
@@ -239,6 +268,9 @@ function MileagePage() {
                         vehicles={allVehicles}
                         onSaved={() => router.invalidate()}
                       />
+                      <Button variant="ghost" size="sm" onClick={() => duplicate(m)}>
+                        Duplicate
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => remove(m)}>
                         Delete
                       </Button>
