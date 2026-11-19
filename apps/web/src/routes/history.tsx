@@ -13,7 +13,7 @@ import {
 } from "@fiscode/ui/components/alert-dialog";
 import { Button } from "@fiscode/ui/components/button";
 import { History as HistoryIcon } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { NoDataEmpty } from "../components/empty-states/no-data";
@@ -33,6 +33,7 @@ import {
 import { planRestore, type RestorePlan } from "../lib/history-restore";
 
 const PAGE_SIZE = 100;
+const LIST_ID = "history-list";
 
 export const Route = createFileRoute("/history")({
   loader: async () => {
@@ -92,10 +93,12 @@ function HistoryPage() {
         />
       ) : (
         <>
-          <div className="flex flex-wrap items-end gap-3">
-            <Filter label="Record" value={kind} onValueChange={setKind} items={kindItems} />
-            <Filter label="Action" value={action} onValueChange={setAction} items={actionItems} />
-            <p className="ml-auto text-sm text-muted-foreground" aria-live="polite">
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-end gap-3">
+              <Filter label="Record" value={kind} onValueChange={setKind} items={kindItems} />
+              <Filter label="Action" value={action} onValueChange={setAction} items={actionItems} />
+            </div>
+            <p className="text-sm text-muted-foreground" aria-live="polite">
               {matching.length === entries.length
                 ? `${entries.length} ${entries.length === 1 ? "entry" : "entries"}`
                 : `${matching.length} of ${entries.length} entries`}
@@ -107,7 +110,13 @@ function HistoryPage() {
               No entries match these filters.
             </p>
           ) : (
-            <ul aria-label="History" className="rounded-md border border-border text-sm">
+            // Focus lands here after a restore: its newest entry is the restore.
+            <ul
+              id={LIST_ID}
+              tabIndex={-1}
+              aria-label="History"
+              className="rounded-md border border-border text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
               {visible.map(({ entry, row }) => (
                 <HistoryItem
                   key={entry.id}
@@ -162,8 +171,9 @@ function Filter({
   );
 }
 
-// One entry. Wide: when | what | Restore on one line. Narrow: what and
-// Restore on the first line, when under it; nothing scrolls sideways.
+// One entry. Wide: when | what | Restore on one line, Details under what.
+// Narrow: what and Restore on the first line, then when, then Details;
+// nothing scrolls sideways.
 function HistoryItem({
   entry,
   plan,
@@ -177,11 +187,11 @@ function HistoryItem({
     <li className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 border-b border-border/40 px-3 py-2 last:border-b-0 md:grid-cols-[11rem_minmax(0,1fr)_auto]">
       <time
         dateTime={entry.at.toISOString()}
-        className="order-3 col-span-2 text-xs text-muted-foreground tabular-nums md:order-none md:col-span-1 md:pt-0.5 md:text-sm"
+        className="col-span-2 row-start-2 text-xs text-muted-foreground tabular-nums md:col-span-1 md:col-start-1 md:row-start-1 md:pt-0.5 md:text-sm"
       >
         {formatHistoryTime(entry.at)}
       </time>
-      <div className="min-w-0">
+      <div className="col-start-1 row-start-1 min-w-0 md:col-start-2">
         <p className="font-medium wrap-break-word">{entry.headline}</p>
         {entry.changes.length > 0 ? (
           <ul className="mt-0.5 text-muted-foreground">
@@ -196,17 +206,17 @@ function HistoryItem({
         ) : entry.facts.length > 0 ? (
           <p className="mt-0.5 text-muted-foreground wrap-break-word">{entry.facts.join(" · ")}</p>
         ) : null}
-        <details className="mt-1 text-xs text-muted-foreground">
-          <summary className="w-fit cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
-            Details
-          </summary>
-          <p className="mt-1 break-all">
-            {entry.kindLabel} record <span className="font-mono">{entry.recordId}</span>, entry{" "}
-            <span className="font-mono">{entry.id}</span>
-          </p>
-        </details>
       </div>
-      <div className="justify-self-end">
+      <details className="col-span-2 row-start-3 text-xs text-muted-foreground md:col-span-1 md:col-start-2 md:row-start-2">
+        <summary className="w-fit cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+          Details
+        </summary>
+        <p className="mt-1 break-all">
+          {entry.kindLabel} record <span className="font-mono">{entry.recordId}</span>, entry{" "}
+          <span className="font-mono">{entry.id}</span>
+        </p>
+      </details>
+      <div className="col-start-2 row-start-1 justify-self-end md:col-start-3">
         {plan ? <RestoreDialog entry={entry} plan={plan} onChange={onChange} /> : null}
       </div>
     </li>
@@ -224,6 +234,9 @@ function RestoreDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // A done restore removes this button (the entry has nothing left to
+  // restore), so focus goes to the list instead of back to it.
+  const restored = useRef(false);
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger
@@ -233,7 +246,18 @@ function RestoreDialog({
           </Button>
         }
       />
-      <AlertDialogContent>
+      <AlertDialogContent
+        finalFocus={() => {
+          if (!restored.current) return true;
+          restored.current = false;
+          // Focused by hand: handed an element that is not tabbable itself,
+          // the dialog would focus the first control inside it instead.
+          const list = document.getElementById(LIST_ID);
+          if (!list) return true;
+          list.focus();
+          return false;
+        }}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{plan.title}</AlertDialogTitle>
           <AlertDialogDescription>{plan.description}</AlertDialogDescription>
@@ -247,6 +271,7 @@ function RestoreDialog({
               setBusy(true);
               try {
                 await plan.run(onChange);
+                restored.current = true;
                 setOpen(false);
               } catch (err) {
                 console.error(err);

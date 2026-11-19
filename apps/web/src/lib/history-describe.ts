@@ -278,6 +278,8 @@ const KINDS: Record<string, KindSpec> = {
 };
 
 const IMPORT_ENTITY = "__import_snapshot";
+/** The import reason a whole-state restore from History is stored under. */
+export const HISTORY_RESTORE_REASON = "history-restore";
 export const IMPORT_KIND = "import";
 
 const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
@@ -373,15 +375,20 @@ export function describeHistoryRow(row: HistoryRow, names: NameLookup): HistoryE
 
   if (row.entity === IMPORT_ENTITY) {
     const added = countBundleRows(after) - countBundleRows(before);
+    // A whole-state restore from this screen, or the Undo of one. The two
+    // are stored the same way, so the words fit both.
+    const fromHistory = row.entityId === HISTORY_RESTORE_REASON;
     const headline =
       row.entityId === "import-append"
         ? `Import added ${rows(Math.max(added, 0))}`
-        : `Import replaced everything (${rows(countBundleRows(after))})`;
+        : fromHistory
+          ? `Went back to an earlier state from History (${rows(countBundleRows(after))})`
+          : `Import replaced everything (${rows(countBundleRows(after))})`;
     return {
       ...base,
       kind: IMPORT_KIND,
       kindLabel: HISTORY_KIND_LABELS[IMPORT_KIND]!,
-      action: "imported",
+      action: fromHistory ? "restored" : "imported",
       headline,
       facts: row.entityId === "import-append" ? [] : [`${rows(countBundleRows(before))} before`],
       summary: headline,

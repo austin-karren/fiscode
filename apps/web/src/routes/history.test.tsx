@@ -14,6 +14,10 @@ const db = vi.hoisted(() => {
     expenseRepo: repo(),
     clientRepo: repo(),
     other: repo(),
+    profileRepo: {
+      get: vi.fn(),
+      revertTo: vi.fn(async (snapshot: unknown) => snapshot),
+    },
     importBundle: vi.fn(async () => {}),
     invalidate: vi.fn(),
   };
@@ -34,6 +38,7 @@ vi.mock("@fiscode/db", () => ({
   mileageRepo: db.other,
   homeOfficeRepo: db.other,
   retirementRepo: db.other,
+  profileRepo: db.profileRepo,
 }));
 
 let loaderData: unknown;
@@ -204,7 +209,7 @@ describe("history screen", () => {
     );
     expect(restoreButton("Added expense: Demo software $89.50")).toBeNull();
     expect(restoreButton("Edited expense: Demo software $99.00")).not.toBeNull();
-    // The profile repo cannot revert.
+    // There is no profile now, so there is nothing to put the old one onto.
     expect(restoreButton("Edited profile")).toBeNull();
   });
 
@@ -301,6 +306,71 @@ describe("restore from history", () => {
     await waitFor(() => expect(db.expenseRepo.softDelete).toHaveBeenCalledWith("expense_1"));
   });
 
+  it("does not offer to go back to before an import when that is the state now", async () => {
+    const before = { ...emptyBundle, expenses: [expenseAt(8950)] };
+    const after = { ...emptyBundle, expenses: [expenseAt(9900)] };
+    await show([historyRow("__import_snapshot", "revert", before, after, "import-restore")], {
+      // Same rows; only updatedAt has moved.
+      expenses: [expenseAt(8950, { updatedAt: "2026-11-19T00:00:00.000Z" })],
+    });
+    expect(restoreButton("Import replaced everything (1 row)")).toBeNull();
+  });
+
+  it("restores an earlier profile, and Undo puts the current one back", async () => {
+    const profile = {
+      id: "profile",
+      filingStatus: "single",
+      state: "UT",
+      seStartDate: "2026-11-02",
+      dependents: 0,
+      tracksRoth: false,
+      usesRetirement: false,
+      quarterlyMethod: "annualized",
+      prepLeadDays: 14,
+      ...stamps,
+    };
+    const edited = { ...profile, filingStatus: "mfj" };
+    await show([historyRow("profile", "update", profile, edited, "profile")], {
+      profile: edited,
+    });
+
+    const dialog = await confirmRestore("Edited profile");
+    expect(dialog).toHaveTextContent(
+      "This puts the profile back to filing status Single. The current values are replaced.",
+    );
+    await waitFor(() => expect(db.profileRepo.revertTo).toHaveBeenCalledWith(profile));
+    expect(await screen.findByText("The profile restored.")).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(db.profileRepo.revertTo).toHaveBeenLastCalledWith(edited));
+  });
+
+  it("moves focus to the list after a restore, since its button is gone", async () => {
+    await show([historyRow("expense", "update", expenseAt(8950), expenseAt(9900), "expense_1")], {
+      expenses: [expenseAt(9900)],
+    });
+
+    await confirmRestore("Edited expense: Demo software $99.00");
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await waitFor(() => expect(screen.getByRole("list", { name: "History" })).toHaveFocus());
+  });
+
+  it("gives focus back to Restore when the dialog is cancelled", async () => {
+    await show([historyRow("expense", "update", expenseAt(8950), expenseAt(9900), "expense_1")], {
+      expenses: [expenseAt(9900)],
+    });
+    const button = restoreButton("Edited expense: Demo software $99.00")!;
+    button.focus();
+    fireEvent.click(button);
+    const dialog = await screen.findByRole("alertdialog");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await waitFor(() => expect(button).toHaveFocus());
+  });
+
   it("goes back to before an import, and Undo returns to the state it left", async () => {
     const before = { ...emptyBundle, expenses: [expenseAt(8950)] };
     const after = { ...emptyBundle, expenses: [expenseAt(9900)], clients: [client] };
@@ -313,11 +383,11 @@ describe("restore from history", () => {
     );
 
     await waitFor(() => expect(db.importBundle).toHaveBeenCalledTimes(1));
-    expect(db.importBundle).toHaveBeenCalledWith(before, "import-restore");
+    expect(db.importBundle).toHaveBeenCalledWith(before, "history-restore");
 
     fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
     await waitFor(() => expect(db.importBundle).toHaveBeenCalledTimes(2));
-    expect(db.importBundle).toHaveBeenLastCalledWith({ ...emptyBundle, ...now }, "import-restore");
+    expect(db.importBundle).toHaveBeenLastCalledWith({ ...emptyBundle, ...now }, "history-restore");
   });
 
   it("says so and changes nothing more when a restore fails", async () => {

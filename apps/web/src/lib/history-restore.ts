@@ -8,6 +8,7 @@ import {
   importBundle,
   incomeRepo,
   mileageRepo,
+  profileRepo,
   retirementRepo,
   spouseRepo,
   timeRepo,
@@ -19,6 +20,7 @@ import { toast } from "sonner";
 
 import {
   countBundleRows,
+  HISTORY_RESTORE_REASON,
   parseSnapshot,
   snapshotChanges,
   snapshotNoun,
@@ -39,9 +41,15 @@ type AnyCrudRepo = {
   revertTo: (id: string, snapshot: any) => Promise<unknown>;
 };
 
-// History's `entity` is the table name. The profile is not here: its repo has
-// no `revertTo`, so a profile edit can be read but not restored.
+// History's `entity` is the table name. The profile is a single row with its
+// own `revertTo(snapshot)`; it is never deleted, so nothing calls softDelete.
+const profileAsCrud: AnyCrudRepo = {
+  revertTo: (_id, snapshot) => profileRepo.revertTo(snapshot),
+  softDelete: async () => false,
+};
+
 const REPOS: Record<string, AnyCrudRepo> = {
+  profile: profileAsCrud,
   client: clientRepo,
   entity: entityRepo,
   spouse: spouseRepo,
@@ -73,6 +81,7 @@ export const currentRowFor = (
   entity: string,
   id: string,
 ): StoredRow | undefined => {
+  if (entity === "profile") return bundle.profile as StoredRow | undefined;
   const key = BUNDLE_KEY[entity];
   if (!key) return undefined;
   return (bundle[key] as unknown as StoredRow[]).find((r) => r.id === id);
@@ -98,6 +107,8 @@ export type RestorePlan = {
   run: (onChange: () => void) => Promise<void>;
 };
 
+const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
 const sentenceList = (parts: string[]): string =>
   parts.length <= 1
     ? (parts[0] ?? "")
@@ -116,7 +127,9 @@ export function planRestore(
   const before = parseSnapshot(row.beforeJson);
   if (!before) return undefined;
 
-  if (row.entity === "__import_snapshot") return planImportRestore(before);
+  if (row.entity === "__import_snapshot") {
+    return sameState(before, bundle) ? undefined : planImportRestore(before);
+  }
 
   const repo = REPOS[row.entity];
   // Restoring a deleted snapshot would delete the record; that is done on the
@@ -125,6 +138,8 @@ export function planRestore(
   const snapshot = before as StoredRow;
   const current = currentRowFor(bundle, row.entity, row.entityId);
   if (sameRow(current, snapshot)) return undefined;
+  // With no profile there is nothing to put back onto; setup makes one.
+  if (row.entity === "profile" && !current) return undefined;
 
   const noun = snapshotNoun(row.entity);
   const name = snapshotTitle(row.entity, snapshot, names);
@@ -163,12 +178,28 @@ export function planRestore(
         repo,
         snapshot,
         current,
-        message: gone ? `${name} is back.` : `${name} restored.`,
+        message: capitalize(gone ? `${name} is back.` : `${name} restored.`),
         undoneMessage: "Restore undone.",
         onChange,
       }),
   };
 }
+
+const STATE_TABLES = Object.values(BUNDLE_KEY);
+
+/** Whether the data now is what a stored whole-state snapshot holds. */
+const sameState = (snapshot: Snapshot, bundle: Bundle): boolean => {
+  const profileNow = bundle.profile as Snapshot | undefined;
+  const profileThen = (snapshot.profile ?? undefined) as Snapshot | undefined;
+  if (!sameRow(profileNow, profileThen)) return false;
+  return STATE_TABLES.every((key) => {
+    const now = bundle[key] as unknown as StoredRow[];
+    const then = Array.isArray(snapshot[key]) ? (snapshot[key] as StoredRow[]) : [];
+    if (now.length !== then.length) return false;
+    const thenById = new Map(then.map((r) => [r.id, r]));
+    return now.every((r) => sameRow(r, thenById.get(r.id)));
+  });
+};
 
 function planImportRestore(before: Record<string, unknown>): RestorePlan {
   const count = countBundleRows(before);
@@ -181,14 +212,14 @@ function planImportRestore(before: Record<string, unknown>): RestorePlan {
     run: async (onChange) => {
       // Taken first, so Undo can put today's state back.
       const current = await buildBundle({ includeDeleted: true });
-      await importBundle({ ...emptyBundle(), ...before, history: [] }, "import-restore");
+      await importBundle({ ...emptyBundle(), ...before, history: [] }, HISTORY_RESTORE_REASON);
       onChange();
       toast("Back to before the import.", {
         duration: 8000,
         action: {
           label: "Undo",
           onClick: async () => {
-            await importBundle({ ...current, history: [] }, "import-restore");
+            await importBundle({ ...current, history: [] }, HISTORY_RESTORE_REASON);
             onChange();
             toast.success("Restore undone.");
           },

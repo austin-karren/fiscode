@@ -237,6 +237,12 @@ describe("describeHistoryRow", () => {
       "Import replaced everything (5 rows)",
     ],
     [
+      "a whole-state restore from History, or its Undo",
+      row("__import_snapshot", "revert", bundle([expense]), bundle([]), "history-restore"),
+      "restored",
+      "Went back to an earlier state from History (3 rows)",
+    ],
+    [
       "an overwrite import under its old name",
       row("__import_snapshot", "revert", bundle([]), bundle([expense]), "import-overwrite"),
       "imported",
