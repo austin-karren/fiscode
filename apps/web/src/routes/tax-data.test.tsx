@@ -17,7 +17,7 @@ const statuses = [
     year: 2026,
     source: "remote",
     schemaVersion: "1",
-    remoteSource: "fiscode-bundled 2026",
+    remoteSource: "fiscode 2026",
     sourceUrl: "/tax-data/v1/2026.json",
     fetchedAt: "2026-11-18T16:00:00.000Z",
     ageMs: 0,
@@ -55,7 +55,7 @@ describe("tax data cards", () => {
     render(<TaxDataPage />);
     const c = within(card(2026));
     expect(c.getByText("Downloaded")).toBeInTheDocument();
-    expect(c.getByText("fiscode-bundled 2026")).toBeInTheDocument();
+    expect(c.getByText("fiscode 2026")).toBeInTheDocument();
     expect(c.queryByText("Remote")).not.toBeInTheDocument();
   });
 
@@ -70,5 +70,11 @@ describe("tax data cards", () => {
     render(<TaxDataPage />);
     expect(card(2026)).toHaveTextContent(/Nov 18, 2026, \d{1,2}:00 (AM|PM)/);
     for (const year of [2026, 2025]) expectNoRawValues(card(year));
+  });
+
+  it("uses one term for each source: downloaded, or built into the app", () => {
+    render(<TaxDataPage />);
+    expect(document.body).not.toHaveTextContent(/bundled/i);
+    expect(document.body).toHaveTextContent("the figures built into the app are used");
   });
 });

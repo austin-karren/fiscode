@@ -71,7 +71,7 @@ function TaxDataPage() {
   return (
     <Page
       title="Tax data"
-      description="Per-year IRS / SSA figures used by the estimate engine. Synced from a hosted mirror; falls back to bundled values when the mirror is unreachable."
+      description="Per-year IRS / SSA figures used by the estimate engine. Downloaded from a hosted mirror; until a year is downloaded, the figures built into the app are used."
     >
       <div className="flex justify-end">
         <Button
