@@ -221,6 +221,8 @@ export type ImportResult = {
   bundle: Bundle;
   provenance: Partial<Provenance>;
   validationErrors: ImportError[];
+  /** How many header rows (rows starting with `record_type`) the file has. */
+  tables: number;
 };
 
 export type ImportError = {
@@ -337,6 +339,7 @@ export const parseCsv = (raw: string): ImportResult => {
     return {
       bundle: emptyBundle(),
       provenance,
+      tables: 0,
       validationErrors: [
         {
           rowIndex: -1,
@@ -355,13 +358,17 @@ export const parseCsv = (raw: string): ImportResult => {
   const validationErrors: ImportResult["validationErrors"] = [];
   const validated: CsvRow[] = [];
   let header: string[] | undefined;
+  let tables = 0;
   let rowIndex = -1;
   let profileLine = 0;
+  // Spreadsheet row of each id seen so far, per record type.
+  const seenIds = new Map<string, number>();
   all.forEach((row, index) => {
     if (isBlank(row) || isComment(row)) return;
     // Header names are matched without regard to case or outer spaces.
     if (row[0]!.trim().toLowerCase() === "record_type") {
       header = row.map((name) => name.trim().toLowerCase());
+      tables++;
       return;
     }
     rowIndex++;
@@ -418,6 +425,20 @@ export const parseCsv = (raw: string): ImportResult => {
     }
     const result = csvRowSchema.safeParse(flat);
     if (result.success) {
+      // An id is the row's identity. Two rows of one type sharing an id cannot
+      // both be stored: a restore would fail at the database and an append
+      // would keep one and drop the other without a word. Refuse it here,
+      // where both row numbers are known.
+      const idKey = `${result.data.record_type}\u0000${result.data.id}`;
+      const firstLine = seenIds.get(idKey);
+      if (firstLine !== undefined) {
+        validationErrors.push({
+          ...where,
+          message: `id: "${result.data.id}" is also used on row ${firstLine}. Each ${result.data.record_type} row needs its own id`,
+        });
+        return;
+      }
+      seenIds.set(idKey, index + 1);
       if (result.data.record_type === "profile") profileLine = index + 1;
       validated.push(result.data);
     } else {
@@ -440,7 +461,7 @@ export const parseCsv = (raw: string): ImportResult => {
       message: "profile.se_start_date is required but missing or empty",
     });
   }
-  return { bundle, provenance, validationErrors };
+  return { bundle, provenance, validationErrors, tables };
 };
 
 export { rowToBundle };

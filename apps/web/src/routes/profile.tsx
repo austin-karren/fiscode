@@ -6,7 +6,13 @@ import { FieldCheckbox } from "../components/forms/field-checkbox";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
-import { cents } from "@fiscode/core";
+import {
+  cents,
+  ENTITY_TYPE_LABELS,
+  FILING_STATUS_LABELS,
+  QUARTERLY_METHOD_LABELS,
+  labelOptions,
+} from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -27,23 +33,14 @@ import { EditEntityDialog } from "../components/edit-entity-dialog";
 import { EditSpouseDialog } from "../components/edit-spouse-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
 
-const FILING_OPTIONS = [
-  { value: "single", label: "Single" },
-  { value: "mfj", label: "Married filing jointly" },
-  { value: "mfs", label: "Married filing separately" },
-  { value: "hoh", label: "Head of household" },
-];
+const FILING_OPTIONS = labelOptions(FILING_STATUS_LABELS);
 
-const QUARTERLY_OPTIONS = [
-  { value: "annualized", label: "Annualized installment" },
-  { value: "even", label: "Even split (annual / 4)" },
-];
+const QUARTERLY_OPTIONS = labelOptions(QUARTERLY_METHOD_LABELS);
 
-const ENTITY_OPTIONS = [
-  { value: "sole_prop", label: "Sole proprietor" },
-  { value: "single_member_llc", label: "Single-member LLC" },
-  { value: "s_corp", label: "S corp (coming soon)" },
-];
+// S corp is listed and disabled: the estimate does not handle it yet.
+const ENTITY_OPTIONS = labelOptions(ENTITY_TYPE_LABELS).map((o) =>
+  o.value === "s_corp" ? { ...o, label: `${o.label} (coming soon)` } : o,
+);
 
 const profileSchema = z.object({
   filingStatus: z.enum(["single", "mfj", "mfs", "hoh"], {
