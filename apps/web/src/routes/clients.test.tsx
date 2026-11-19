@@ -21,7 +21,8 @@ const archivedClient = {
 const pointsAt = (clientId: string, n: number) =>
   Array.from({ length: n }, (_, i) => ({ id: `${clientId}_${i}`, clientId }));
 
-const { softDelete, revertTo, invalidate, loaded } = vi.hoisted(() => ({
+const { create, softDelete, revertTo, invalidate, loaded } = vi.hoisted(() => ({
+  create: vi.fn(async () => undefined),
   // A test sets `loaded.clients` to load something other than the default pair.
   loaded: { clients: undefined as unknown[] | undefined },
   softDelete: vi.fn(async () => true),
@@ -35,7 +36,7 @@ vi.mock("@fiscode/db", () => ({
   clientRepo: {
     list: async () => [],
     listIncludingDeleted: async () => [],
-    create: vi.fn(),
+    create,
     update: vi.fn(),
     softDelete,
     revertTo,
@@ -145,5 +146,38 @@ describe("archived clients", () => {
     expect(screen.getByText("No active clients")).toBeInTheDocument();
     expect(screen.getByText(/Show archived/, { selector: "p, div" })).toBeInTheDocument();
     expect(screen.queryByText("No clients yet")).not.toBeInTheDocument();
+  });
+});
+
+describe("client default rate", () => {
+  const submit = (rate: string) => {
+    renderPage();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Demo New Co" } });
+    const input = screen.getByLabelText("Default rate");
+    fireEvent.change(input, { target: { value: rate } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    return input;
+  };
+
+  it("does not save a non-numeric rate as empty", async () => {
+    const input = submit("abc");
+    expect(
+      await screen.findByText("Enter an amount greater than 0, like 12.50"),
+    ).toBeInTheDocument();
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("saves a blank rate as none and a plain rate in cents", async () => {
+    submit("");
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ defaultRateCents: null })),
+    );
+    cleanup();
+    create.mockClear();
+    submit("150");
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ defaultRateCents: 15000 })),
+    );
   });
 });

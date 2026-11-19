@@ -4,7 +4,7 @@ import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { clientRepo, incomeRepo, profileRepo } from "@fiscode/db";
-import { cents, formatUSD, parseUSD } from "@fiscode/core";
+import { cents, formatUSD } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { Coins } from "lucide-react";
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditIncomeDialog } from "../components/edit-income-dialog";
 import { ParentName } from "../components/parent-name";
+import { moneyAmount } from "../lib/field-schemas";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 
 const KIND_OPTIONS = [
@@ -32,7 +33,7 @@ const KIND_OPTIONS = [
 // Per-field schemas fire on blur; the form-level schema fires on submit.
 const fieldSchemas = {
   date: z.date({ message: "Pick a date" }),
-  amount: z.string().refine((v) => parseUSD(v) !== undefined, "Enter a valid amount"),
+  amount: moneyAmount,
   clientId: z.string(),
   kind: z.enum(["recurring", "bonus", "consulting", "other"], {
     message: "Pick an income kind",
@@ -67,7 +68,7 @@ function IncomePage() {
     },
     validators: { onSubmit: incomeFormSchema },
     onSubmit: async ({ value, formApi }) => {
-      const parsed = parseUSD(value.amount)!;
+      const parsed = moneyAmount.parse(value.amount);
       await incomeRepo.create({
         date: dateToIso(value.date!),
         amountCents: parsed,

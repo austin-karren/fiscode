@@ -4,13 +4,13 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
-import { optionalIntegerString, optionalNonNegativeIntegerString } from "@fiscode/core";
 import { mileageRepo, vehicleRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Car } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { optionalMpg, optionalVehicleYear } from "../lib/field-schemas";
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
@@ -26,9 +26,9 @@ import { GLOSSARY } from "../lib/tax-glossary";
 const vehicleSchema = z.object({
   make: z.string().min(1, "Make is required"),
   model: z.string().min(1, "Model is required"),
-  // year is integer; mpg is non-negative integer. Both optional (blank → null).
-  year: optionalIntegerString,
-  mpg: optionalNonNegativeIntegerString,
+  // Both optional: blank is stored as null.
+  year: optionalVehicleYear,
+  mpg: optionalMpg,
 });
 const fs = vehicleSchema.shape;
 
@@ -136,13 +136,14 @@ function VehiclesPage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="year">
+            <TSFormField form={form} name="year" validators={{ onBlur: fs.year }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>Year</FormLabel>
                   <FormControl>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
@@ -152,13 +153,14 @@ function VehiclesPage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="mpg">
+            <TSFormField form={form} name="mpg" validators={{ onBlur: fs.mpg }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>MPG</FormLabel>
                   <FormControl>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
