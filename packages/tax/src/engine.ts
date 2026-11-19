@@ -27,6 +27,12 @@ export const estimateYear = ({ entity, method, input }: EstimateArgs): EstimateR
   const strategy = strategyFor(entity);
   const estimate = strategy.compute(input, cfg);
   const quarterly = strategy.quarterly(input, cfg, method);
-  const safeHarbor = computeSafeHarbor(estimate, input.priorYearTotalTax, input.priorYearAgi, cfg);
+  const safeHarbor = computeSafeHarbor(
+    estimate,
+    input.priorYearTotalTax,
+    input.priorYearAgi,
+    cfg,
+    input.filingStatus,
+  );
   return { estimate, quarterly, safeHarbor };
 };

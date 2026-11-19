@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cents, dollars } from "@fiscode/core";
+import { config2025 } from "./config/2025.ts";
 import { config2026 } from "./config/2026.ts";
 import { soleProprietorStrategy } from "./strategy/sole-prop.ts";
 import type { TaxInput } from "./types.ts";
@@ -78,5 +79,21 @@ describe("2026 estimate, demo filers", () => {
     expect(e.federal.taxableIncome).toBe(dollars(59_740.41));
     expect(e.federal.federalIncomeTax).toBe(dollars(6_672.85));
     expect(e.totalLiability).toBe(dollars(22_921.83));
+  });
+
+  it("2025 single: $60,000 of 1099 income, $5,000 of expenses (post-OBBBA deduction)", () => {
+    const e = soleProprietorStrategy.compute(
+      input({ year: 2025, gross1099: dollars(60_000), deductibleExpenses: dollars(5_000) }),
+      config2025,
+    );
+    // SE tax 7,771.25 and AGI 51,114.37, as in the 2026 single case above
+    // Before QBI   51,114.37 − 15,750 (2025 std deduction, Rev. Proc. 2025-32 §3.01) = 35,364.37
+    // QBI          min(20% × 51,114.37 = 10,222.87, 20% × 35,364.37 = 7,072.87)      =  7,072.87
+    // Taxable      35,364.37 − 7,072.87                                              = 28,291.50
+    // Income tax   11,925 × 10% = 1,192.50; (28,291.50 − 11,925) × 12% = 1,963.98    =  3,156.48
+    // Total        3,156.48 + 7,771.25                                               = 10,927.73
+    expect(e.federal.taxableIncome).toBe(dollars(28_291.5));
+    expect(e.federal.federalIncomeTax).toBe(dollars(3_156.48));
+    expect(e.totalLiability).toBe(dollars(10_927.73));
   });
 });

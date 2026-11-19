@@ -386,6 +386,13 @@ describe("buildTaxInput — spouse selection + withholding", () => {
   });
 });
 
+describe("buildTaxInput — dependents", () => {
+  it("passes the profile's dependents to the engine (Utah personal exemption)", () => {
+    const b = makeBundle({ profile: { ...makeBundle().profile!, dependents: 2 } });
+    expect(buildTaxInput(b, 2026).dependents).toBe(2);
+  });
+});
+
 describe("buildAnnualizedInput — cumulative periods", () => {
   it("cumulates income and expenses by quarter-end (3/5/8/12)", () => {
     const b = makeBundle({

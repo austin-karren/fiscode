@@ -226,6 +226,7 @@ export const buildTaxInput = (bundle: Bundle, year: number): TaxInput => {
     year,
     filingStatus: profile.filingStatus as TaxInput["filingStatus"],
     state: profile.state as TaxInput["state"],
+    dependents: profile.dependents,
     gross1099: derived.gross1099,
     deductibleExpenses: derived.totalDeductibleExpenses,
     spouseW2Wages: cents(spouse?.annualW2WagesCents ?? 0),

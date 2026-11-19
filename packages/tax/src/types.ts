@@ -34,10 +34,28 @@ export type YearConfig = {
     priorYearDefault: number; // 1.00
     priorYearHighIncome: number; // 1.10
     priorYearAgiThreshold: Cents; // 150,000
+    /** The same threshold when this year's filing status is MFS. */
+    priorYearAgiThresholdMfs: Cents; // 75,000
   };
   meals: { deductibleFraction: number }; // 0.50
   quarterlyDueDates: [IsoDate, IsoDate, IsoDate, IsoDate];
   stateRates: Partial<Record<StateCode, number>>;
+  /**
+   * Utah's nonrefundable taxpayer tax credit (Utah Code 59-10-1018; TC-40
+   * lines 9-18). With it, Utah tax is the flat rate on Utah taxable income
+   * (which starts from federal AGI) minus this credit.
+   */
+  utahTaxpayerCredit: {
+    /** 6% of (federal standard deduction + personal exemptions). */
+    creditRate: number;
+    /** Utah personal exemption per qualifying dependent. */
+    personalExemptionPerDependent: Cents;
+    /** The credit shrinks by this much per dollar of income over the base. */
+    phaseOutRate: number;
+    phaseOutBase: Record<FilingStatus, Cents>;
+    /** True when the amounts come from a draft form, not the final one. */
+    draft: boolean;
+  };
 };
 
 export type TaxInput = {
@@ -48,6 +66,8 @@ export type TaxInput = {
   gross1099: Cents;
   /** Total business expenses (excluding half-SE-tax and QBI adjustments). */
   deductibleExpenses: Cents;
+  /** Qualifying dependents (Utah personal exemption). Defaults to 0. */
+  dependents?: number;
   /** Spouse W-2 wages, if MFJ + spouse block active for the year. */
   spouseW2Wages: Cents;
   /** Spouse W-2 federal withholding, offsets required estimates. */
@@ -77,8 +97,11 @@ export type FederalBreakdown = {
 };
 
 export type StateBreakdown = {
-  taxableIncome: Cents; // approximation: federal taxable for now
+  /** Utah: federal AGI (Utah taxable income). Other states: federal taxable income. */
+  taxableIncome: Cents;
   rate: number;
+  /** Utah's taxpayer tax credit applied; 0 for other states. */
+  taxpayerCredit: Cents;
   stateIncomeTax: Cents;
 };
 

@@ -14,7 +14,8 @@ export const GLOSSARY = {
   totalLiability:
     "Federal income tax + SE tax + state income tax, before spouse withholding offsets.",
   federalIncomeTax: "Bracket-walked tax on (net profit − ½ SE tax − QBI − standard deduction).",
-  stateIncomeTax: "Flat per-state rate applied to taxable income. Utah 2026: 4.55%.",
+  stateIncomeTax:
+    "Utah: 4.45% (2026) of income starting from federal AGI, minus the Utah taxpayer tax credit. Other states: their flat rate on federal taxable income.",
   remainingOwed:
     "Total liability minus spouse withholding. Distributed across the four quarterly payments.",
 

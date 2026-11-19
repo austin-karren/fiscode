@@ -98,13 +98,15 @@ export const config2026: YearConfig = {
     simplifiedMaxSqft: 300,
     simplifiedCap: dollars(1_500),
   },
-  // 1040-ES-2026, General Rule and Higher income taxpayers. The MFS AGI
-  // threshold ($75,000) has no key yet.
+  // 1040-ES-2026, General Rule and Higher income taxpayers: "more than
+  // $150,000 ($75,000 if your filing status for 2026 is married filing
+  // separately)".
   safeHarbor: {
     currentYearFraction: 0.9,
     priorYearDefault: 1.0,
     priorYearHighIncome: 1.1,
     priorYearAgiThreshold: dollars(150_000),
+    priorYearAgiThresholdMfs: dollars(75_000),
   },
   // Instructions for Schedule C (2025 edition), https://www.irs.gov/instructions/i1040sc
   meals: { deductibleFraction: 0.5 },
@@ -119,5 +121,22 @@ export const config2026: YearConfig = {
     // Utah Code 59-10-104 (effective 1/1/2026), "(b) 4.45%."
     // https://le.utah.gov/xcode/title59/chapter10/C59-10-S104_2026050620260506.pdf
     UT: 0.0445,
+  },
+  // DRAFT: 2026 TC-40 dated 10/20/26, lines 9-18 (could change before the final
+  // form): https://files.tax.utah.gov/tax/forms/drafts/tc-40.pdf
+  // Formula: Utah Code 59-10-1018 (effective 1/1/2026),
+  // https://le.utah.gov/xcode/Title59/Chapter10/C59-10-S1018_2026050620260506.pdf
+  // The form's base amounts are the statute's, indexed by the Tax Commission.
+  utahTaxpayerCredit: {
+    creditRate: 0.06,
+    personalExemptionPerDependent: dollars(2_167),
+    phaseOutRate: 0.013,
+    phaseOutBase: {
+      single: dollars(18_696),
+      mfs: dollars(18_696),
+      hoh: dollars(28_045),
+      mfj: dollars(37_392),
+    },
+    draft: true,
   },
 };

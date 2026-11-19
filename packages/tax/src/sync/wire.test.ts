@@ -106,3 +106,21 @@ describe("dated mileage rates on the wire", () => {
     ]);
   });
 });
+
+describe("wire v3: Utah credit and MFS safe harbor round-trip", () => {
+  it("2026 config survives encode -> parse -> decode unchanged", () => {
+    const wire = yearConfigToWire(config2026, "test", "2026-01-15T00:00:00.000Z");
+    const back = wireToYearConfig(taxYearWireSchema.parse(wire));
+    expect(back.utahTaxpayerCredit).toEqual(config2026.utahTaxpayerCredit);
+    expect(back.safeHarbor).toEqual(config2026.safeHarbor);
+  });
+
+  it("a v2 file (no Utah credit) is rejected, so a stale cache is skipped", () => {
+    const { utahTaxpayerCredit: _, ...v2 } = yearConfigToWire(
+      config2026,
+      "t",
+      "2026-01-15T00:00:00.000Z",
+    );
+    expect(taxYearWireSchema.safeParse({ ...v2, schemaVersion: "v2" }).success).toBe(false);
+  });
+});
