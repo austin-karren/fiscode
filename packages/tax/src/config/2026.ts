@@ -1,25 +1,30 @@
 import { dollars, isoDate } from "@fiscode/core";
 import type { YearConfig } from "../types.ts";
 
-// All figures are SEEDS. Every annually-changing tax figure must be verified
-// against the IRS / SSA before relying on this for a real estimate.
+// Sources (each constant below names the one it comes from):
+// - RP-2025-32: Rev. Proc. 2025-32, 2026 inflation adjustments after the
+//   One, Big, Beautiful Bill Act. https://www.irs.gov/pub/irs-drop/rp-25-32.pdf
+// - 1040-ES-2026: 2026 Form 1040-ES. https://www.irs.gov/pub/irs-pdf/f1040es.pdf
+// - SE-INSTR: Instructions for Schedule SE (2026). https://www.irs.gov/instructions/i1040sse
 export const config2026: YearConfig = {
   year: 2026,
-  // todo: verify against IRS Rev. Proc. for 2026
+  // RP-2025-32 §4.14(1).
   standardDeduction: {
-    single: dollars(15_000),
-    mfj: dollars(30_000),
-    mfs: dollars(15_000),
-    hoh: dollars(22_500),
+    single: dollars(16_100),
+    mfj: dollars(32_200),
+    mfs: dollars(16_100),
+    hoh: dollars(24_150),
   },
-  // todo: verify against SSA for 2026 (~$184,500 projected)
+  // SE-INSTR: "For 2026, the maximum amount of self-employment income subject
+  // to social security tax is $184,500." Also 1040-ES-2026 worksheet line 5.
   ssWageBase: dollars(184_500),
+  // Rates: 1040-ES-2026 SE tax worksheet (lines 3, 4, 9). Additional Medicare
+  // thresholds: SE-INSTR; statutory, not indexed.
   seTax: {
     netEarningsFactor: 0.9235,
     ssRate: 0.124,
     medicareRate: 0.029,
     addlMedicareRate: 0.009,
-    // Statutory; not inflation-indexed.
     addlMedicareThreshold: {
       single: dollars(200_000),
       mfj: dollars(250_000),
@@ -27,72 +32,83 @@ export const config2026: YearConfig = {
       hoh: dollars(200_000),
     },
   },
-  // todo: verify against IRS Rev. Proc. for 2026
+  // RP-2025-32 §4.01, Tables 1 (mfj), 2 (hoh), 3 (single), 4 (mfs).
   brackets: {
     mfj: [
-      { upTo: dollars(23_850), rate: 0.1 },
-      { upTo: dollars(96_950), rate: 0.12 },
-      { upTo: dollars(206_700), rate: 0.22 },
-      { upTo: dollars(394_600), rate: 0.24 },
-      { upTo: dollars(501_050), rate: 0.32 },
-      { upTo: dollars(751_600), rate: 0.35 },
+      { upTo: dollars(24_800), rate: 0.1 },
+      { upTo: dollars(100_800), rate: 0.12 },
+      { upTo: dollars(211_400), rate: 0.22 },
+      { upTo: dollars(403_550), rate: 0.24 },
+      { upTo: dollars(512_450), rate: 0.32 },
+      { upTo: dollars(768_700), rate: 0.35 },
       { upTo: null, rate: 0.37 },
     ],
     single: [
-      { upTo: dollars(11_925), rate: 0.1 },
-      { upTo: dollars(48_475), rate: 0.12 },
-      { upTo: dollars(103_350), rate: 0.22 },
-      { upTo: dollars(197_300), rate: 0.24 },
-      { upTo: dollars(250_525), rate: 0.32 },
-      { upTo: dollars(626_350), rate: 0.35 },
+      { upTo: dollars(12_400), rate: 0.1 },
+      { upTo: dollars(50_400), rate: 0.12 },
+      { upTo: dollars(105_700), rate: 0.22 },
+      { upTo: dollars(201_775), rate: 0.24 },
+      { upTo: dollars(256_225), rate: 0.32 },
+      { upTo: dollars(640_600), rate: 0.35 },
       { upTo: null, rate: 0.37 },
     ],
     mfs: [
-      { upTo: dollars(11_925), rate: 0.1 },
-      { upTo: dollars(48_475), rate: 0.12 },
-      { upTo: dollars(103_350), rate: 0.22 },
-      { upTo: dollars(197_300), rate: 0.24 },
-      { upTo: dollars(250_525), rate: 0.32 },
-      { upTo: dollars(375_800), rate: 0.35 },
+      { upTo: dollars(12_400), rate: 0.1 },
+      { upTo: dollars(50_400), rate: 0.12 },
+      { upTo: dollars(105_700), rate: 0.22 },
+      { upTo: dollars(201_775), rate: 0.24 },
+      { upTo: dollars(256_225), rate: 0.32 },
+      { upTo: dollars(384_350), rate: 0.35 },
       { upTo: null, rate: 0.37 },
     ],
     hoh: [
-      { upTo: dollars(17_000), rate: 0.1 },
-      { upTo: dollars(64_850), rate: 0.12 },
-      { upTo: dollars(103_350), rate: 0.22 },
-      { upTo: dollars(197_300), rate: 0.24 },
-      { upTo: dollars(250_500), rate: 0.32 },
-      { upTo: dollars(626_350), rate: 0.35 },
+      { upTo: dollars(17_700), rate: 0.1 },
+      { upTo: dollars(67_450), rate: 0.12 },
+      { upTo: dollars(105_700), rate: 0.22 },
+      { upTo: dollars(201_750), rate: 0.24 },
+      { upTo: dollars(256_200), rate: 0.32 },
+      { upTo: dollars(640_600), rate: 0.35 },
       { upTo: null, rate: 0.37 },
     ],
   },
   qbi: {
+    // https://www.irs.gov/newsroom/qualified-business-income-deduction
     rate: 0.2,
-    // todo: verify against IRS for 2026
+    // RP-2025-32 §4.26 threshold amounts. (The MFJ QBI threshold, $403,500,
+    // is not the MFJ 24% bracket top, $403,550; both are quoted from RP.)
     taxableIncomeLimit: {
-      single: dollars(197_300),
-      mfj: dollars(394_600),
-      mfs: dollars(197_300),
-      hoh: dollars(197_300),
+      single: dollars(201_750),
+      mfj: dollars(403_500),
+      mfs: dollars(201_775),
+      hoh: dollars(201_750),
     },
   },
-  // todo: verify against IRS for 2026 — mileage rate changes every year
-  mileageRatePerMile: 0.725,
+  // Business rate changed mid-year.
+  // 72.5 cents: Notice 2026-10, https://www.irs.gov/pub/irs-drop/n-26-10.pdf
+  // 76 cents from July 1, 2026: Announcement 2026-11, IRB 2026-29,
+  // https://www.irs.gov/irb/2026-29_irb (also
+  // https://www.irs.gov/tax-professionals/standard-mileage-rates).
+  mileageRates: [
+    { from: isoDate("2026-01-01"), ratePerMile: 0.725 },
+    { from: isoDate("2026-07-01"), ratePerMile: 0.76 },
+  ],
+  // https://www.irs.gov/businesses/small-businesses-self-employed/simplified-option-for-home-office-deduction
   homeOffice: {
     simplifiedRatePerSqft: dollars(5),
     simplifiedMaxSqft: 300,
     simplifiedCap: dollars(1_500),
   },
+  // 1040-ES-2026, General Rule and Higher income taxpayers. The MFS AGI
+  // threshold ($75,000) has no key yet.
   safeHarbor: {
     currentYearFraction: 0.9,
     priorYearDefault: 1.0,
     priorYearHighIncome: 1.1,
-    // todo: verify; the 150k AGI threshold (75k MFS) has been stable but confirm
     priorYearAgiThreshold: dollars(150_000),
   },
+  // Instructions for Schedule C (2025 edition), https://www.irs.gov/instructions/i1040sc
   meals: { deductibleFraction: 0.5 },
-  // Quarterly due dates: 15th of the month after the quarter ends, rolled
-  // to next business day at runtime. Q4 falls in the *next* calendar year.
+  // 1040-ES-2026, Payment Due Dates.
   quarterlyDueDates: [
     isoDate("2026-04-15"),
     isoDate("2026-06-15"),
@@ -100,7 +116,8 @@ export const config2026: YearConfig = {
     isoDate("2027-01-15"),
   ],
   stateRates: {
-    // todo: verify Utah flat rate for 2026 (trending down)
-    UT: 0.0455,
+    // Utah Code 59-10-104 (effective 1/1/2026), "(b) 4.45%."
+    // https://le.utah.gov/xcode/title59/chapter10/C59-10-S104_2026050620260506.pdf
+    UT: 0.0445,
   },
 };

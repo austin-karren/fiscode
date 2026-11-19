@@ -84,3 +84,25 @@ describe("taxYearDataUrl", () => {
     );
   });
 });
+
+describe("dated mileage rates on the wire", () => {
+  it("2026 round-trips both rates, and keeps the Jan 1 rate for older readers", () => {
+    const wire = yearConfigToWire(config2026, "test", "2026-01-15T00:00:00.000Z");
+    expect(wire.mileageRatePerMile).toBe(0.725);
+    expect(wireToYearConfig(taxYearWireSchema.parse(wire)).mileageRates).toEqual([
+      { from: "2026-01-01", ratePerMile: 0.725 },
+      { from: "2026-07-01", ratePerMile: 0.76 },
+    ]);
+  });
+
+  it("a file written before mileageRates existed applies its one rate all year", () => {
+    const { mileageRates: _, ...old } = yearConfigToWire(
+      config2025,
+      "test",
+      "2025-01-15T00:00:00.000Z",
+    );
+    expect(wireToYearConfig(taxYearWireSchema.parse(old)).mileageRates).toEqual([
+      { from: "2025-01-01", ratePerMile: 0.7 },
+    ]);
+  });
+});

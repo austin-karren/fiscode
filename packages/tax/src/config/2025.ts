@@ -70,7 +70,7 @@ export const config2025: YearConfig = {
       hoh: dollars(197_300),
     },
   },
-  mileageRatePerMile: 0.7,
+  mileageRates: [{ from: isoDate("2025-01-01"), ratePerMile: 0.7 }],
   homeOffice: {
     simplifiedRatePerSqft: dollars(5),
     simplifiedMaxSqft: 300,
@@ -90,6 +90,10 @@ export const config2025: YearConfig = {
     isoDate("2026-01-15"),
   ],
   stateRates: {
-    UT: 0.0455,
+    // 2025 TC-40 (form headed "2025"), line 10: "Utah tax - multiply line 9 by
+    // 4.5% (.045)". Read on 2026-11-18 at
+    // https://files.tax.utah.gov/tax/forms/current/tc-40.pdf, which is the
+    // current-year form and will show the 2026 form once Utah posts it.
+    UT: 0.045,
   },
 };
