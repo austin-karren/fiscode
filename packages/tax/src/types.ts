@@ -71,6 +71,11 @@ export type TaxInput = {
   gross1099: Cents;
   /** Total business expenses (excluding half-SE-tax and QBI adjustments). */
   deductibleExpenses: Cents;
+  /**
+   * Self-employed health insurance premiums paid for the year (Form 7206 line 3). Not a Schedule C
+   * expense: an adjustment on Schedule 1 line 17, limited by the business's profit. Defaults to 0.
+   */
+  selfEmployedHealthInsurance?: Cents;
   /** Qualifying dependents (Utah personal exemption). Defaults to 0. */
   dependents?: number;
   /** Spouse W-2 wages, if MFJ + spouse block active for the year. */
@@ -117,6 +122,8 @@ export type TaxEstimate = {
   year: number;
   netProfit: Cents; // gross1099 - deductibleExpenses
   agi: Cents; // for safe-harbor classification
+  /** Self-employed health insurance deduction allowed (Schedule 1 line 17, Form 7206 line 14). */
+  selfEmployedHealthInsurance: Cents;
   se: SeTaxBreakdown;
   federal: FederalBreakdown;
   state: StateBreakdown;
@@ -181,6 +188,8 @@ export type IncomePeriod = {
   cumulativeGross1099: Cents;
   /** Cumulative deductible expenses through endsAt. */
   cumulativeDeductibleExpenses: Cents;
+  /** Cumulative self-employed health insurance premiums through endsAt. Defaults to 0. */
+  cumulativeSelfEmployedHealthInsurance?: Cents;
 };
 
 export type AnnualizedInput = TaxInput & {

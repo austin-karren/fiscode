@@ -59,6 +59,28 @@ threshold, with no W-2 wages or property, it shrinks in proportion to how far ta
 into the phase-in band, and is $0 at the band's end. From 2026, anyone with $1,000 or more of QBI
 gets at least $400 ([26 U.S.C. 199A(i)](https://uscode.house.gov), added by Pub. L. 119-21 §70105).
 
+### Self-employed health insurance
+
+Premiums entered under the "Self-employed health insurance" expense category are not a Schedule C
+expense. They are an adjustment on Schedule 1 line 17, figured on
+[Form 7206](https://www.irs.gov/pub/irs-pdf/f7206.pdf):
+
+- **The limit:** line 14 is "the smaller of line 3 [the premiums] or line 13". Line 13 is the
+  business's net profit, less the deductible half of SE tax, less SEP/SIMPLE contributions.
+  fiscode doesn't model retirement contributions, so it deducts at most net profit minus half the
+  SE tax.
+- **SE tax:** "You can't subtract the self-employed health insurance deduction when figuring net
+  earnings for your self-employment tax"
+  ([instructions](https://www.irs.gov/instructions/i7206)). SE tax is figured on the full net
+  profit.
+- **What it lowers:** AGI, so federal and Utah income tax.
+- **QBI:** it lowers QBI too. Reg. 1.199A-3(b)(1)(vi) counts "the self-employed health insurance
+  deduction under section 162(l)" as attributable to the business.
+
+Not modelled: "You can't take the deduction for any month you were eligible to participate in any
+employer (including your spouse's) subsidized health plan". fiscode has no input for that
+eligibility, so leave out premiums for those months.
+
 ### Utah income tax
 
 Utah taxes income starting from federal AGI, not federal taxable income (TC-40 line 7). The tax is

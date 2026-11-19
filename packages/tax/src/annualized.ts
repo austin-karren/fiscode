@@ -56,6 +56,10 @@ export const annualizedQuarterly = (
         ...input,
         gross1099: mulRate(p.cumulativeGross1099, factor),
         deductibleExpenses: mulRate(p.cumulativeDeductibleExpenses, factor),
+        selfEmployedHealthInsurance: mulRate(
+          p.cumulativeSelfEmployedHealthInsurance ?? (0 as Cents),
+          factor,
+        ),
       },
       cfg,
     );

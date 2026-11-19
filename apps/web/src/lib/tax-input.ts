@@ -47,6 +47,12 @@ const sumWithinYear = (
     cents(0),
   );
 
+// Self-employed health insurance is not a Schedule C expense: it is a Schedule 1 line 17
+// adjustment (Form 7206), so it never lowers net profit or SE tax. These two split the rows.
+const isHealthInsurance = (e: { category: string }) => e.category === "health_insurance";
+const scheduleCExpenses = <T extends { category: string }>(rows: readonly T[]): T[] =>
+  rows.filter((e) => !isHealthInsurance(e));
+
 // Which expenses count (startup expenses before the SE start included) is
 // `expensesCountedForYear` in @fiscode/core, shared with the year-end packet.
 const sumExpensesWithinYear = (
@@ -187,7 +193,7 @@ const tentativeProfitBetween = (
   )
     .filter((r) => within(r.date))
     .reduce((sum, r) => sum + r.amountCents, 0);
-  const expenses = expensesCountedForYear(bundle.expenses, year, seStartDate)
+  const expenses = scheduleCExpenses(expensesCountedForYear(bundle.expenses, year, seStartDate))
     .filter((r) => within(r.date))
     .reduce((sum, r) => sum + r.amountCents, 0);
   const mileage = mileageDeduction(
@@ -359,7 +365,10 @@ const countExcludedBeforeSeStart = (
 
 export type DerivedYear = {
   gross1099: Cents;
+  /** Schedule C expenses: every counted expense except self-employed health insurance. */
   directExpenses: Cents;
+  /** Self-employed health insurance premiums counted for the year (Schedule 1 line 17, before its limit). */
+  selfEmployedHealthInsurance: Cents;
   mileageDeduction: Cents;
   homeOfficeDeduction: Cents;
   /** Simplified-method home office over the gross income limit. It cannot be carried over: lost. */
@@ -387,7 +396,16 @@ export const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
     year,
     seStartDate,
   );
-  const directExpenses = sumExpensesWithinYear(bundle.expenses, year, seStartDate);
+  const directExpenses = sumExpensesWithinYear(
+    scheduleCExpenses(bundle.expenses),
+    year,
+    seStartDate,
+  );
+  const selfEmployedHealthInsurance = sumExpensesWithinYear(
+    bundle.expenses.filter(isHealthInsurance),
+    year,
+    seStartDate,
+  );
   const mileageDeduction = sumMileageDeductionWithinYear(bundle, year, seStartDate);
   const limited = limitedHomeOffice(
     bundle,
@@ -401,6 +419,7 @@ export const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
   return {
     gross1099,
     directExpenses,
+    selfEmployedHealthInsurance,
     mileageDeduction,
     homeOfficeDeduction,
     homeOfficeLost: limited.lost,
@@ -426,6 +445,7 @@ export const buildTaxInput = (bundle: Bundle, year: number): TaxInput => {
     dependents: profile.dependents,
     gross1099: derived.gross1099,
     deductibleExpenses: derived.totalDeductibleExpenses,
+    selfEmployedHealthInsurance: derived.selfEmployedHealthInsurance,
     spouseW2Wages: cents(spouse?.annualW2WagesCents ?? 0),
     spouseFederalWithholding: cents(spouse?.annualFederalWithholdingCents ?? 0),
     spouseStateWithholding: cents(spouse?.annualStateWithholdingCents ?? 0),
@@ -454,9 +474,13 @@ export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedIn
     );
     // The year's counted expenses (startup ones included), up to the cutoff.
     // Startup rows land in the first cumulative window that contains their date.
-    const expRows = expensesCountedForYear(bundle.expenses, year, seStartDate).filter(
+    const counted = expensesCountedForYear(bundle.expenses, year, seStartDate).filter(
       (r) => r.date <= cutoff,
     );
+    const expRows = scheduleCExpenses(counted);
+    const cumSehi = counted
+      .filter(isHealthInsurance)
+      .reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0));
     const cumGross = incomeRows.reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0));
     // Direct expenses plus mileage and home office through the cutoff, the same
     // pieces deriveYear adds for the whole year (Schedule AI line 1 is the
@@ -468,7 +492,7 @@ export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedIn
     // The period's home office, limited by the period's own tentative profit.
     const homeOffice = limitedHomeOffice(bundle, year, seStartDate, cutoff, cumGross - otherExp);
     const cumExp = addCents(otherExp, homeOffice.allowed);
-    return { cumGross, cumExp };
+    return { cumGross, cumExp, cumSehi };
   };
   const periods = endsDates.map((e) => {
     const c = cumulative(e.ends);
@@ -476,6 +500,7 @@ export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedIn
       endsAt: e.ends as never,
       cumulativeGross1099: c.cumGross,
       cumulativeDeductibleExpenses: c.cumExp,
+      cumulativeSelfEmployedHealthInsurance: c.cumSehi,
     };
   }) as unknown as AnnualizedInput["periods"];
   return { ...base, periods };
