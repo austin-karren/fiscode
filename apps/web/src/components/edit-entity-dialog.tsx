@@ -27,6 +27,7 @@ import {
   type EntityPeriodFieldError,
 } from "../lib/entity-period-error";
 import { useToday } from "../lib/use-today";
+import { useEditDialog } from "../hooks/use-edit-dialog";
 
 const ENTITY_OPTIONS = labelOptions(ENTITY_TYPE_LABELS).filter((o) => o.value !== "s_corp");
 
@@ -37,7 +38,6 @@ const editSchema = z.object({
 });
 
 export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSaved: () => void }) {
-  const [open, setOpen] = useState(false);
   // Set when the repo blocks the dates; shown on the field it is about.
   const [periodError, setPeriodError] = useState<EntityPeriodFieldError | null>(null);
 
@@ -67,15 +67,10 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
       onSaved();
     },
   });
+  const { open, setOpen, onOpenChange } = useEditDialog(form, () => setPeriodError(null));
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) setPeriodError(null);
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">

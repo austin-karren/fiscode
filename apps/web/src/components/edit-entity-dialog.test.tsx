@@ -107,6 +107,33 @@ describe("edit entity dialog", () => {
     expect(fieldDescribedBy(message)).toBe(controlLabelled("End (optional)"));
   });
 
+  it("opens on the saved period again after a refused end date and Escape", async () => {
+    update.mockRejectedValueOnce(
+      new EntityDatesError({ startDate: "2026-11-02", endDate: "2023-01-01" }),
+    );
+    render(<EditEntityDialog entity={llc} onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    await screen.findByRole("dialog");
+
+    // Type an End before the Start; the save is refused.
+    fireEvent.click(controlLabelled("End (optional)")!);
+    const typed = await screen.findByLabelText("Type a date");
+    fireEvent.change(typed, { target: { value: "01/01/2023" } });
+    fireEvent.keyDown(typed, { key: "Enter" });
+    await waitFor(() => expect(controlLabelled("End (optional)")).toHaveTextContent("2023"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText(/is before the start date/);
+
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    await screen.findByRole("dialog");
+
+    expect(controlLabelled("End (optional)")).not.toHaveTextContent("2023");
+    expect(controlLabelled("End (optional)")).toHaveTextContent("Pick a date");
+    expect(screen.queryByText(/is before the start date/)).not.toBeInTheDocument();
+  });
+
   it("does not submit a form the dialog's trigger sits in", async () => {
     // On the profile page the Edit button is inside the add-period form, and a
     // React submit event bubbles out of the dialog's portal to that form.

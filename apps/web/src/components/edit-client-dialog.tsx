@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +20,7 @@ import { z } from "zod";
 import { optionalMoneyAmount } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
+import { useEditDialog } from "../hooks/use-edit-dialog";
 
 const editSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -29,8 +29,6 @@ const editSchema = z.object({
 });
 
 export function EditClientDialog({ client, onSaved }: { client: ClientRow; onSaved: () => void }) {
-  const [open, setOpen] = useState(false);
-
   const form = useForm({
     defaultValues: {
       name: client.name,
@@ -52,9 +50,10 @@ export function EditClientDialog({ client, onSaved }: { client: ClientRow; onSav
       onSaved();
     },
   });
+  const { open, setOpen, onOpenChange } = useEditDialog(form);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +22,7 @@ import { TSFormField } from "./forms/ts-form-field";
 import { CONFIG_YEARS_BACK, DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { useToday } from "../lib/use-today";
+import { useEditDialog } from "../hooks/use-edit-dialog";
 
 const editSchema = z.object({
   startDate: z.date({ message: "Pick a start date" }),
@@ -35,8 +35,6 @@ const editSchema = z.object({
 const centsToDollarsStr = (c: number) => (c / 100).toFixed(2);
 
 export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSaved: () => void }) {
-  const [open, setOpen] = useState(false);
-
   const today = useToday();
   const form = useForm({
     defaultValues: {
@@ -61,9 +59,10 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
       onSaved();
     },
   });
+  const { open, setOpen, onOpenChange } = useEditDialog(form);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">
