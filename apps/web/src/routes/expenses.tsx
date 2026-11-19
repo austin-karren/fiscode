@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
@@ -22,7 +23,7 @@ import { z } from "zod";
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
-import { DatePicker, dateToIso } from "../components/forms/date-picker";
+import { DatePicker, dateToIso, isoToDate } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { InfoTooltip } from "../components/info-tooltip";
@@ -65,15 +66,19 @@ function ExpensesPage() {
   const router = useRouter();
 
   const today = useToday();
+  const empty = {
+    date: today as Date | undefined,
+    amount: "",
+    category: "software_subs",
+    description: "",
+    flagForSection179: false,
+    startupExpense: false,
+  };
+  // The add card, and its first value field: focus targets after Add and Duplicate.
+  const addCard = useRef<HTMLDivElement>(null);
+  const firstValue = useRef<HTMLInputElement>(null);
   const form = useForm({
-    defaultValues: {
-      date: today as Date | undefined,
-      amount: "",
-      category: "software_subs",
-      description: "",
-      flagForSection179: false,
-      startupExpense: false,
-    },
+    defaultValues: empty,
     validators: { onSubmit: expenseFormSchema },
     onSubmit: async ({ value, formApi }) => {
       const parsed = moneyAmount.parse(value.amount);
@@ -90,10 +95,31 @@ function ExpensesPage() {
         deletedAt: null,
       });
       toast.success("Expense added.");
-      formApi.reset();
+      // A run of entries shares the date: keep it, clear the rest, go on with the amount.
+      formApi.reset({ ...empty, date: value.date }, { keepDefaultValues: true });
       router.invalidate();
+      firstValue.current?.focus();
     },
   });
+
+  // Fills the add form with a row's values, and puts focus on its date, the
+  // value a copy most often changes.
+  const duplicate = (row: (typeof expenses)[number]) => {
+    form.reset(
+      {
+        date: isoToDate(row.date) ?? today,
+        amount: formatUSD(cents(row.amountCents)).replace(/[$,]/g, ""),
+        category: row.category,
+        description: row.description ?? "",
+        flagForSection179: row.flagForSection179,
+        startupExpense: row.startupExpense,
+      },
+      { keepDefaultValues: true },
+    );
+    // The first form control is the date field's trigger; FormControl gives each
+    // control an id ending in "-form-item". Focus also scrolls it into view.
+    addCard.current?.querySelector<HTMLElement>('[id$="-form-item"]')?.focus();
+  };
 
   const remove = (row: (typeof expenses)[number]) =>
     softDeleteWithUndo({
@@ -115,7 +141,7 @@ function ExpensesPage() {
           void form.handleSubmit();
         }}
       >
-        <Card>
+        <Card ref={addCard}>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
               Add expense
@@ -143,6 +169,7 @@ function ExpensesPage() {
                   <FormLabel>Amount</FormLabel>
                   <FormControl>
                     <Input
+                      ref={firstValue}
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
@@ -320,6 +347,9 @@ function ExpensesPage() {
                         categories={CATEGORIES}
                         onSaved={() => router.invalidate()}
                       />
+                      <Button variant="ghost" size="sm" onClick={() => duplicate(x)}>
+                        Duplicate
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => remove(x)}>
                         Delete
                       </Button>

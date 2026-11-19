@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
@@ -14,7 +15,7 @@ import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
-import { DatePicker, dateToIso } from "../components/forms/date-picker";
+import { DatePicker, dateToIso, isoToDate } from "../components/forms/date-picker";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
@@ -62,14 +63,18 @@ function IncomePage() {
   const clients = allClients.filter((c) => !c.deletedAt);
 
   const today = useToday();
+  const empty = {
+    date: today as Date | undefined,
+    amount: "",
+    clientId: "",
+    kind: "recurring",
+    description: "",
+  };
+  // The add card, and its Amount: focus targets after Add and Duplicate.
+  const addCard = useRef<HTMLDivElement>(null);
+  const amountInput = useRef<HTMLInputElement>(null);
   const form = useForm({
-    defaultValues: {
-      date: today as Date | undefined,
-      amount: "",
-      clientId: "",
-      kind: "recurring",
-      description: "",
-    },
+    defaultValues: empty,
     validators: { onSubmit: incomeFormSchema },
     onSubmit: async ({ value, formApi }) => {
       const parsed = moneyAmount.parse(value.amount);
@@ -84,10 +89,35 @@ function IncomePage() {
         deletedAt: null,
       });
       toast.success("Income entry added.");
-      formApi.reset();
+      // A run of entries (a year of monthly income) shares the date and the
+      // client: keep those, clear the rest, and go on with the amount.
+      formApi.reset(
+        { ...empty, date: value.date, clientId: value.clientId },
+        { keepDefaultValues: true },
+      );
       router.invalidate();
+      amountInput.current?.focus();
     },
   });
+
+  // Fills the add form with a row's values, and puts focus on its date, the
+  // value a copy most often changes. An archived client cannot be picked for
+  // a new entry, so it is left out.
+  const duplicate = (row: (typeof income)[number]) => {
+    form.reset(
+      {
+        date: isoToDate(row.date) ?? today,
+        amount: formatUSD(cents(row.amountCents)).replace(/[$,]/g, ""),
+        clientId: clients.some((c) => c.id === row.clientId) ? (row.clientId ?? "") : "",
+        kind: row.kind,
+        description: row.description ?? "",
+      },
+      { keepDefaultValues: true },
+    );
+    // The first form control is the date field's trigger; FormControl gives each
+    // control an id ending in "-form-item". Focus also scrolls it into view.
+    addCard.current?.querySelector<HTMLElement>('[id$="-form-item"]')?.focus();
+  };
 
   const remove = (row: (typeof income)[number]) =>
     softDeleteWithUndo({
@@ -109,7 +139,7 @@ function IncomePage() {
           void form.handleSubmit();
         }}
       >
-        <Card>
+        <Card ref={addCard}>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
               Add entry
@@ -137,6 +167,7 @@ function IncomePage() {
                   <FormLabel>Amount</FormLabel>
                   <FormControl>
                     <Input
+                      ref={amountInput}
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
@@ -258,6 +289,9 @@ function IncomePage() {
                         clients={allClients}
                         onSaved={() => router.invalidate()}
                       />
+                      <Button variant="ghost" size="sm" onClick={() => duplicate(i)}>
+                        Duplicate
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => remove(i)}>
                         Delete
                       </Button>

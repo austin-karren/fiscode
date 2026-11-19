@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
@@ -13,7 +14,7 @@ import { hoursWorked } from "../lib/field-schemas";
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
-import { DatePicker, dateToIso } from "../components/forms/date-picker";
+import { DatePicker, dateToIso, isoToDate } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
@@ -55,13 +56,17 @@ function TimePage() {
   const clients = allClients.filter((c) => !c.deletedAt);
 
   const today = useToday();
+  const empty = {
+    date: today as Date | undefined,
+    hours: "",
+    clientId: "",
+    description: "",
+  };
+  // The add card, and its first value field: focus targets after Add and Duplicate.
+  const addCard = useRef<HTMLDivElement>(null);
+  const firstValue = useRef<HTMLInputElement>(null);
   const form = useForm({
-    defaultValues: {
-      date: today as Date | undefined,
-      hours: "",
-      clientId: "",
-      description: "",
-    },
+    defaultValues: empty,
     validators: { onSubmit: timeSchema },
     onSubmit: async ({ value, formApi }) => {
       const parsed = timeSchema.parse(value);
@@ -74,10 +79,33 @@ function TimePage() {
         deletedAt: null,
       });
       toast.success("Time entry added.");
-      formApi.reset();
+      // A run of entries shares the date and the client: keep those, clear the rest.
+      formApi.reset(
+        { ...empty, date: value.date, clientId: value.clientId },
+        { keepDefaultValues: true },
+      );
       router.invalidate();
+      firstValue.current?.focus();
     },
   });
+
+  // Fills the add form with a row's values, and puts focus on its date, the
+  // value a copy most often changes.
+  const duplicate = (row: (typeof entries)[number]) => {
+    form.reset(
+      {
+        date: isoToDate(row.date) ?? today,
+        hours: String(row.minutes / 60),
+        // An archived client cannot be picked for a new entry.
+        clientId: clients.some((c) => c.id === row.clientId) ? (row.clientId ?? "") : "",
+        description: row.description ?? "",
+      },
+      { keepDefaultValues: true },
+    );
+    // The first form control is the date field's trigger; FormControl gives each
+    // control an id ending in "-form-item". Focus also scrolls it into view.
+    addCard.current?.querySelector<HTMLElement>('[id$="-form-item"]')?.focus();
+  };
 
   const remove = (row: (typeof entries)[number]) =>
     softDeleteWithUndo({
@@ -99,7 +127,7 @@ function TimePage() {
           void form.handleSubmit();
         }}
       >
-        <Card>
+        <Card ref={addCard}>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
               Log time
@@ -127,6 +155,7 @@ function TimePage() {
                   <FormLabel>Hours</FormLabel>
                   <FormControl>
                     <Input
+                      ref={firstValue}
                       type="text"
                       inputMode="decimal"
                       value={field.state.value}
@@ -234,6 +263,9 @@ function TimePage() {
                         clients={allClients}
                         onSaved={() => router.invalidate()}
                       />
+                      <Button variant="ghost" size="sm" onClick={() => duplicate(t)}>
+                        Duplicate
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => remove(t)}>
                         Delete
                       </Button>
