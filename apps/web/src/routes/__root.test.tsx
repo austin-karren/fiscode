@@ -9,6 +9,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@tanstack/react-router-devtools", () => ({ TanStackRouterDevtools: () => null }));
+// The root loader reads the profile from SQLite over OPFS, which jsdom lacks;
+// these tests give the stand-in root their own loader instead.
+vi.mock("@fiscode/db", () => ({ profileRepo: { get: async () => undefined } }));
 
 import { ThemeProvider } from "@fiscode/ui/components/theme";
 
@@ -34,8 +37,9 @@ const PATHS = {
 } as const;
 
 // The real layout around stand-in pages: the real pages need the database.
-async function renderAt(path: string) {
-  const root = createRootRoute({ component: RootLayout });
+// `hasProfile` stands in for the root loader, which reads the profile.
+async function renderAt(path: string, { hasProfile = true } = {}) {
+  const root = createRootRoute({ component: RootLayout, loader: () => ({ hasProfile }) });
   const pages = Object.keys(PATHS).map((p) =>
     createRoute({
       getParentRoute: () => root,
@@ -58,7 +62,11 @@ async function renderAt(path: string) {
       <RouterProvider router={router} />
     </ThemeProvider>,
   );
-  await screen.findByRole("heading", { name: `Page ${path}` });
+  if (hasProfile || path === "/setup") {
+    await screen.findByRole("heading", { name: `Page ${path}` });
+  } else {
+    await screen.findByText("Set up fiscode first");
+  }
   return router;
 }
 
@@ -78,6 +86,33 @@ beforeEach(() => {
 afterEach(cleanup);
 
 const headerLabel = () => screen.getByTestId("header-label");
+
+describe("before setup", () => {
+  const DATA_ROUTES = Object.keys(PATHS).filter((p) => p !== "/setup");
+
+  it.each(DATA_ROUTES)("shows %s as 'Set up fiscode first', not the page", async (path) => {
+    await renderAt(path, { hasProfile: false });
+    expect(screen.queryByRole("heading", { name: `Page ${path}` })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "In the page" })).not.toBeInTheDocument();
+    const main = screen.getByRole("main");
+    expect(within(main).getByRole("link", { name: "Run setup" })).toHaveAttribute("href", "/setup");
+    expect(within(main).getByRole("link", { name: "Restore a backup" })).toHaveAttribute(
+      "href",
+      "/setup#restore",
+    );
+  });
+
+  it("still names the screen in the header", async () => {
+    await renderAt("/income", { hasProfile: false });
+    expect(headerLabel()).toHaveTextContent("Income");
+  });
+
+  it("lets the setup screen through", async () => {
+    await renderAt("/setup", { hasProfile: false });
+    expect(screen.getByRole("heading", { name: "Page /setup" })).toBeInTheDocument();
+    expect(screen.queryByText("Set up fiscode first")).not.toBeInTheDocument();
+  });
+});
 
 describe("root layout", () => {
   it.each(Object.entries(PATHS))(
