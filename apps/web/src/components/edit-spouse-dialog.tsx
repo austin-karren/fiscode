@@ -20,7 +20,7 @@ import { z } from "zod";
 
 import { optionalMoneyAmountOrZero } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
-import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
+import { CONFIG_YEARS_BACK, DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 
 const editSchema = z.object({
@@ -87,6 +87,7 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
                   <FormLabel>Start</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d ?? new Date())}
@@ -102,6 +103,7 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
                   <FormLabel>End (optional)</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
