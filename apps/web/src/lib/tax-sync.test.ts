@@ -7,6 +7,7 @@ import {
   config2026,
   getOverlayMeta,
   getOverlayYearConfig,
+  getYearConfig,
   yearConfigToWire,
 } from "@fiscode/tax";
 import {
@@ -161,6 +162,40 @@ describe("hydrateOverlayFromCache", () => {
     expect(loaded).toBe(0);
     expect(skipped).toBe(1);
     expect(getOverlayYearConfig(2026)).toBeUndefined();
+  });
+
+  it("skips a 2026 row cached by a build before the sourced 2026 figures, so the bundled ones apply", async () => {
+    // What origin/main's build served and a browser may have cached: schema
+    // v1, the 2025 seeds for 2026, one mileage rate, Utah at 4.55%.
+    const { mileageRates: _, ...current } = yearConfigToWire(
+      config2026,
+      "fiscode-bundled 2026",
+      FIXED,
+    );
+    const oldRow = {
+      ...current,
+      schemaVersion: "v1",
+      standardDeduction: { single: 15_000, mfj: 30_000, mfs: 15_000, hoh: 22_500 },
+      stateRates: { UT: 0.0455 },
+    };
+    await taxYearCacheRepo.upsert({
+      year: 2026,
+      json: JSON.stringify(oldRow),
+      schemaVersion: "v1",
+      source: "fiscode-bundled 2026",
+      sourceUrl: "/tax-data/v1/2026.json",
+      fetchedAt: FIXED,
+      etag: null,
+    });
+    const { loaded, skipped } = await hydrateOverlayFromCache();
+    expect({ loaded, skipped }).toEqual({ loaded: 0, skipped: 1 });
+    expect(getOverlayYearConfig(2026)).toBeUndefined();
+    const cfg = getYearConfig(2026);
+    expect(cfg.standardDeduction.mfj).toBe(32_200_00);
+    expect(cfg.stateRates.UT).toBe(0.0445);
+    expect(cfg.mileageRates).toHaveLength(2);
+    // And the stale row is refetched in the background.
+    expect(await shouldSyncInBackground(2026)).toBe(true);
   });
 
   it("skips rows whose payload no longer matches the schema", async () => {

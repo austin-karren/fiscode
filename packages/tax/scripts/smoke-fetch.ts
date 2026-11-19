@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Smoke test: stand up a local HTTP server serving the v1 wire format for
+ * Smoke test: stand up a local HTTP server serving the current wire format for
  * the 2026 tax year, then exercise the fetch → zod-validate → wireToYearConfig
  * chain against it. Pass/fail printed; exit 0 on success, 1 on failure.
  *
@@ -25,8 +25,8 @@ const PAYLOADS = {
 };
 
 const server = createServer((req, res) => {
-  // Path convention: /tax-data/v1/{year}.json
-  const match = req.url?.match(/\/tax-data\/v1\/(\d{4})\.json$/);
+  // Path convention: /tax-data/<schema version>/{year}.json
+  const match = req.url?.match(/\/tax-data\/v\d+\/(\d{4})\.json$/);
   if (!match) {
     res.writeHead(404, { "content-type": "text/plain" });
     res.end("not found");
@@ -105,9 +105,9 @@ const fetchAndValidate = async (year: number) => {
     detail: `${cfg.standardDeduction.mfj} === ${reference.standardDeduction.mfj}`,
   });
   log({
-    name: "mileageRatePerMile preserved",
-    ok: cfg.mileageRatePerMile === reference.mileageRatePerMile,
-    detail: `${cfg.mileageRatePerMile} === ${reference.mileageRatePerMile}`,
+    name: "mileageRates preserved",
+    ok: JSON.stringify(cfg.mileageRates) === JSON.stringify(reference.mileageRates),
+    detail: `${JSON.stringify(cfg.mileageRates)} === ${JSON.stringify(reference.mileageRates)}`,
   });
   log({
     name: "quarterlyDueDates preserved",
@@ -141,7 +141,7 @@ const fetchAndValidate = async (year: number) => {
 };
 
 const test404 = async () => {
-  const url = `${BASE}/v1/2099.json`;
+  const url = `${BASE}/${TAX_YEAR_WIRE_SCHEMA_VERSION}/2099.json`;
   console.log(`\nfetch ${url} (expecting 404)`);
   const res = await fetch(url);
   log({ name: "Unknown year returns 404", ok: res.status === 404, detail: `status=${res.status}` });
