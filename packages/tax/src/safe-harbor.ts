@@ -1,11 +1,13 @@
 import { type Cents, minCents, mulRate } from "@fiscode/core";
+import type { FilingStatus } from "@fiscode/core";
 import type { SafeHarborResult, TaxEstimate, YearConfig } from "./types.ts";
 
 /**
  * Safe-harbor floor: meeting this avoids the underpayment penalty.
  *
  * Either pay 90% of current-year tax, OR 100% of prior-year tax (110% if
- * prior-year AGI exceeded the threshold). True exemption requires a zero-tax
+ * prior-year AGI exceeded the threshold: $150,000, or $75,000 when this
+ * year's filing status is married filing separately). True exemption requires a zero-tax
  * prior year. First-year filers fall back to the 90%-of-current target.
  */
 export const computeSafeHarbor = (
@@ -13,6 +15,7 @@ export const computeSafeHarbor = (
   priorYearTotalTax: Cents | undefined,
   priorYearAgi: Cents | undefined,
   cfg: YearConfig,
+  filingStatus?: FilingStatus,
 ): SafeHarborResult => {
   const currentYearTarget = mulRate(estimate.totalLiability, cfg.safeHarbor.currentYearFraction);
   if (priorYearTotalTax === undefined) {
@@ -24,8 +27,11 @@ export const computeSafeHarbor = (
       firstYear: true,
     };
   }
-  const highIncome =
-    priorYearAgi !== undefined && priorYearAgi > cfg.safeHarbor.priorYearAgiThreshold;
+  const threshold =
+    filingStatus === "mfs"
+      ? cfg.safeHarbor.priorYearAgiThresholdMfs
+      : cfg.safeHarbor.priorYearAgiThreshold;
+  const highIncome = priorYearAgi !== undefined && priorYearAgi > threshold;
   const multiplier = highIncome
     ? cfg.safeHarbor.priorYearHighIncome
     : cfg.safeHarbor.priorYearDefault;

@@ -81,6 +81,7 @@ export const config2025: YearConfig = {
     priorYearDefault: 1.0,
     priorYearHighIncome: 1.1,
     priorYearAgiThreshold: dollars(150_000),
+    priorYearAgiThresholdMfs: dollars(75_000),
   },
   meals: { deductibleFraction: 0.5 },
   quarterlyDueDates: [
@@ -95,5 +96,22 @@ export const config2025: YearConfig = {
     // https://files.tax.utah.gov/tax/forms/current/tc-40.pdf, which is the
     // current-year form and will show the 2026 form once Utah posts it.
     UT: 0.045,
+  },
+  // 2025 TC-40, lines 9-15: exemption "$2,111"; base "$18,213 (single or
+  // married filing separately); $27,320 (head of household); or $36,426
+  // (married filing jointly ...)". Read on 2026-11-18 at
+  // https://files.tax.utah.gov/tax/forms/current/tc-40.pdf (the current-year
+  // form; it will show 2026 once Utah posts it).
+  utahTaxpayerCredit: {
+    creditRate: 0.06,
+    personalExemptionPerDependent: dollars(2_111),
+    phaseOutRate: 0.013,
+    phaseOutBase: {
+      single: dollars(18_213),
+      mfs: dollars(18_213),
+      hoh: dollars(27_320),
+      mfj: dollars(36_426),
+    },
+    draft: false,
   },
 };

@@ -44,17 +44,27 @@ its primary source in a comment beside it; anything not yet checked is marked
 | Social Security wage base                 | $184,500                                                       | [Schedule SE instructions](https://www.irs.gov/instructions/i1040sse)                                                       |
 | Business mileage                          | 72.5¢ Jan 1 – Jun 30; 76¢ from Jul 1                           | [Notice 2026-10](https://www.irs.gov/pub/irs-drop/n-26-10.pdf), [Announcement 2026-11](https://www.irs.gov/irb/2026-29_irb) |
 | Utah rate                                 | 4.45%                                                          | [Utah Code 59-10-104](https://le.utah.gov/xcode/title59/chapter10/C59-10-S104_2026050620260506.pdf)                         |
+| Utah personal exemption (DRAFT)           | $2,167 per qualifying dependent                                | [2026 TC-40 draft dated 10/20/26](https://files.tax.utah.gov/tax/forms/drafts/tc-40.pdf), line 9                            |
+| Utah credit phase-out base (DRAFT)        | $18,696 single and MFS, $28,045 HOH, $37,392 MFJ               | 2026 TC-40 draft, line 15                                                                                                   |
+| Safe-harbor prior-year AGI threshold      | $150,000; $75,000 if MFS                                       | [2026 Form 1040-ES](https://www.irs.gov/pub/irs-pdf/f1040es.pdf)                                                            |
 
 The mileage rate changed mid-year, so each trip is deducted at the rate in force on its date.
+
+### Utah income tax
+
+Utah taxes income starting from federal AGI, not federal taxable income (TC-40 line 7). The tax is
+4.45% of that, minus the nonrefundable taxpayer tax credit
+([Utah Code 59-10-1018](https://le.utah.gov/xcode/Title59/Chapter10/C59-10-S1018_2026050620260506.pdf)):
+6% of (the federal standard deduction + the personal exemption per dependent), reduced by 1.3% of
+income above the filing-status base, and never below zero. The 2026 exemption and base amounts
+come from Utah's draft 2026 TC-40 and may change when the final form is posted.
 
 Not modelled yet:
 
 - The 2026 QBI minimum deduction: $400 for $1,000 or more of QBI (Rev. Proc. 2025-32 §2.12).
 - The QBI phase-in above the threshold.
-- Utah's taxpayer tax credit. The estimate applies the flat rate.
-- The safe-harbor prior-year AGI threshold for married filing separately, $75,000
-  ([2026 Form 1040-ES](https://www.irs.gov/pub/irs-pdf/f1040es.pdf)). The estimate uses $150,000
-  for every filing status.
+- Utah additions to and subtractions from income, itemized deductions, and the extra exemption
+  for a dependent born in the year.
 
 `getYearConfig(year)` falls back to the nearest defined year and surfaces a console warning + UI
 banner — stale data is loud, not silent.

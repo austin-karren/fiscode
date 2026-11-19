@@ -78,6 +78,21 @@ describe("config 2025 — pinned values", () => {
     expect(c.stateRates.UT).toBe(0.045);
   });
 
+  it("Utah taxpayer tax credit (2025 TC-40)", () => {
+    expect(c.utahTaxpayerCredit).toEqual({
+      creditRate: 0.06,
+      personalExemptionPerDependent: dollars(2_111),
+      phaseOutRate: 0.013,
+      phaseOutBase: {
+        single: dollars(18_213),
+        mfs: dollars(18_213),
+        hoh: dollars(27_320),
+        mfj: dollars(36_426),
+      },
+      draft: false,
+    });
+  });
+
   it("quarterly due dates land in the right months and Jun 15 shifts to Jun 16 (Sunday)", () => {
     expect(c.quarterlyDueDates).toEqual(["2025-04-15", "2025-06-16", "2025-09-15", "2026-01-15"]);
   });
@@ -150,6 +165,26 @@ describe("config 2026 — pinned values (Rev. Proc. 2025-32, Notice 2026-10, Ann
 
   it("UT state rate 4.45%", () => {
     expect(c.stateRates.UT).toBe(0.0445);
+  });
+
+  it("Utah taxpayer tax credit (2026 TC-40 DRAFT dated 10/20/26)", () => {
+    expect(c.utahTaxpayerCredit).toEqual({
+      creditRate: 0.06,
+      personalExemptionPerDependent: dollars(2_167),
+      phaseOutRate: 0.013,
+      phaseOutBase: {
+        single: dollars(18_696),
+        mfs: dollars(18_696),
+        hoh: dollars(28_045),
+        mfj: dollars(37_392),
+      },
+      draft: true,
+    });
+  });
+
+  it("safe harbor: $150,000 prior-year AGI threshold, $75,000 if MFS", () => {
+    expect(c.safeHarbor.priorYearAgiThreshold).toBe(dollars(150_000));
+    expect(c.safeHarbor.priorYearAgiThresholdMfs).toBe(dollars(75_000));
   });
 
   it("quarterly due dates", () => {
