@@ -4,7 +4,7 @@ import { flushSync } from "react-dom";
 import { Card } from "@fiscode/ui/components/card";
 import { Button } from "@fiscode/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
-import { buildBundle } from "@fiscode/db";
+import { buildBundle, clientRepo, vehicleRepo } from "@fiscode/db";
 import { exportBundle, exportFileName, type VehicleRow } from "@fiscode/csv";
 import { estimateYear, getYearConfig } from "@fiscode/tax";
 import {
@@ -48,6 +48,7 @@ export const Route = createFileRoute("/year-end")({
         derived: undefined,
         totalsByCategory: undefined,
         lists: undefined,
+        names: undefined,
       } as const;
     }
     const profile = bundle.profile;
@@ -63,7 +64,13 @@ export const Route = createFileRoute("/year-end")({
     const derived = deriveYear(bundle, year);
     const totalsByCategory = expenseTotalsByCategory(bundle.expenses, year, profile.seStartDate);
     const lists = yearEndLists(bundle, year, derived.seStartDate);
-    return { bundle, profile, year, result, derived, totalsByCategory, lists } as const;
+    // The bundle leaves archived clients and vehicles out, but last year's
+    // rows still name them.
+    const names = {
+      clients: await clientRepo.listIncludingDeleted(),
+      vehicles: await vehicleRepo.listIncludingDeleted(),
+    };
+    return { bundle, profile, year, result, derived, totalsByCategory, lists, names } as const;
   },
   component: YearEndPage,
 });
@@ -83,7 +90,7 @@ function usePrintDate() {
 
 function YearEndPage() {
   const data = useLoaderData({ from: "/year-end" });
-  const { bundle, profile, year, result, derived, totalsByCategory, lists } = data;
+  const { profile, year, result, derived, totalsByCategory, lists, names } = data;
   const printedOn = usePrintDate();
 
   // Profile missing → route still renders, but with SetupRequiredEmpty in
@@ -216,7 +223,7 @@ function YearEndPage() {
         </dl>
       </Card>
 
-      <YearEndLists lists={lists!} bundle={bundle} year={year} derived={derived} />
+      <YearEndLists lists={lists!} names={names!} year={year} derived={derived} />
 
       <Card className="p-4 print:break-inside-avoid print:overflow-visible print:p-0 print:ring-0">
         <h2 className="mb-3 text-sm font-medium uppercase text-muted-foreground">
@@ -293,7 +300,10 @@ function Row({
 function ListCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <Card className="p-4 print:overflow-visible print:p-0 print:ring-0">
-      <h2 className="mb-3 text-sm font-medium uppercase text-muted-foreground">{title}</h2>
+      {/* Printed, a heading stays on the page with its table. */}
+      <h2 className="mb-3 text-sm font-medium uppercase text-muted-foreground print:break-after-avoid">
+        {title}
+      </h2>
       <div className="overflow-x-auto print:overflow-visible">{children}</div>
     </Card>
   );
@@ -304,19 +314,20 @@ const TOTAL_ROW = "break-inside-avoid font-medium";
 
 function YearEndLists({
   lists,
-  bundle,
+  names,
   year,
   derived,
 }: {
   lists: ReturnType<typeof yearEndLists>;
-  bundle: { clients: { id: string; name: string }[]; vehicles: VehicleRow[] };
+  /** Every client and vehicle, archived ones included. */
+  names: { clients: { id: string; name: string }[]; vehicles: VehicleRow[] };
   year: number;
   derived: { gross1099: number; mileageDeduction: number };
 }) {
   const clientName = (id: string | null) =>
-    id === null ? "No client" : (bundle.clients.find((c) => c.id === id)?.name ?? "Unknown client");
+    id === null ? "No client" : (names.clients.find((c) => c.id === id)?.name ?? "Unknown client");
   const vehicleName = (id: string | null) => {
-    const v = bundle.vehicles.find((x) => x.id === id);
+    const v = names.vehicles.find((x) => x.id === id);
     return v ? [v.year, v.make, v.model].filter(Boolean).join(" ") : "—";
   };
   const totalMiles = lists.mileage.reduce((sum, t) => sum + t.businessMiles, 0);

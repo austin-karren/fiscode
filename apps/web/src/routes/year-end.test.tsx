@@ -5,7 +5,21 @@ import { expectNoRawValues } from "../test/raw-values";
 
 // The database is SQLite over OPFS and the router needs a browser history;
 // neither exists in jsdom. Both are replaced at the package boundary.
-vi.mock("@fiscode/db", () => ({ buildBundle: async () => ({}) }));
+// `db.bundle` stands in for buildBundle, which leaves archived rows out; the
+// repos' listIncludingDeleted keep them, as the real ones do.
+const { db } = vi.hoisted(() => ({
+  db: {
+    bundle: {} as Record<string, unknown>,
+    clients: [] as unknown[],
+    vehicles: [] as unknown[],
+  },
+}));
+
+vi.mock("@fiscode/db", () => ({
+  buildBundle: async () => db.bundle,
+  clientRepo: { listIncludingDeleted: async () => db.clients },
+  vehicleRepo: { listIncludingDeleted: async () => db.vehicles },
+}));
 
 const loaderData = {
   profile: { filingStatus: "single", state: "UT" },
@@ -31,7 +45,7 @@ const loaderData = {
     excludedBeforeSeStart: { income: 0, expense: 0, mileage: 0 },
   },
   totalsByCategory: { software_subs: 8950 },
-  bundle: {
+  names: {
     clients: [{ id: "c_demo", name: "Demo Client Co" }],
     vehicles: [{ id: "v_demo", year: 2020, make: "Demo", model: "Wagon" }],
   },
@@ -80,6 +94,8 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
     </a>
   ),
 }));
+
+import { exampleBundle } from "@fiscode/csv";
 
 import { Route } from "./year-end";
 
@@ -175,5 +191,20 @@ describe("year-end packet", () => {
     expect(screen.getByRole("link", { name: "Tax data" })).toHaveAttribute("href", "/tax-data");
     expect(document.body).not.toHaveTextContent(/todo: verify/i);
     expect(document.body).not.toHaveTextContent(/tax package source/i);
+  });
+});
+
+describe("year-end loader", () => {
+  it("names an archived client and vehicle in the lists, not 'Unknown'", async () => {
+    const example = exampleBundle();
+    const [archivedClient, ...liveClients] = example.clients;
+    const ARCHIVED = "2026-10-01T00:00:00.000Z";
+    db.bundle = { ...example, clients: liveClients, vehicles: [] };
+    db.clients = [{ ...archivedClient!, deletedAt: ARCHIVED }, ...liveClients];
+    db.vehicles = example.vehicles.map((v) => ({ ...v, deletedAt: ARCHIVED }));
+
+    const loader = Route.options.loader as unknown as () => Promise<{ names: unknown }>;
+    const data = await loader();
+    expect(data.names).toEqual({ clients: db.clients, vehicles: db.vehicles });
   });
 });
