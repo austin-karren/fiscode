@@ -22,6 +22,7 @@ import { EditTimeDialog } from "../components/edit-time-dialog";
 import { ParentName } from "../components/parent-name";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { useToday } from "../lib/use-today";
+import { formatDate } from "../lib/format-date";
 
 const timeSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -217,7 +218,7 @@ function TimePage() {
                 <DataTable.Row key={t.id}>
                   <DataTable.Cell>
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="font-mono">{t.date}</span>
+                      <span className="whitespace-nowrap">{formatDate(t.date)}</span>
                       <PreSeStartBadge rowDate={t.date} seStartDate={profile?.seStartDate} />
                     </span>
                   </DataTable.Cell>

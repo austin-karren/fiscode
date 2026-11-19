@@ -7,13 +7,24 @@ import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/aler
 import { buildBundle } from "@fiscode/db";
 import { exportBundle, exportFileName } from "@fiscode/csv";
 import { estimateYear, getYearConfig } from "@fiscode/tax";
-import { cents, formatUSD, todayIso, yearOf } from "@fiscode/core";
+import {
+  cents,
+  ENTITY_TYPE_LABELS,
+  EXPENSE_CATEGORY_LABELS,
+  FILING_STATUS_LABELS,
+  formatUSD,
+  labelFor,
+  todayIso,
+  yearOf,
+} from "@fiscode/core";
 import { CircleAlert, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 
 import { Page } from "../components/page";
 import { buildAnnualizedInput, buildTaxInput, deriveYear } from "../lib/tax-input";
 import { GLOSSARY } from "../lib/tax-glossary";
+import { formatDate } from "../lib/format-date";
+import { US_STATE_BY_CODE } from "../lib/us-states";
 import { expenseTotalsByCategory } from "../lib/year-end";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { SetupRequiredEmpty } from "../components/empty-states/setup-required";
@@ -156,7 +167,8 @@ function YearEndPage() {
           <AlertTitle>Some rows are dated before your SE start date</AlertTitle>
           <AlertDescription>
             {excl.income} income, {excl.expense} expense, {excl.mileage} mileage rows dated before{" "}
-            {derived.seStartDate} are not counted. Review them on their respective pages.
+            {formatDate(derived.seStartDate)} are not counted. Review them on their respective
+            pages.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -164,10 +176,10 @@ function YearEndPage() {
       <Card className="p-4 print:break-inside-avoid print:overflow-visible print:p-0 print:ring-0">
         <dl className="grid gap-2 @md:grid-cols-2">
           <Row label="Filing status" tooltip={GLOSSARY.filingStatus}>
-            {profile.filingStatus.toUpperCase()}
+            {labelFor(FILING_STATUS_LABELS, profile.filingStatus)}
           </Row>
-          <Row label="State">{profile.state}</Row>
-          <Row label="Entity">{derived.activeEntityType}</Row>
+          <Row label="State">{US_STATE_BY_CODE[profile.state] ?? profile.state}</Row>
+          <Row label="Entity">{labelFor(ENTITY_TYPE_LABELS, derived.activeEntityType)}</Row>
           <Row label="1099 income" tooltip={GLOSSARY.income1099}>
             {formatUSD(derived.gross1099)}
           </Row>
@@ -212,7 +224,7 @@ function YearEndPage() {
                 key={cat}
                 className="break-inside-avoid border-b border-border/40 last:border-b-0"
               >
-                <td className="py-1">{cat}</td>
+                <td className="py-1">{labelFor(EXPENSE_CATEGORY_LABELS, cat)}</td>
                 <td className="py-1 text-right tabular-nums">{formatUSD(cents(total))}</td>
               </tr>
             ))}
@@ -234,7 +246,7 @@ function YearEndPage() {
         <p className="text-sm text-muted-foreground">
           Year config: {getYearConfig(year).year}. Mileage rate:{" "}
           {getYearConfig(year)
-            .mileageRates.map((r) => `$${r.ratePerMile.toFixed(3)}/mi from ${r.from}`)
+            .mileageRates.map((r) => `$${r.ratePerMile.toFixed(3)}/mi from ${formatDate(r.from)}`)
             .join(", ")}
           . SS wage base: {formatUSD(cents(getYearConfig(year).ssWageBase))}.
         </p>

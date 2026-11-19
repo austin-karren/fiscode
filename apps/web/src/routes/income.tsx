@@ -23,6 +23,8 @@ import { ParentName } from "../components/parent-name";
 import { moneyAmount } from "../lib/field-schemas";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { useToday } from "../lib/use-today";
+import { formatDate } from "../lib/format-date";
+import { INCOME_KIND_LABELS, labelFor } from "@fiscode/core";
 
 const KIND_OPTIONS = [
   { value: "recurring", label: "Recurring" },
@@ -239,14 +241,14 @@ function IncomePage() {
                 <DataTable.Row key={i.id}>
                   <DataTable.Cell>
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="font-mono">{i.date}</span>
+                      <span className="whitespace-nowrap">{formatDate(i.date)}</span>
                       <PreSeStartBadge rowDate={i.date} seStartDate={profile?.seStartDate} />
                     </span>
                   </DataTable.Cell>
                   <DataTable.Cell>
                     <ParentName parent={allClients.find((c) => c.id === i.clientId)} />
                   </DataTable.Cell>
-                  <DataTable.Cell>{i.kind}</DataTable.Cell>
+                  <DataTable.Cell>{labelFor(INCOME_KIND_LABELS, i.kind)}</DataTable.Cell>
                   <DataTable.Cell>{i.description ?? "—"}</DataTable.Cell>
                   <DataTable.Cell align="right">{formatUSD(cents(i.amountCents))}</DataTable.Cell>
                   <DataTable.Cell align="right">

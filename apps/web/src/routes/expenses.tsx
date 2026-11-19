@@ -35,6 +35,7 @@ import { softDeleteWithUndo } from "../lib/soft-delete";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@fiscode/ui/components/tooltip";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { useToday } from "../lib/use-today";
+import { formatDate } from "../lib/format-date";
 
 const CATEGORIES = Object.entries(EXPENSE_CATEGORY_LABELS);
 
@@ -285,7 +286,7 @@ function ExpensesPage() {
                 <DataTable.Row key={x.id}>
                   <DataTable.Cell>
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="font-mono">{x.date}</span>
+                      <span className="whitespace-nowrap">{formatDate(x.date)}</span>
                       {x.startupExpense ? (
                         <Badge variant="secondary">Startup §195</Badge>
                       ) : (

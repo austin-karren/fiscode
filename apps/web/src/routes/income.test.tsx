@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { Toaster } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { expectNoRawValues } from "../test/raw-values";
+
 // Demo data. "Demo Archived Co" was archived after the first row was logged.
 const liveClient = { id: "c_live", name: "Demo Live Co", deletedAt: null };
 const archivedClient = {
@@ -64,6 +66,16 @@ const rowFor = (text: string) => screen.getByText(text).closest("tr")!;
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+describe("income table text", () => {
+  it("shows dates and kinds as words, never stored values", () => {
+    renderPage();
+    const table = screen.getByRole("table");
+    expect(table).toHaveTextContent("Jan 15, 2026");
+    expect(table).toHaveTextContent("Consulting");
+    expectNoRawValues(table);
+  });
 });
 
 describe("income list with an archived client", () => {
