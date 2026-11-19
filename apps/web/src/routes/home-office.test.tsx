@@ -133,6 +133,20 @@ describe("home office: Actual method and its rules", () => {
     expect(await within(addCard()).findByText("Larger than the home")).toBeInTheDocument();
   });
 
+  it("clears the area message once the home is made large enough, and Save comes back", async () => {
+    render(<HomeOfficePage />);
+    typeInto("Home sqft (optional)", "1220");
+    typeInto("Office sqft (optional)", "1500");
+    await within(addCard()).findByText("Larger than the home");
+
+    // Only Home changes; Office is not touched again.
+    typeInto("Home sqft (optional)", "1600");
+    await waitFor(() =>
+      expect(within(addCard()).queryByText("Larger than the home")).not.toBeInTheDocument(),
+    );
+    expect(saveButton()).toBeEnabled();
+  });
+
   it("asks for the monthly costs only under Actual, and saves them in cents", async () => {
     render(<HomeOfficePage />);
     expect(screen.queryByTestId("actual-costs")).not.toBeInTheDocument();

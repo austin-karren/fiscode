@@ -127,7 +127,9 @@ export function HomeOfficeFields({ form, methodError }: { form: any; methodError
           form={form}
           name="officeSqft"
           requirement="optional"
-          validators={{ onBlur: officeOnBlur }}
+          // Re-checked when Home sqft is blurred too: raising the home can
+          // clear the message without touching the office field.
+          validators={{ onBlur: officeOnBlur, onBlurListenTo: ["homeSqft"] }}
         >
           {(field) => (
             <FormItem>

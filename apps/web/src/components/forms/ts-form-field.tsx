@@ -39,7 +39,7 @@ export function TSFormField({
 }: {
   form: any;
   name: string;
-  validators?: { onBlur?: BlurValidator };
+  validators?: { onBlur?: BlurValidator; onBlurListenTo?: string[] };
   error?: string;
   /** "required" or "optional"; leave out for a checkbox. See FormField. */
   requirement?: FieldRequirement;
@@ -47,7 +47,7 @@ export function TSFormField({
 }) {
   const FieldComp = form.Field as React.ComponentType<{
     name: string;
-    validators?: { onBlur?: BlurValidator };
+    validators?: { onBlur?: BlurValidator; onBlurListenTo?: string[] };
     children: (field: AnyFieldApi) => ReactNode;
   }>;
   return (
