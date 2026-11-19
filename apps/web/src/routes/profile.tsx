@@ -23,7 +23,12 @@ import { ConfirmDialog } from "@fiscode/ui/components/confirm-dialog";
 
 import { Page } from "../components/page";
 import { TSFormField } from "../components/forms/ts-form-field";
-import { DatePicker, dateToIso, isoToDate } from "../components/forms/date-picker";
+import {
+  CONFIG_YEARS_BACK,
+  DatePicker,
+  dateToIso,
+  isoToDate,
+} from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { StateCombobox } from "../components/forms/state-combobox";
 import { LabelWithTooltip } from "../components/forms/labeled";
@@ -304,6 +309,7 @@ function ProfileFormPanel({
                   </LabelWithTooltip>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
@@ -502,6 +508,7 @@ function ProfileFormPanel({
                   <FormLabel>Start</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
@@ -517,6 +524,7 @@ function ProfileFormPanel({
                   <FormLabel>End (optional)</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
@@ -572,6 +580,7 @@ function ProfileFormPanel({
                   <FormLabel>Start</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
@@ -587,6 +596,7 @@ function ProfileFormPanel({
                   <FormLabel>End</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
