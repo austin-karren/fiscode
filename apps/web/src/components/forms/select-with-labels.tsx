@@ -23,6 +23,7 @@ export function SelectWithLabels({
   onBlur,
   "aria-invalid": ariaInvalid,
   "aria-describedby": ariaDescribedBy,
+  "aria-required": ariaRequired,
 }: {
   value: string;
   onValueChange: (v: string) => void;
@@ -50,6 +51,7 @@ export function SelectWithLabels({
         id={id}
         aria-invalid={ariaInvalid}
         aria-describedby={ariaDescribedBy}
+        aria-required={ariaRequired}
         onBlur={() => {
           if (!openRef.current) onBlur?.();
         }}

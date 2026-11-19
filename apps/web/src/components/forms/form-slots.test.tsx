@@ -9,7 +9,9 @@ import {
 import { TooltipProvider } from "@fiscode/ui/components/tooltip";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { DatePicker } from "./date-picker";
 import { LabelWithTooltip } from "./labeled";
+import { SelectWithLabels } from "./select-with-labels";
 
 afterEach(cleanup);
 
@@ -77,5 +79,39 @@ describe("form slots", () => {
   it("links a label's info hint to its field, so the field announces it", () => {
     render(<Field hint="Demo hint text." />);
     expect(screen.getByRole("textbox")).toHaveAccessibleDescription("Demo hint text.");
+  });
+});
+
+describe("required custom controls", () => {
+  const wrap = (control: React.ReactNode) => (
+    <TooltipProvider>
+      <FormField name="demo" errors={[]} requirement="required">
+        <FormItem>
+          <FormLabel>Demo</FormLabel>
+          <FormControl>{control}</FormControl>
+          <FormMessage />
+        </FormItem>
+      </FormField>
+    </TooltipProvider>
+  );
+
+  it("passes the required state to a select", () => {
+    render(
+      wrap(
+        <SelectWithLabels
+          value=""
+          onValueChange={() => {}}
+          items={[{ value: "a", label: "Demo option" }]}
+        />,
+      ),
+    );
+    expect(screen.getByRole("combobox", { name: "Demo" })).toHaveAttribute("aria-required", "true");
+  });
+
+  it("says 'Required' in a date button's description, as a button cannot be aria-required", () => {
+    render(wrap(<DatePicker value={undefined} onValueChange={() => {}} />));
+    const button = screen.getByRole("button", { name: /Demo/ });
+    expect(button).not.toHaveAttribute("aria-required");
+    expect(button).toHaveAccessibleDescription(/Required/);
   });
 });
