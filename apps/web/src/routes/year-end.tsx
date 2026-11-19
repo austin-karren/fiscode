@@ -184,7 +184,7 @@ function YearEndPage() {
       ) : null}
 
       <Card className="p-4 print:break-inside-avoid print:overflow-visible print:p-0 print:ring-0">
-        <dl className="grid gap-2 @md:grid-cols-2">
+        <dl className="grid gap-2 gap-x-12 @md:grid-cols-2">
           <Row label="Filing status" tooltip={GLOSSARY.filingStatus}>
             {labelFor(FILING_STATUS_LABELS, profile.filingStatus)}
           </Row>

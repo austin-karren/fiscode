@@ -111,3 +111,16 @@ describe("dashboard text", () => {
     expectNoRawValues(document.body, ["SINGLE", "UT"]);
   });
 });
+
+describe("dashboard hierarchy", () => {
+  it("shows one primary figure, the total, with the three taxes receding beside it", () => {
+    render(<Dashboard />);
+    const value = (label: string) =>
+      screen.getByText(label).closest("[data-slot=card-content]")!.querySelector("p + p")!;
+    expect(value("Total liability")).toHaveClass("text-4xl");
+    for (const label of ["Self-employment tax", "Federal income tax", "State income tax"]) {
+      expect(value(label)).not.toHaveClass("text-4xl");
+      expect(value(label)).toHaveClass("text-lg");
+    }
+  });
+});
