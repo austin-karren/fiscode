@@ -30,6 +30,7 @@ import { expenseTotalsByCategory, yearEndLists } from "../lib/year-end";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { SetupRequiredEmpty } from "../components/empty-states/setup-required";
 import { InfoTooltip } from "../components/info-tooltip";
+import { SectionTitle } from "../components/section-title";
 
 export const Route = createFileRoute("/year-end")({
   // No beforeLoad redirect — route stays visitable without a profile so the
@@ -226,9 +227,7 @@ function YearEndPage() {
       <YearEndLists lists={lists!} names={names!} year={year} derived={derived} />
 
       <Card className="p-4 print:break-inside-avoid print:overflow-visible print:p-0 print:ring-0">
-        <h2 className="mb-3 text-sm font-medium uppercase text-muted-foreground">
-          Expense breakdown
-        </h2>
+        <SectionTitle className="mb-3">Expense breakdown</SectionTitle>
         <table className="w-full text-sm">
           <tbody>
             {Object.entries(totalsByCategory).map(([cat, total]) => (
@@ -252,9 +251,7 @@ function YearEndPage() {
       </Card>
 
       <Card className="p-4 print:break-inside-avoid print:overflow-visible print:p-0 print:ring-0">
-        <h2 className="mb-3 text-sm font-medium uppercase text-muted-foreground">
-          Tax config used
-        </h2>
+        <SectionTitle className="mb-3">Tax config used</SectionTitle>
         <p className="text-sm text-muted-foreground">
           Year config: {getYearConfig(year).year}. Mileage rate:{" "}
           {getYearConfig(year)
@@ -301,9 +298,7 @@ function ListCard({ title, children }: { title: string; children: React.ReactNod
   return (
     <Card className="p-4 print:overflow-visible print:p-0 print:ring-0">
       {/* Printed, a heading stays on the page with its table. */}
-      <h2 className="mb-3 text-sm font-medium uppercase text-muted-foreground print:break-after-avoid">
-        {title}
-      </h2>
+      <SectionTitle className="mb-3 print:break-after-avoid">{title}</SectionTitle>
       <div className="overflow-x-auto print:overflow-visible">{children}</div>
     </Card>
   );

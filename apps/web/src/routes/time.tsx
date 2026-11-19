@@ -24,6 +24,7 @@ import { ParentName } from "../components/parent-name";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { useToday } from "../lib/use-today";
 import { formatDate } from "../lib/format-date";
+import { SectionTitle } from "../components/section-title";
 
 const timeSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -129,8 +130,8 @@ function TimePage() {
       >
         <Card ref={addCard}>
           <CardHeader>
-            <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-              Log time
+            <CardTitle>
+              <SectionTitle>Log time</SectionTitle>
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1fr_1.5fr_2fr]">
