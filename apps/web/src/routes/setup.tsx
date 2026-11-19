@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
@@ -56,6 +56,7 @@ export const Route = createFileRoute("/setup")({
 
 function SetupPage() {
   const navigate = useNavigate();
+  const router = useRouter();
   // Defaults are intentionally empty — the user picks every field. No
   // auto-filled assumptions about filing status, state, start date, or
   // entity type. Submit stays disabled until zod accepts all four.
@@ -95,6 +96,9 @@ function SetupPage() {
           });
         }
         toast.success("Profile saved.");
+        // The layout read "no profile yet" when this screen opened; read it
+        // again, or the next screen would still ask for setup.
+        await router.invalidate();
         navigate({ to: "/" });
       } catch (err) {
         console.error(err);
@@ -216,7 +220,10 @@ function SetupPage() {
         </Card>
       </EnterToSubmitForm>
 
-      <ImportCard variant="setup" onImported={() => navigate({ to: "/" })} />
+      {/* "Restore a backup" on the set-up-first screens links here. */}
+      <div id="restore" className="scroll-mt-16">
+        <ImportCard variant="setup" onImported={() => navigate({ to: "/" })} />
+      </div>
     </Page>
   );
 }
