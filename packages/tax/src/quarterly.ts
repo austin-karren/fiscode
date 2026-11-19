@@ -29,7 +29,8 @@ export const evenQuarterly = (
 ): QuarterlyPlan => {
   const periods = quarterPeriods(estimate.year);
   const required = regularInstallments(requiredAnnualPayment);
-  const toPay = paymentsAfterWithholding(required, estimate.spouseWithholding);
+  // Federal withholding only (Form 2210 line 6); state withholding never offsets IRS installments.
+  const toPay = paymentsAfterWithholding(required, estimate.federalWithholding);
   const payments = periods.map((p, i): QuarterPayment => ({
     quarter: (i + 1) as 1 | 2 | 3 | 4,
     periodStart: p.start,

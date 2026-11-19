@@ -1,4 +1,4 @@
-import { type Cents, type IsoDate, addCents, mulRate, shiftToBusinessDay } from "@fiscode/core";
+import { type Cents, type IsoDate, mulRate, shiftToBusinessDay } from "@fiscode/core";
 import { type Four, paymentsAfterWithholding, scheduleAiInstallments } from "./installments.ts";
 import type {
   AnnualizedInput,
@@ -59,11 +59,11 @@ export const annualizedQuarterly = (
       },
       cfg,
     );
-    return estimate.totalLiability;
+    // Schedule AI line 19 is federal: income tax + SE tax, no state tax.
+    return estimate.federalLiability;
   }) as Four<Cents>;
   const required = scheduleAiInstallments(annualizedTax, requiredAnnualPayment);
-  const withholding = addCents(input.spouseFederalWithholding, input.spouseStateWithholding);
-  const toPay = paymentsAfterWithholding(required, withholding);
+  const toPay = paymentsAfterWithholding(required, input.spouseFederalWithholding);
   const payments = periods.map((period, i): QuarterPayment => ({
     quarter: (i + 1) as 1 | 2 | 3 | 4,
     periodStart: period.start,

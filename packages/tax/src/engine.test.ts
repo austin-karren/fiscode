@@ -62,17 +62,23 @@ describe("estimateYear (sole prop, MFJ, UT)", () => {
     // First-year safe harbor: floor = 90% of current.
     expect(safeHarbor.firstYear).toBe(true);
     expect(safeHarbor.priorYearTarget).toBeUndefined();
-    expect(safeHarbor.floor).toBe(Math.round(estimate.totalLiability * 0.9));
+    // Form 2210 line 5: 90% of this year's federal tax (income tax + SE tax).
+    expect(estimate.federalLiability).toBe(
+      (estimate.federal.federalIncomeTax + estimate.se.totalSeTax) as Cents,
+    );
+    expect(safeHarbor.floor).toBe(Math.round(estimate.federalLiability * 0.9));
   });
 
   // Form 2210 line 7: "Subtract line 6 from line 4. If less than $1,000, stop;
   // you don't owe a penalty." Withholding is set so the tax left is exactly
   // the boundary amount.
   describe("the $1,000 no-penalty test (Form 2210 lines 4 and 7)", () => {
+    // Federal tax only (Form 2210 line 4 = federal income tax + SE tax), minus
+    // federal withholding only (line 6).
     const leaving = (left: number) => {
-      const total = estimateYear({ entity: "sole_prop", method: "even", input: baseInput() })
-        .estimate.totalLiability;
-      return baseInput({ spouseFederalWithholding: cents(total - dollars(left)) });
+      const federal = estimateYear({ entity: "sole_prop", method: "even", input: baseInput() })
+        .estimate.federalLiability;
+      return baseInput({ spouseFederalWithholding: cents(federal - dollars(left)) });
     };
 
     for (const method of ["even", "annualized"] as const) {
@@ -88,7 +94,7 @@ describe("estimateYear (sole prop, MFJ, UT)", () => {
 
       it(`${method}: $999.99 left after withholding → no installments`, () => {
         const r = run(999.99);
-        expect(r.estimate.remainingOwed).toBe(dollars(999.99));
+        expect(r.estimate.federalLiability - r.estimate.federalWithholding).toBe(dollars(999.99));
         expect(r.quarterly.noInstallmentsRequired).toBe(true);
         expect(r.quarterly.payments.map((p) => p.requiredInstallment)).toEqual([0, 0, 0, 0]);
         expect(r.quarterly.payments.map((p) => p.amount)).toEqual([0, 0, 0, 0]);
@@ -97,7 +103,7 @@ describe("estimateYear (sole prop, MFJ, UT)", () => {
       it(`${method}: $1,000.00 and $1,000.01 left → installments are required`, () => {
         for (const left of [1_000, 1_000.01]) {
           const r = run(left);
-          expect(r.estimate.remainingOwed).toBe(dollars(left));
+          expect(r.estimate.federalLiability - r.estimate.federalWithholding).toBe(dollars(left));
           expect(r.quarterly.noInstallmentsRequired).toBe(false);
           const req = r.quarterly.payments.reduce((a, p) => a + p.requiredInstallment, 0);
           expect(req).toBe(r.safeHarbor.floor);
@@ -111,7 +117,7 @@ describe("estimateYear (sole prop, MFJ, UT)", () => {
         method: "even",
         input: baseInput({ gross1099: dollars(4_000), deductibleExpenses: cents(0) }),
       });
-      expect(r.estimate.remainingOwed).toBeLessThan(dollars(1_000));
+      expect(r.estimate.federalLiability).toBeLessThan(dollars(1_000));
       expect(r.quarterly.noInstallmentsRequired).toBe(true);
       expect(r.quarterly.payments.map((p) => p.amount)).toEqual([0, 0, 0, 0]);
     });

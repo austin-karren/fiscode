@@ -74,18 +74,18 @@ The plan follows Form 2210. The lines used read the same in the
 [2025 form](https://www.irs.gov/pub/irs-pdf/f2210.pdf) and the
 [2026 draft](https://www.irs.gov/pub/irs-dft/f2210--dft.pdf) (created April 16, 2026):
 
-- If the tax left after withholding is under $1,000, no installments are required and every card
-  is $0 (lines 4 and 7: "If less than $1,000, stop; you don't owe a penalty"). The dashboard says
+- If the federal tax left after federal withholding is under $1,000, no installments are required
+  and every card is $0 (lines 4 and 7: "If less than $1,000, stop; you don't owe a penalty"). The dashboard says
   so in one sentence.
-- The year target is the required annual payment (line 9): the smaller of 90% of this year's tax
-  and the prior-year amount, which is the safe-harbor floor.
+- The year target is the required annual payment (line 9): the smaller of 90% of this year's
+  federal tax and the prior-year amount, which is the safe-harbor floor.
 - Regular method: each required installment is 25% of the target (line 10).
 - Annualized method (Schedule AI): each period's income, mileage, home office and other
   expenses through that period are annualized and the year's tax figured on them. Each
   installment is the smaller of the annualized amount, with any earlier reduction recaptured, and
   the regular 25% plus whatever earlier regular installments left unused (lines 21-27). The four
   always add up to the target.
-- Withholding counts as paid a quarter at a time
+- Federal withholding counts as paid a quarter at a time
   ([instructions](https://www.irs.gov/pub/irs-pdf/i2210.pdf)), so each card shows what is left to
   pay after it.
 
@@ -94,8 +94,18 @@ Notes on the quarterly plan:
 - Schedule AI Part II figures self-employment tax per period with a prorated Social Security
   limit. Without W-2 wages of your own, that gives the same result as the annualized calculation
   fiscode uses. With your own W-2 wages it would differ, and fiscode does not model them yet.
-- Utah's tax is included in the same target and in the $1,000 test. Form 2210 counts federal tax
-  only, and Utah has its own estimated-tax schedule.
+- The plan is federal only, as Form 2210 is: federal income tax plus self-employment tax, minus
+  federal withholding. State tax and state withholding never enter it.
+
+### Utah prepayment
+
+Utah has no quarterly schedule and no $1,000 test. Its
+[TC-546](https://files.tax.utah.gov/tax/forms/current/tc-546.pdf) asks for a minimum by the
+return's due date: the lesser of 90% of this year's Utah tax and last year's Utah tax, minus Utah
+withholding ("If less than zero, a payment is not due at this time"). Unpaid, it costs "2 percent
+of the unpaid tax for each month of the extension period". The return is due the same day as the
+federal one ([Utah Code 59-10-514](https://le.utah.gov/xcode/Title59/Chapter10/59-10-S514.html)),
+April 15. fiscode has no input for last year's Utah tax, so it shows 90% of this year's.
 
 Not modelled yet:
 

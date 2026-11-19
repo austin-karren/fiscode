@@ -98,7 +98,7 @@ function Dashboard() {
       <Card>
         <CardHeader>
           <CardTitle className="inline-flex items-center gap-1.5 text-sm font-medium uppercase text-muted-foreground">
-            Quarterly payments
+            IRS quarterly payments (federal)
             <InfoTooltip text={GLOSSARY.unevenQuarters} />
           </CardTitle>
         </CardHeader>
@@ -128,8 +128,15 @@ function Dashboard() {
           </div>
           {result.quarterly.noInstallmentsRequired ? (
             <p className="mt-3 text-sm text-muted-foreground">
-              No estimated payments are needed: you owe less than $1,000 after withholding, so there
-              is no underpayment penalty.
+              No IRS estimated payments are needed: you owe the IRS less than $1,000 after federal
+              withholding, so there is no federal underpayment penalty.
+            </p>
+          ) : null}
+          {result.statePrepayment ? (
+            <p className="mt-3 text-sm text-muted-foreground">
+              Utah: pay at least {formatUSD(result.statePrepayment.minimum)} by{" "}
+              <span className="font-mono">{result.statePrepayment.dueDate}</span> (90% of this
+              year&apos;s Utah tax, less Utah withholding).
             </p>
           ) : null}
           {upcoming && recommendedPrep ? (

@@ -44,9 +44,9 @@ const input = (overrides: Partial<AnnualizedInput> = {}): AnnualizedInput =>
 
 describe("annualizedQuarterly", () => {
   const cfg = config2026;
-  // Required annual payment for a first-year filer: 90% of the year's tax.
+  // Required annual payment for a first-year filer: 90% of the year's federal tax.
   const required90 = () =>
-    Math.round(soleProprietorStrategy.compute(input(), cfg).totalLiability * 0.9) as never;
+    Math.round(soleProprietorStrategy.compute(input(), cfg).federalLiability * 0.9) as never;
 
   it("returns four payments with the correct period/due-date metadata", () => {
     const plan = annualizedQuarterly(input(), cfg, soleProprietorStrategy, required90());

@@ -29,6 +29,9 @@ const estimate = (year: number, owed: number): TaxEstimate =>
     federal: { taxableIncome: cents(0), qbiDeduction: cents(0), federalIncomeTax: cents(0) },
     state: { taxableIncome: cents(0), rate: 0, stateIncomeTax: cents(0) },
     spouseWithholding: cents(0),
+    federalLiability: dollars(owed),
+    federalWithholding: cents(0),
+    stateWithholding: cents(0),
     totalLiability: dollars(owed),
     remainingOwed: dollars(owed),
   }) as TaxEstimate;
@@ -55,9 +58,9 @@ describe("evenQuarterly", () => {
     expect(plan.method).toBe("even");
   });
 
-  it("withholding counts as paid one quarter per due date", () => {
+  it("federal withholding counts as paid one quarter per due date", () => {
     // Required 10,800 → 2,700 each; withholding 4,000 → 1,000 each → pay 1,700
-    const e = { ...estimate(2026, 12_000), spouseWithholding: dollars(4_000) } as TaxEstimate;
+    const e = { ...estimate(2026, 12_000), federalWithholding: dollars(4_000) } as TaxEstimate;
     const plan = evenQuarterly(e, config2026, dollars(10_800));
     expect(plan.payments.map((p) => p.amount)).toEqual([
       dollars(1_700),

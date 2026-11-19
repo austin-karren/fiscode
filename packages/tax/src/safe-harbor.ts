@@ -17,7 +17,9 @@ export const computeSafeHarbor = (
   cfg: YearConfig,
   filingStatus?: FilingStatus,
 ): SafeHarborResult => {
-  const currentYearTarget = mulRate(estimate.totalLiability, cfg.safeHarbor.currentYearFraction);
+  // Form 2210 line 5: 90% of this year's federal tax (line 4). State tax has
+  // its own rule (see state-prepayment.ts).
+  const currentYearTarget = mulRate(estimate.federalLiability, cfg.safeHarbor.currentYearFraction);
   if (priorYearTotalTax === undefined) {
     return {
       currentYearTarget,

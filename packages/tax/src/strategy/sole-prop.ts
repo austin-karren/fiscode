@@ -102,6 +102,9 @@ export const soleProprietorStrategy: TaxStrategy = {
         stateIncomeTax,
       },
       spouseWithholding: totalWithholding,
+      federalLiability: addCents(federalIncomeTax, se.totalSeTax),
+      federalWithholding: input.spouseFederalWithholding,
+      stateWithholding: input.spouseStateWithholding,
       totalLiability,
       remainingOwed: clampMinZero(subCents(totalLiability, totalWithholding)),
     };

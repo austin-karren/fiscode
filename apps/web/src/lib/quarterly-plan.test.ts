@@ -67,4 +67,36 @@ describe("quarterly plan, Form 2210", () => {
     const even = plan(withIncomeOn("2026-11-02"), "even").quarterly.payments;
     expect(even[0]!.requiredInstallment).toBeGreaterThan(0);
   });
+
+  // The reviewer's cases: the example profile with the spouse's withholding
+  // changed. Federal tax (income + SE) is $5,097.42 and Utah tax $1,110.00.
+  const withWithholding = (federal: number, state: number) => {
+    const b = exampleBundle();
+    b.spouses = b.spouses.map((s) => ({
+      ...s,
+      annualFederalWithholdingCents: federal,
+      annualStateWithholdingCents: state,
+    }));
+    return b;
+  };
+
+  it("case A: $597.42 left with the IRS, Utah unpaid: no IRS installments, Utah prepayment $999.00", () => {
+    const r = plan(withWithholding(4_500_00, 0), "annualized");
+    expect(r.estimate.federalLiability).toBe(5_097_42);
+    expect(r.quarterly.noInstallmentsRequired).toBe(true);
+    expect(r.quarterly.payments.map((p) => p.amount)).toEqual([0, 0, 0, 0]);
+    // 90% × 1,110.00 = 999.00, no Utah withholding
+    expect(r.statePrepayment).toMatchObject({ dueDate: "2027-04-15", minimum: 999_00 });
+  });
+
+  it("case B: $1,097.42 left with the IRS, Utah over-withheld: IRS installments required", () => {
+    const r = plan(withWithholding(4_000_00, 3_000_00), "even");
+    expect(r.quarterly.noInstallmentsRequired).toBe(false);
+    // Line 9 = 90% × 5,097.42 = 4,587.678 → 4,587.68; 25% each = 1,146.92
+    // Federal withholding 4,000 → 1,000 a quarter → 146.92 left each quarter
+    expect(r.safeHarbor.floor).toBe(4_587_68);
+    expect(r.quarterly.payments.map((p) => p.amount)).toEqual([146_92, 146_92, 146_92, 146_92]);
+    // Utah: 999.00 − 3,000.00 withheld → nothing due
+    expect(r.statePrepayment?.minimum).toBe(0);
+  });
 });

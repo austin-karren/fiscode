@@ -13,8 +13,8 @@ import { type Cents, cents, clampMinZero, mulRate, subCents } from "@fiscode/cor
  * Form 2210 line 7: "Subtract line 6 from line 4. If less than $1,000, stop;
  * you don't owe a penalty." (Line 4 says the same of the tax before
  * withholding, which line 7 already covers.) Under it, no installment is
- * required. fiscode applies it to the tax it estimates after withholding,
- * which includes Utah's; Form 2210 itself counts federal tax only.
+ * required. It counts federal tax and federal withholding only, as the form
+ * does; Utah's prepayment is separate (state-prepayment.ts).
  */
 export const NO_PENALTY_THRESHOLD = cents(1_000_00);
 
