@@ -7,6 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/u
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
 import {
+  EntityPeriodError,
   cents,
   ENTITY_TYPE_LABELS,
   FILING_STATUS_LABELS,
@@ -22,7 +23,12 @@ import { ConfirmDialog } from "@fiscode/ui/components/confirm-dialog";
 
 import { Page } from "../components/page";
 import { TSFormField } from "../components/forms/ts-form-field";
-import { DatePicker, dateToIso, isoToDate } from "../components/forms/date-picker";
+import {
+  CONFIG_YEARS_BACK,
+  DatePicker,
+  dateToIso,
+  isoToDate,
+} from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { StateCombobox } from "../components/forms/state-combobox";
 import { LabelWithTooltip } from "../components/forms/labeled";
@@ -148,6 +154,9 @@ function ProfileFormPanel({
     },
   });
 
+  // Set when the repo blocks an entity period: an overlap, or an end before the start.
+  const [entityError, setEntityError] = useState<string | null>(null);
+
   const entityForm = useForm({
     defaultValues: {
       type: "" as "" | "sole_prop" | "single_member_llc",
@@ -156,13 +165,20 @@ function ProfileFormPanel({
     },
     validators: { onSubmit: entitySchema as never },
     onSubmit: async ({ value, formApi }) => {
-      await entityRepo.create({
-        type: value.type as "sole_prop" | "single_member_llc",
-        startDate: dateToIso(value.startDate!),
-        endDate: value.endDate ? dateToIso(value.endDate) : null,
-        notes: null,
-        deletedAt: null,
-      });
+      setEntityError(null);
+      try {
+        await entityRepo.create({
+          type: value.type as "sole_prop" | "single_member_llc",
+          startDate: dateToIso(value.startDate!),
+          endDate: value.endDate ? dateToIso(value.endDate) : null,
+          notes: null,
+          deletedAt: null,
+        });
+      } catch (err) {
+        if (!(err instanceof EntityPeriodError)) throw err;
+        setEntityError(err.message);
+        return;
+      }
       toast.success("Entity period added.");
       formApi.reset();
       router.invalidate();
@@ -170,7 +186,13 @@ function ProfileFormPanel({
   });
 
   async function endEntityNow(id: string) {
-    await entityRepo.update(id, { endDate: dateToIso(new Date()) });
+    try {
+      await entityRepo.update(id, { endDate: dateToIso(new Date()) });
+    } catch (err) {
+      if (!(err instanceof EntityPeriodError)) throw err;
+      toast.error(err.message);
+      return;
+    }
     toast.success("Entity period ended.");
     router.invalidate();
   }
@@ -287,6 +309,7 @@ function ProfileFormPanel({
                   </LabelWithTooltip>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
@@ -485,6 +508,7 @@ function ProfileFormPanel({
                   <FormLabel>Start</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
@@ -500,6 +524,7 @@ function ProfileFormPanel({
                   <FormLabel>End (optional)</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
@@ -511,6 +536,13 @@ function ProfileFormPanel({
               )}
             </TSFormField>
           </CardContent>
+          {entityError ? (
+            <CardContent>
+              <p role="alert" className="text-sm text-destructive">
+                {entityError}
+              </p>
+            </CardContent>
+          ) : null}
           <CardFooter className="justify-end">
             <entityForm.Subscribe
               selector={(s) => ({
@@ -548,6 +580,7 @@ function ProfileFormPanel({
                   <FormLabel>Start</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
@@ -563,6 +596,7 @@ function ProfileFormPanel({
                   <FormLabel>End</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}

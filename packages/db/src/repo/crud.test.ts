@@ -203,6 +203,55 @@ describe("profileRepo — singleton semantics", () => {
   });
 });
 
+describe("profileRepo.revertTo", () => {
+  const demoProfile = {
+    filingStatus: "mfj",
+    state: "UT",
+    seStartDate: "2026-01-01",
+    dependents: 0,
+    tracksRoth: false,
+    usesRetirement: false,
+    quarterlyMethod: "annualized",
+    prepLeadDays: 14,
+  } as const;
+
+  it("restores the snapshot and writes one revert history entry", async () => {
+    const snapshot = await profileRepo.upsert(demoProfile);
+    await profileRepo.upsert({ ...demoProfile, filingStatus: "single", dependents: 2 });
+
+    const restored = await profileRepo.revertTo(snapshot);
+    expect(restored.filingStatus).toBe("mfj");
+    expect(restored.dependents).toBe(0);
+    expect(restored.id).toBe("profile");
+    expect(restored.createdAt).toBe(snapshot.createdAt);
+    expect(await profileRepo.get()).toEqual(restored);
+
+    const events = await historyRepo.listFor("profile", "profile");
+    expect(events.map((e) => e.op)).toEqual(["insert", "update", "revert"]);
+    const revert = events[2]!;
+    expect(JSON.parse(revert.beforeJson!).filingStatus).toBe("single");
+    expect(JSON.parse(revert.afterJson!).filingStatus).toBe("mfj");
+  });
+
+  it("is harmless when the snapshot is the current state", async () => {
+    const current = await profileRepo.upsert(demoProfile);
+    const restored = await profileRepo.revertTo(current);
+    const { updatedAt: _a, ...restoredFields } = restored;
+    const { updatedAt: _b, ...currentFields } = current;
+    expect(restoredFields).toEqual(currentFields);
+    const events = await historyRepo.listFor("profile", "profile");
+    expect(events.map((e) => e.op)).toEqual(["insert", "revert"]);
+  });
+
+  it("brings the profile back when there is none, as the singleton row", async () => {
+    const snapshot = await profileRepo.upsert(demoProfile);
+    sqlite.prepare("DELETE FROM profile").run();
+    const restored = await profileRepo.revertTo({ ...snapshot, id: "not-profile" });
+    expect(restored.id).toBe("profile");
+    expect(await profileRepo.exists()).toBe(true);
+  });
+});
+
 describe("repo — cross-table soft-delete + history isolation", () => {
   it("soft-deleting an expense does not affect mileage rows", async () => {
     const e = await expenseRepo.create({

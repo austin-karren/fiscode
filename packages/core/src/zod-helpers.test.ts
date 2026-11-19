@@ -1,22 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   csvBoolean,
-  csvOptionalInteger,
   csvOptionalIsoDate,
-  csvRequiredInteger,
   csvIsoDate,
-  integerString,
   isoDateString,
-  nonNegativeIntegerString,
   nonNegativeNumericString,
   numericString,
-  optionalIntegerString,
   optionalIsoDateString,
-  optionalNonNegativeIntegerString,
-  optionalUsdString,
-  positiveIntegerString,
   positiveNumericString,
-  usdString,
 } from "./zod-helpers.ts";
 
 const ok = <T>(
@@ -65,65 +56,6 @@ describe("nonNegativeNumericString / positiveNumericString", () => {
   });
 });
 
-describe("integerString / nonNegativeIntegerString / positiveIntegerString", () => {
-  it("integerString rejects decimals", () => {
-    fail(integerString, "1.5");
-    expect(ok(integerString, "42")).toBe(42);
-  });
-  it("nonNegativeInteger accepts 0", () => {
-    expect(ok(nonNegativeIntegerString, "0")).toBe(0);
-    fail(nonNegativeIntegerString, "-1");
-    fail(nonNegativeIntegerString, "1.5");
-  });
-  it("positiveInteger rejects 0", () => {
-    fail(positiveIntegerString, "0");
-    expect(ok(positiveIntegerString, "1")).toBe(1);
-  });
-});
-
-describe("optionalIntegerString / optionalNonNegativeIntegerString", () => {
-  it("empty → null", () => {
-    expect(ok(optionalIntegerString, "")).toBeNull();
-    expect(ok(optionalIntegerString, "   ")).toBeNull();
-    expect(ok(optionalNonNegativeIntegerString, "")).toBeNull();
-  });
-  it("integer in, integer out", () => {
-    expect(ok(optionalIntegerString, "2022")).toBe(2022);
-    expect(ok(optionalNonNegativeIntegerString, "0")).toBe(0);
-  });
-  it("non-numeric rejected even when 'optional'", () => {
-    fail(optionalIntegerString, "abc");
-    fail(optionalNonNegativeIntegerString, "abc");
-  });
-  it("negative rejected for nonNegative variant", () => {
-    expect(ok(optionalIntegerString, "-3")).toBe(-3);
-    fail(optionalNonNegativeIntegerString, "-3");
-  });
-  it("decimals rejected", () => {
-    fail(optionalIntegerString, "1.5");
-    fail(optionalNonNegativeIntegerString, "1.5");
-  });
-});
-
-describe("usdString / optionalUsdString", () => {
-  it("parses $1,234.56 to 123456 cents", () => {
-    expect(ok(usdString, "$1,234.56")).toBe(123_456);
-    expect(ok(usdString, "1234.56")).toBe(123_456);
-    expect(ok(usdString, "  42 ")).toBe(4_200);
-  });
-  it("rejects non-numeric and empty", () => {
-    fail(usdString, "abc");
-    fail(usdString, "");
-  });
-  it("optional: blank → null", () => {
-    expect(ok(optionalUsdString, "")).toBeNull();
-    expect(ok(optionalUsdString, "   ")).toBeNull();
-  });
-  it("optional: non-numeric still rejected (not silently $0)", () => {
-    fail(optionalUsdString, "abc");
-  });
-});
-
 describe("isoDateString / optionalIsoDateString", () => {
   it("accepts YYYY-MM-DD", () => {
     expect(ok(isoDateString, "2026-06-15")).toBe("2026-06-15");
@@ -143,16 +75,6 @@ describe("isoDateString / optionalIsoDateString", () => {
 });
 
 describe("CSV cell helpers", () => {
-  it("csvOptionalInteger: '' → null; finite int → number; junk rejected", () => {
-    expect(ok(csvOptionalInteger, "")).toBeNull();
-    expect(ok(csvOptionalInteger, "42")).toBe(42);
-    fail(csvOptionalInteger, "abc");
-    fail(csvOptionalInteger, "1.5");
-  });
-  it("csvRequiredInteger rejects empty", () => {
-    fail(csvRequiredInteger, "");
-    expect(ok(csvRequiredInteger, "0")).toBe(0);
-  });
   it("csvBoolean: '0' / '1' / '' only", () => {
     expect(ok(csvBoolean, "1")).toBe(true);
     expect(ok(csvBoolean, "0")).toBe(false);

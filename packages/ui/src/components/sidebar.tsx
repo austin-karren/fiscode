@@ -144,6 +144,7 @@ function Sidebar({
   side = "left",
   variant = "sidebar",
   collapsible = "offcanvas",
+  mobileFinalFocus,
   className,
   children,
   dir,
@@ -152,6 +153,8 @@ function Sidebar({
   side?: "left" | "right";
   variant?: "sidebar" | "floating" | "inset";
   collapsible?: "offcanvas" | "icon" | "none";
+  /** Where focus goes when the mobile sheet closes; the default is the element that opened it. */
+  mobileFinalFocus?: React.ComponentProps<typeof SheetContent>["finalFocus"];
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
 
@@ -178,6 +181,7 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
+          finalFocus={mobileFinalFocus}
           className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
           style={
             {

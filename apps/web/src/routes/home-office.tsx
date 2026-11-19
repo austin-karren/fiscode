@@ -22,7 +22,7 @@ import { optionalSqft } from "../lib/field-schemas";
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
-import { DatePicker, dateToIso } from "../components/forms/date-picker";
+import { CONFIG_YEARS_BACK, DatePicker, dateToIso } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { InfoTooltip } from "../components/info-tooltip";
@@ -109,6 +109,7 @@ function HomeOfficePage() {
                   <FormLabel>Start date</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}

@@ -17,9 +17,9 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { TSFormField } from "./forms/ts-form-field";
-import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
+import { CONFIG_YEARS_BACK, DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
-import { ENTITY_TYPE_LABELS, labelOptions } from "@fiscode/core";
+import { ENTITY_TYPE_LABELS, EntityPeriodError, labelOptions } from "@fiscode/core";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 
 const ENTITY_OPTIONS = labelOptions(ENTITY_TYPE_LABELS).filter((o) => o.value !== "s_corp");
@@ -32,6 +32,8 @@ const editSchema = z.object({
 
 export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
+  // Set when the repo blocks the dates: an overlap, or an end before the start.
+  const [overlap, setOverlap] = useState<string | null>(null);
 
   const form = useForm({
     defaultValues: {
@@ -41,11 +43,18 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
     },
     validators: { onSubmit: editSchema as never },
     onSubmit: async ({ value }) => {
-      await entityRepo.update(entity.id, {
-        type: value.type,
-        startDate: dateToIso(value.startDate!),
-        endDate: value.endDate ? dateToIso(value.endDate) : null,
-      });
+      setOverlap(null);
+      try {
+        await entityRepo.update(entity.id, {
+          type: value.type,
+          startDate: dateToIso(value.startDate!),
+          endDate: value.endDate ? dateToIso(value.endDate) : null,
+        });
+      } catch (err) {
+        if (!(err instanceof EntityPeriodError)) throw err;
+        setOverlap(err.message);
+        return;
+      }
       toast.success("Entity period updated.");
       setOpen(false);
       onSaved();
@@ -53,7 +62,13 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
   });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setOverlap(null);
+      }}
+    >
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">
@@ -69,6 +84,10 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
         <EnterToSubmitForm
           onSubmit={(e) => {
             e.preventDefault();
+            // The trigger sits inside the add-period form on the profile page,
+            // and a React submit event bubbles through the dialog's portal.
+            // Without this, saving here would submit that form as well.
+            e.stopPropagation();
             void form.handleSubmit();
           }}
         >
@@ -97,6 +116,7 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
                   <FormLabel>Start</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d ?? new Date())}
@@ -112,6 +132,7 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
                   <FormLabel>End (optional)</FormLabel>
                   <FormControl>
                     <DatePicker
+                      yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
                       onValueChange={(d) => field.handleChange(d)}
@@ -123,6 +144,11 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
               )}
             </TSFormField>
           </div>
+          {overlap ? (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              {overlap}
+            </p>
+          ) : null}
           <DialogFooter className="mt-4" showCloseButton>
             <form.Subscribe
               selector={(s) => ({ canSubmit: s.canSubmit, isSubmitting: s.isSubmitting })}

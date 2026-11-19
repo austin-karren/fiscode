@@ -11,69 +11,68 @@ import {
   SidebarMenuItem,
   SidebarRail,
   SidebarSeparator,
+  useSidebar,
 } from "@fiscode/ui/components/sidebar";
+import { NavThemeSwitcher, useThemeCycle } from "@fiscode/ui/components/nav-theme-switcher";
 import { Link, useLocation } from "@tanstack/react-router";
-import {
-  BookOpen,
-  Briefcase,
-  Car,
-  Clock,
-  CloudDownload,
-  Coins,
-  FileSpreadsheet,
-  Gauge,
-  Github,
-  History,
-  Home,
-  Receipt,
-  UserCircle2,
-} from "lucide-react";
+import { BookOpen, Code } from "lucide-react";
+
+import { useRef } from "react";
+
+import { MAIN_ID, NAV_GROUPS, isNavItemActive } from "../lib/nav";
 
 const EXTERNAL_LINKS = [
   { href: "https://docs.fiscode.app", label: "Docs", icon: BookOpen },
-  { href: "https://github.com/austin-karren/fiscode", label: "GitHub", icon: Github },
+  { href: "https://github.com/austin-karren/fiscode", label: "GitHub", icon: Code },
 ] as const;
 
-const NAV_GROUPS = [
-  {
-    label: "Overview",
-    items: [{ to: "/", label: "Dashboard", icon: Gauge, exact: true }],
-  },
-  {
-    label: "Track",
-    items: [
-      { to: "/income", label: "Income", icon: Coins },
-      { to: "/expenses", label: "Expenses", icon: Receipt },
-      { to: "/mileage", label: "Mileage", icon: Car },
-      { to: "/time", label: "Time", icon: Clock },
-    ],
-  },
-  {
-    label: "Configure",
-    items: [
-      { to: "/clients", label: "Clients", icon: Briefcase },
-      { to: "/vehicles", label: "Vehicles", icon: Car },
-      { to: "/home-office", label: "Home office", icon: Home },
-      { to: "/profile", label: "Profile", icon: UserCircle2 },
-    ],
-  },
-  {
-    label: "Reports",
-    items: [
-      { to: "/year-end", label: "Year-end", icon: FileSpreadsheet },
-      { to: "/history", label: "History", icon: History },
-    ],
-  },
-  {
-    label: "Settings",
-    items: [{ to: "/tax-data", label: "Tax data", icon: CloudDownload }],
-  },
-] as const;
+// Expanded sidebar (and the mobile sheet): the three-way switcher. Collapsed
+// rail: one button that cycles through the three modes.
+function ThemeControl() {
+  const { Icon, label, toggleMode } = useThemeCycle();
+  return (
+    <>
+      <div className="px-2 pb-1 group-data-[collapsible=icon]:hidden">
+        <NavThemeSwitcher className="w-full" />
+      </div>
+      <SidebarMenu className="hidden px-2 pb-1 group-data-[collapsible=icon]:flex">
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            tooltip={`${label}. Click to change.`}
+            aria-label={`${label}. Change theme`}
+            onClick={toggleMode}
+          >
+            <Icon />
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </>
+  );
+}
 
 export function AppSidebar() {
   const { pathname } = useLocation();
+  const { isMobile, setOpenMobile } = useSidebar();
+  // On a phone the nav is a sheet over the page: picking a destination closes
+  // it, otherwise the new page stays hidden behind it. Focus then goes to the
+  // new page instead of back to the button that opened the sheet.
+  const pickedDestination = useRef(false);
+  const closeSheet = isMobile
+    ? () => {
+        pickedDestination.current = true;
+        setOpenMobile(false);
+      }
+    : undefined;
+  const focusAfterSheet = () => {
+    if (!pickedDestination.current) return true;
+    pickedDestination.current = false;
+    // Focused by hand: handed an element that is not tabbable itself, the
+    // dialog would focus the first control inside it instead.
+    document.getElementById(MAIN_ID)?.focus();
+    return false;
+  };
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" mobileFinalFocus={focusAfterSheet}>
       {/* Match the main app header (h-12) so the separator below this row
           aligns with the one beneath the main header. The wordmark + short
           mark are stacked — "fiscode" sits in normal flow and "fs" overlays
@@ -99,24 +98,32 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarSeparator className="mx-0" />
-      <SidebarContent>
+      {/* The groups scroll when the window is short, in the icon rail too, and
+          show a thin scrollbar so the pinned footer does not read as covering
+          them. */}
+      <SidebarContent
+        role="navigation"
+        aria-label="Main"
+        className="[scrollbar-width:thin]! group-data-[collapsible=icon]:overflow-x-hidden group-data-[collapsible=icon]:overflow-y-auto"
+      >
         {NAV_GROUPS.map((group) => (
           <SidebarGroup key={group.label}>
-            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            {/* Collapsed, the label is invisible but still lies over the last
+                item of the group above; it must not take that item's clicks. */}
+            <SidebarGroupLabel className="group-data-[collapsible=icon]:pointer-events-none">
+              {group.label}
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => {
-                  const isActive =
-                    "exact" in item && item.exact
-                      ? pathname === item.to
-                      : pathname.startsWith(item.to);
+                  const isActive = isNavItemActive(item, pathname);
                   return (
                     <SidebarMenuItem key={item.to}>
                       <SidebarMenuButton
                         isActive={isActive}
                         tooltip={item.label}
                         render={
-                          <Link to={item.to}>
+                          <Link to={item.to} onClick={closeSheet}>
                             <item.icon />
                             <span>{item.label}</span>
                           </Link>
@@ -134,9 +141,11 @@ export function AppSidebar() {
           icon mode — the links shrink to icon-only via SidebarMenuButton's
           collapsible behavior; the tagline fades out with the wordmark's
           asymmetric timing (out fast on collapse, in late on expand). */}
-      <SidebarFooter className="gap-0">
+      <SidebarFooter className="gap-0 border-t border-sidebar-border">
         <SidebarGroup className="py-1">
-          <SidebarGroupLabel>Reference</SidebarGroupLabel>
+          <SidebarGroupLabel className="group-data-[collapsible=icon]:pointer-events-none">
+            Reference
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {EXTERNAL_LINKS.map((link) => (
@@ -155,6 +164,7 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        <ThemeControl />
         <div className="overflow-hidden whitespace-nowrap transition-[max-height] duration-150 delay-300 max-h-8 group-data-[collapsible=icon]:max-h-0 group-data-[collapsible=icon]:duration-75 group-data-[collapsible=icon]:delay-0">
           <div className="px-2 py-1 text-xs text-muted-foreground opacity-100 transition-discrete duration-150 delay-300 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:duration-75 group-data-[collapsible=icon]:delay-0">
             local-only · CSV is source of truth
