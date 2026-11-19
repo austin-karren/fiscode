@@ -233,11 +233,11 @@ function ClientsPage() {
             <DataTable.Body>
               {clients.map((c) => (
                 <DataTable.Row key={c.id}>
-                  <DataTable.Cell>
+                  <DataTable.Cell label="Name">
                     <ParentName parent={c} />
                   </DataTable.Cell>
-                  <DataTable.Cell>{c.type ?? "—"}</DataTable.Cell>
-                  <DataTable.Cell align="right">
+                  <DataTable.Cell label="Type">{c.type ?? "—"}</DataTable.Cell>
+                  <DataTable.Cell label="Default rate" align="right">
                     {c.defaultRateCents !== null ? formatUSD(cents(c.defaultRateCents)) : "—"}
                   </DataTable.Cell>
                   <DataTable.Cell align="right">

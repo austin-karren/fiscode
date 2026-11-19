@@ -216,18 +216,26 @@ function HomeOfficePage() {
           <DataTable.Body>
             {rows.map((r) => (
               <DataTable.Row key={r.id}>
-                <DataTable.Cell>
+                <DataTable.Cell label="Start">
                   <span className="whitespace-nowrap">{formatDate(r.startDate)}</span>
                 </DataTable.Cell>
-                <DataTable.Cell>
+                <DataTable.Cell label="End">
                   <span className="whitespace-nowrap">
                     {r.endDate ? formatDate(r.endDate) : "—"}
                   </span>
                 </DataTable.Cell>
-                <DataTable.Cell>{labelFor(HOME_OFFICE_METHOD_LABELS, r.method)}</DataTable.Cell>
-                <DataTable.Cell align="right">{r.officeSqft ?? "—"}</DataTable.Cell>
-                <DataTable.Cell align="right">{r.homeSqft ?? "—"}</DataTable.Cell>
-                <DataTable.Cell align="right">{monthlyCosts(r)}</DataTable.Cell>
+                <DataTable.Cell label="Method">
+                  {labelFor(HOME_OFFICE_METHOD_LABELS, r.method)}
+                </DataTable.Cell>
+                <DataTable.Cell label="Office sqft" align="right">
+                  {r.officeSqft ?? "—"}
+                </DataTable.Cell>
+                <DataTable.Cell label="Home sqft" align="right">
+                  {r.homeSqft ?? "—"}
+                </DataTable.Cell>
+                <DataTable.Cell label="Monthly costs" align="right">
+                  {monthlyCosts(r)}
+                </DataTable.Cell>
                 <DataTable.Cell align="right">
                   <EditHomeOfficeDialog row={r} rows={rows} onSaved={() => router.invalidate()} />
                 </DataTable.Cell>

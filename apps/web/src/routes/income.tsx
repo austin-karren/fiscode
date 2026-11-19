@@ -288,18 +288,22 @@ function IncomePage() {
               .sort((a, b) => (a.date > b.date ? -1 : 1))
               .map((i) => (
                 <DataTable.Row key={i.id}>
-                  <DataTable.Cell>
+                  <DataTable.Cell label="Date">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="whitespace-nowrap">{formatDate(i.date)}</span>
                       <PreSeStartBadge rowDate={i.date} seStartDate={profile?.seStartDate} />
                     </span>
                   </DataTable.Cell>
-                  <DataTable.Cell>
+                  <DataTable.Cell label="Client">
                     <ParentName parent={allClients.find((c) => c.id === i.clientId)} />
                   </DataTable.Cell>
-                  <DataTable.Cell>{labelFor(INCOME_KIND_LABELS, i.kind)}</DataTable.Cell>
-                  <DataTable.Cell>{i.description ?? "—"}</DataTable.Cell>
-                  <DataTable.Cell align="right">{formatUSD(cents(i.amountCents))}</DataTable.Cell>
+                  <DataTable.Cell label="Kind">
+                    {labelFor(INCOME_KIND_LABELS, i.kind)}
+                  </DataTable.Cell>
+                  <DataTable.Cell label="Description">{i.description ?? "—"}</DataTable.Cell>
+                  <DataTable.Cell label="Amount" align="right">
+                    {formatUSD(cents(i.amountCents))}
+                  </DataTable.Cell>
                   <DataTable.Cell align="right">
                     <div className="inline-flex gap-1">
                       <EditIncomeDialog

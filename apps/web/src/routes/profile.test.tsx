@@ -140,6 +140,27 @@ describe("profile period lists", () => {
     expect(text).toContain("Jan 1, 2026 – Jun 30, 2026");
     for (const list of lists) expectNoRawValues(list);
   });
+
+  it("wraps an entity row on a phone instead of running past its card", () => {
+    const FIXED = "2026-06-04T12:00:00.000Z";
+    loaded.entities = [
+      {
+        id: "ent_demo",
+        type: "single_member_llc",
+        startDate: "2026-03-02",
+        endDate: null,
+        notes: null,
+        deletedAt: null,
+        createdAt: FIXED,
+        updatedAt: FIXED,
+      },
+    ];
+    render(<ProfilePage />);
+    // jsdom has no layout: the measured check (no overflow at 390) is in the
+    // PR walk; this keeps the row free to wrap its nowrap dates and buttons.
+    const row = screen.getByText(/Mar 2, 2026 – open/).closest("li")!;
+    expect(row).toHaveClass("flex-wrap");
+  });
 });
 
 describe("changing the SE start offers to move the first entity period", () => {
