@@ -23,6 +23,7 @@ import { restoreRow, softDeleteWithUndo } from "../lib/soft-delete";
 import { InfoTooltip } from "../components/info-tooltip";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { VEHICLE_METHOD_LABELS, labelFor } from "@fiscode/core";
+import { SectionTitle } from "../components/section-title";
 
 const vehicleSchema = z.object({
   make: z.string().min(1, "Make is required"),
@@ -102,8 +103,8 @@ function VehiclesPage() {
       >
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-              Add vehicle
+            <CardTitle>
+              <SectionTitle>Add vehicle</SectionTitle>
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.5fr_1.5fr_1fr_1fr]">

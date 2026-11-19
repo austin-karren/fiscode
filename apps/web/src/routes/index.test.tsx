@@ -124,3 +124,42 @@ describe("dashboard hierarchy", () => {
     }
   });
 });
+
+describe("dashboard titles and warnings", () => {
+  const quarterly = loaderData.result.quarterly as { noInstallmentsRequired?: boolean };
+
+  afterEach(() => {
+    delete quarterly.noInstallmentsRequired;
+  });
+
+  it("says 'No payment required' instead of a date to prepare for under the $1,000 rule", () => {
+    quarterly.noInstallmentsRequired = true;
+    render(<Dashboard />);
+    expect(screen.getByText("No payment required")).toBeInTheDocument();
+    expect(screen.queryByText(/Start preparing/)).not.toBeInTheDocument();
+  });
+
+  it("names the next due date and when to start preparing when a payment is required", () => {
+    render(<Dashboard />);
+    expect(screen.getByText(/Next due Sep 15, 2026\. Start preparing around/)).toBeInTheDocument();
+    expect(screen.queryByText("No payment required")).not.toBeInTheDocument();
+  });
+
+  it("labels the safe harbor figures as federal", () => {
+    render(<Dashboard />);
+    expect(screen.getByRole("heading", { name: /Safe harbor \(federal\)/ })).toBeInTheDocument();
+  });
+
+  it("shows the first-year note as a warning alert, not as coloured text", () => {
+    render(<Dashboard />);
+    const note = screen.getByText("First-year filing").closest("[role=alert]");
+    expect(note).toHaveTextContent(/pay-as-you-go target is 90% of current-year tax/);
+  });
+
+  it("titles each section with the same tracked, muted label", () => {
+    render(<Dashboard />);
+    for (const name of [/IRS quarterly payments/, /Safe harbor/, /Year-to-date inputs/i]) {
+      expect(screen.getByRole("heading", { name })).toHaveClass("uppercase", "tracking-wide");
+    }
+  });
+});

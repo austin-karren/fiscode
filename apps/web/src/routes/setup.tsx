@@ -1,6 +1,6 @@
 import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
-import { Card, CardContent, CardFooter, CardHeader } from "@fiscode/ui/components/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo } from "@fiscode/db";
 import {
@@ -23,6 +23,7 @@ import { CONFIG_YEARS_BACK, DatePicker, dateToIso } from "../components/forms/da
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { ImportCard } from "../components/import-card";
+import { SectionTitle } from "../components/section-title";
 
 const FILING_OPTIONS = labelOptions(FILING_STATUS_LABELS);
 
@@ -120,7 +121,11 @@ function SetupPage() {
         }}
       >
         <Card>
-          <CardHeader>SETUP</CardHeader>
+          <CardHeader>
+            <CardTitle>
+              <SectionTitle>Setup</SectionTitle>
+            </CardTitle>
+          </CardHeader>
           <CardContent className="grid gap-3 pb-2">
             <TSFormField
               form={form}

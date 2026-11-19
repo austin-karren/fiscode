@@ -26,6 +26,7 @@ import { buildBundle, importBundle } from "@fiscode/db";
 import { CircleAlert, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { SectionTitle } from "./section-title";
 
 type ReadableFile = Extract<ImportFile, { ok: true }>;
 type RefusedFile = Extract<ImportFile, { ok: false }>;
@@ -164,8 +165,8 @@ export function ImportCard({
     <>
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-            {setup ? "Restore from a backup" : "Import CSV"}
+          <CardTitle>
+            <SectionTitle>{setup ? "Restore from a backup" : "Import CSV"}</SectionTitle>
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col items-start gap-4">

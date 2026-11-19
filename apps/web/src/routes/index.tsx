@@ -24,6 +24,7 @@ import { InfoTooltip } from "../components/info-tooltip";
 import { UtahPrepaymentLine } from "../components/utah-prepayment-line";
 import { formatDate } from "../lib/format-date";
 import { US_STATE_BY_CODE } from "../lib/us-states";
+import { SectionTitle } from "../components/section-title";
 
 // "Single filer · Utah · annualized installments": the profile's settings
 // that shape this estimate, in words. "Single" alone reads like an adjective
@@ -126,9 +127,11 @@ function Dashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="inline-flex items-center gap-1.5 text-sm font-medium uppercase text-muted-foreground">
-            IRS quarterly payments (federal)
-            <InfoTooltip text={GLOSSARY.unevenQuarters} />
+          <CardTitle>
+            <SectionTitle>
+              IRS quarterly payments (federal)
+              <InfoTooltip text={GLOSSARY.unevenQuarters} />
+            </SectionTitle>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -166,7 +169,10 @@ function Dashboard() {
           {result.statePrepayment ? (
             <UtahPrepaymentLine prepayment={result.statePrepayment} />
           ) : null}
-          {upcoming && recommendedPrep ? (
+          {/* Under the $1,000 rule there is nothing to prepare for. */}
+          {result.quarterly.noInstallmentsRequired ? (
+            <p className="mt-3 text-sm font-medium">No payment required</p>
+          ) : upcoming && recommendedPrep ? (
             <p className="mt-3 text-sm text-muted-foreground">
               Next due {formatDate(upcoming.dueDate)}. Start preparing around{" "}
               {formatDate(recommendedPrep)}.
@@ -177,9 +183,11 @@ function Dashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="inline-flex items-center gap-1.5 text-sm font-medium uppercase text-muted-foreground">
-            Safe harbor
-            <InfoTooltip text={GLOSSARY.safeHarbor} />
+          <CardTitle>
+            <SectionTitle>
+              Safe harbor (federal)
+              <InfoTooltip text={GLOSSARY.safeHarbor} />
+            </SectionTitle>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -204,19 +212,23 @@ function Dashboard() {
             </Field>
           </div>
           {result.safeHarbor.firstYear ? (
-            <p className="mt-3 text-sm text-yellow-800 dark:text-yellow-300">
-              First-year filing: pay-as-you-go target is 90% of current-year tax. Owing the full
-              balance at filing is allowed, but underpayment penalty risk applies if you pay too
-              little throughout the year.
-            </p>
+            <Alert variant="warning" className="mt-3">
+              <CircleAlert />
+              <AlertTitle>First-year filing</AlertTitle>
+              <AlertDescription>
+                The pay-as-you-go target is 90% of current-year tax. Owing the full balance at
+                filing is allowed, but underpayment penalty risk applies if you pay too little
+                throughout the year.
+              </AlertDescription>
+            </Alert>
           ) : null}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-            Year-to-date inputs
+          <CardTitle>
+            <SectionTitle>Year-to-date inputs</SectionTitle>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -272,7 +284,7 @@ function StatCard({
   return (
     <Card className={primary ? "@md:col-span-3 @xl:col-span-1" : undefined}>
       <CardContent className="pt-6">
-        <p className="inline-flex items-center gap-1.5 text-xs uppercase text-muted-foreground">
+        <p className="inline-flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
           {label}
           {tooltip ? <InfoTooltip text={tooltip} /> : null}
         </p>
