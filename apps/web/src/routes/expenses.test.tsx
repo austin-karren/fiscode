@@ -38,11 +38,11 @@ describe("expense amount", () => {
   };
 
   it.each([
-    ["-50", "Enter an amount greater than 0, like 12.50"],
-    ["0", "Enter an amount greater than 0, like 12.50"],
-    ["1e3", "Enter an amount greater than 0, like 12.50"],
-    ["12.345", "Use at most 2 decimal places, like 12.50"],
-    ["999999999999", "Enter an amount below $100,000,000"],
+    ["-50", "Enter an amount, like 12.50"],
+    ["0", "Must be more than $0"],
+    ["1e3", "Enter an amount, like 12.50"],
+    ["12.345", "Use 2 decimals at most"],
+    ["999999999999", "Too large"],
   ])("does not save %j and says what is allowed", async (amount, message) => {
     const input = submit(amount);
     expect(await screen.findByText(message)).toBeInTheDocument();
@@ -55,9 +55,7 @@ describe("expense amount", () => {
     const input = screen.getByLabelText("Amount");
     fireEvent.change(input, { target: { value: "-50" } });
     fireEvent.blur(input);
-    expect(
-      await screen.findByText("Enter an amount greater than 0, like 12.50"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Enter an amount, like 12.50")).toBeInTheDocument();
   });
 
   it("saves a plain amount in cents", async () => {
@@ -124,7 +122,7 @@ describe("adding a run of expenses", () => {
     fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
     const card = within(addCard());
     expect(card.getByLabelText("Amount")).toHaveValue("120.00");
-    expect(card.getByLabelText("Description")).toHaveValue("Demo conference travel");
+    expect(card.getByLabelText("Description (optional)")).toHaveValue("Demo conference travel");
     await waitFor(() => expect(card.getByLabelText("Date")).toHaveFocus());
 
     fireEvent.click(card.getByRole("button", { name: "Add" }));
@@ -134,7 +132,7 @@ describe("adding a run of expenses", () => {
       ),
     );
     await waitFor(() => expect(card.getByLabelText("Amount")).toHaveValue(""));
-    expect(card.getByLabelText("Description")).toHaveValue("");
+    expect(card.getByLabelText("Description (optional)")).toHaveValue("");
     expect(card.getByLabelText("Date")).toHaveTextContent("Mar 5, 2026");
     expect(card.getByRole("combobox", { name: "Category" })).toHaveTextContent("Travel");
     await waitFor(() => expect(card.getByLabelText("Amount")).toHaveFocus());

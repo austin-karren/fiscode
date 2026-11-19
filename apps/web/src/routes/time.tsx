@@ -134,7 +134,12 @@ function TimePage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1fr_1.5fr_2fr]">
-            <TSFormField form={form} name="date" validators={{ onBlur: fs.date }}>
+            <TSFormField
+              form={form}
+              name="date"
+              requirement="required"
+              validators={{ onBlur: fs.date }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Date</FormLabel>
@@ -149,7 +154,12 @@ function TimePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="hours" validators={{ onBlur: fs.hours }}>
+            <TSFormField
+              form={form}
+              name="hours"
+              requirement="required"
+              validators={{ onBlur: fs.hours }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Hours</FormLabel>
@@ -167,7 +177,7 @@ function TimePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="clientId">
+            <TSFormField form={form} name="clientId" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Client</FormLabel>
@@ -189,7 +199,7 @@ function TimePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="description">
+            <TSFormField form={form} name="description" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Description</FormLabel>

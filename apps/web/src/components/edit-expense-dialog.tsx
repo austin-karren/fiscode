@@ -95,7 +95,7 @@ export function EditExpenseDialog({
           }}
         >
           <div className="grid gap-3">
-            <TSFormField form={form} name="date">
+            <TSFormField form={form} name="date" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Date</FormLabel>
@@ -110,7 +110,12 @@ export function EditExpenseDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="amount" validators={{ onBlur: editSchema.shape.amount }}>
+            <TSFormField
+              form={form}
+              name="amount"
+              requirement="required"
+              validators={{ onBlur: editSchema.shape.amount }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Amount</FormLabel>
@@ -126,7 +131,7 @@ export function EditExpenseDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="category">
+            <TSFormField form={form} name="category" requirement="required">
               {(field) => (
                 <FormItem>
                   <LabelWithTooltip tooltip={GLOSSARY.expenseCategory}>Category</LabelWithTooltip>
@@ -142,7 +147,7 @@ export function EditExpenseDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="description">
+            <TSFormField form={form} name="description" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Description</FormLabel>

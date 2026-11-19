@@ -86,7 +86,7 @@ export function EditMileageDialog({
           }}
         >
           <div className="grid gap-3">
-            <TSFormField form={form} name="date">
+            <TSFormField form={form} name="date" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Date</FormLabel>
@@ -101,7 +101,12 @@ export function EditMileageDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="miles" validators={{ onBlur: editSchema.shape.miles }}>
+            <TSFormField
+              form={form}
+              name="miles"
+              requirement="required"
+              validators={{ onBlur: editSchema.shape.miles }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Business miles</FormLabel>
@@ -118,7 +123,7 @@ export function EditMileageDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="vehicleId">
+            <TSFormField form={form} name="vehicleId" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Vehicle</FormLabel>
@@ -140,7 +145,7 @@ export function EditMileageDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="purpose">
+            <TSFormField form={form} name="purpose" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Purpose</FormLabel>

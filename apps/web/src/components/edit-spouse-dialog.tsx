@@ -82,7 +82,7 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
           }}
         >
           <div className="grid gap-3">
-            <TSFormField form={form} name="startDate">
+            <TSFormField form={form} name="startDate" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Start</FormLabel>
@@ -98,10 +98,10 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="endDate">
+            <TSFormField form={form} name="endDate" requirement="optional">
               {(field) => (
                 <FormItem>
-                  <FormLabel>End (optional)</FormLabel>
+                  <FormLabel>End</FormLabel>
                   <FormControl>
                     <DatePicker
                       yearsBack={CONFIG_YEARS_BACK}
@@ -115,7 +115,12 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="wages" validators={{ onBlur: editSchema.shape.wages }}>
+            <TSFormField
+              form={form}
+              name="wages"
+              requirement="optional"
+              validators={{ onBlur: editSchema.shape.wages }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Annual W-2 wages</FormLabel>
@@ -131,7 +136,12 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="fedWH" validators={{ onBlur: editSchema.shape.fedWH }}>
+            <TSFormField
+              form={form}
+              name="fedWH"
+              requirement="optional"
+              validators={{ onBlur: editSchema.shape.fedWH }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Fed withholding</FormLabel>
@@ -150,6 +160,7 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
             <TSFormField
               form={form}
               name="stateWH"
+              requirement="optional"
               validators={{ onBlur: editSchema.shape.stateWH }}
             >
               {(field) => (

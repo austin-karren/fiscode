@@ -137,7 +137,12 @@ function MileagePage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1fr_1.5fr_2fr]">
-            <TSFormField form={form} name="date" validators={{ onBlur: fs.date }}>
+            <TSFormField
+              form={form}
+              name="date"
+              requirement="required"
+              validators={{ onBlur: fs.date }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Date</FormLabel>
@@ -152,7 +157,12 @@ function MileagePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="miles" validators={{ onBlur: fs.miles }}>
+            <TSFormField
+              form={form}
+              name="miles"
+              requirement="required"
+              validators={{ onBlur: fs.miles }}
+            >
               {(field) => (
                 <FormItem>
                   <LabelWithTooltip tooltip={GLOSSARY.businessMiles}>
@@ -172,7 +182,7 @@ function MileagePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="vehicleId">
+            <TSFormField form={form} name="vehicleId" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Vehicle</FormLabel>
@@ -194,7 +204,7 @@ function MileagePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="purpose">
+            <TSFormField form={form} name="purpose" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Purpose</FormLabel>

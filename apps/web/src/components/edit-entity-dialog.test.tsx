@@ -34,7 +34,11 @@ const fieldDescribedBy = (message: HTMLElement) =>
 
 // The form control a field label points at.
 const controlLabelled = (label: string) => {
-  const el = screen.getByText(label, { selector: "label" });
+  // Matched on the label's whole text: "(optional)" sits in its own span.
+  const el = screen.getByText(
+    (_, node) =>
+      node?.tagName === "LABEL" && node.textContent?.replace(/\s+/g, " ").trim() === label,
+  );
   return document.getElementById(el.getAttribute("for")!);
 };
 

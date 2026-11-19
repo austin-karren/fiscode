@@ -349,7 +349,7 @@ function ProfileFormPanel({
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-4 pb-2 @md:grid-cols-2">
-            <TSFormField form={profileForm} name="filingStatus">
+            <TSFormField form={profileForm} name="filingStatus" requirement="required">
               {(field) => (
                 <FormItem>
                   <LabelWithTooltip tooltip={GLOSSARY.filingStatus}>Filing status</LabelWithTooltip>
@@ -365,7 +365,7 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={profileForm} name="state">
+            <TSFormField form={profileForm} name="state" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>State</FormLabel>
@@ -380,7 +380,7 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={profileForm} name="seStartDate">
+            <TSFormField form={profileForm} name="seStartDate" requirement="required">
               {(field) => (
                 <FormItem>
                   <LabelWithTooltip tooltip={GLOSSARY.seStartDate}>
@@ -401,6 +401,7 @@ function ProfileFormPanel({
             <TSFormField
               form={profileForm}
               name="dependents"
+              requirement="required"
               validators={{ onBlur: profileSchema.shape.dependents }}
             >
               {(field) => (
@@ -419,7 +420,7 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={profileForm} name="quarterlyMethod">
+            <TSFormField form={profileForm} name="quarterlyMethod" requirement="required">
               {(field) => (
                 <FormItem>
                   <LabelWithTooltip tooltip={GLOSSARY.quarterlyMethodLabel}>
@@ -440,6 +441,7 @@ function ProfileFormPanel({
             <TSFormField
               form={profileForm}
               name="prepLeadDays"
+              requirement="required"
               validators={{ onBlur: profileSchema.shape.prepLeadDays }}
             >
               {(field) => (
@@ -561,7 +563,12 @@ function ProfileFormPanel({
             </ul>
           </CardContent>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-3">
-            <TSFormField form={entityForm} name="type" validators={{ onBlur: efs.type }}>
+            <TSFormField
+              form={entityForm}
+              name="type"
+              requirement="required"
+              validators={{ onBlur: efs.type }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Type</FormLabel>
@@ -584,6 +591,7 @@ function ProfileFormPanel({
             <TSFormField
               form={entityForm}
               name="startDate"
+              requirement="required"
               validators={{ onBlur: efs.startDate }}
               error={periodErrorFor(entityError, "startDate", entities)}
             >
@@ -609,11 +617,12 @@ function ProfileFormPanel({
             <TSFormField
               form={entityForm}
               name="endDate"
+              requirement="optional"
               error={periodErrorFor(entityError, "endDate", entities)}
             >
               {(field) => (
                 <FormItem>
-                  <FormLabel>End (optional)</FormLabel>
+                  <FormLabel>End</FormLabel>
                   <FormControl>
                     <DatePicker
                       yearsBack={CONFIG_YEARS_BACK}
@@ -666,6 +675,7 @@ function ProfileFormPanel({
               <TSFormField
                 form={spouseForm}
                 name="startDate"
+                requirement="required"
                 validators={{ onBlur: sfs.startDate }}
               >
                 {(field) => (
@@ -683,7 +693,7 @@ function ProfileFormPanel({
                   </FormItem>
                 )}
               </TSFormField>
-              <TSFormField form={spouseForm} name="endDate">
+              <TSFormField form={spouseForm} name="endDate" requirement="optional">
                 {(field) => (
                   <FormItem>
                     <FormLabel>End</FormLabel>
@@ -700,7 +710,12 @@ function ProfileFormPanel({
                   </FormItem>
                 )}
               </TSFormField>
-              <TSFormField form={spouseForm} name="wages" validators={{ onBlur: sfs.wages }}>
+              <TSFormField
+                form={spouseForm}
+                name="wages"
+                requirement="optional"
+                validators={{ onBlur: sfs.wages }}
+              >
                 {(field) => (
                   <FormItem>
                     <FormLabel>Annual W-2 wages</FormLabel>
@@ -716,7 +731,12 @@ function ProfileFormPanel({
                   </FormItem>
                 )}
               </TSFormField>
-              <TSFormField form={spouseForm} name="fedWH" validators={{ onBlur: sfs.fedWH }}>
+              <TSFormField
+                form={spouseForm}
+                name="fedWH"
+                requirement="optional"
+                validators={{ onBlur: sfs.fedWH }}
+              >
                 {(field) => (
                   <FormItem>
                     <FormLabel>Fed withholding</FormLabel>
@@ -732,7 +752,12 @@ function ProfileFormPanel({
                   </FormItem>
                 )}
               </TSFormField>
-              <TSFormField form={spouseForm} name="stateWH" validators={{ onBlur: sfs.stateWH }}>
+              <TSFormField
+                form={spouseForm}
+                name="stateWH"
+                requirement="optional"
+                validators={{ onBlur: sfs.stateWH }}
+              >
                 {(field) => (
                   <FormItem>
                     <FormLabel>State withholding</FormLabel>

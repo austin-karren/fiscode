@@ -5,7 +5,13 @@ import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { Badge } from "@fiscode/ui/components/badge";
 import { FieldCheckbox } from "../components/forms/field-checkbox";
-import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
+import {
+  FormControl,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from "@fiscode/ui/components/form";
 import {
   Field,
   FieldContent,
@@ -152,7 +158,12 @@ function ExpensesPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1fr_1.5fr_2fr_auto]">
-            <TSFormField form={form} name="date" validators={{ onBlur: fs.date }}>
+            <TSFormField
+              form={form}
+              name="date"
+              requirement="required"
+              validators={{ onBlur: fs.date }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Date</FormLabel>
@@ -167,7 +178,12 @@ function ExpensesPage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="amount" validators={{ onBlur: fs.amount }}>
+            <TSFormField
+              form={form}
+              name="amount"
+              requirement="required"
+              validators={{ onBlur: fs.amount }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Amount</FormLabel>
@@ -184,7 +200,7 @@ function ExpensesPage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="category">
+            <TSFormField form={form} name="category" requirement="required">
               {(field) => (
                 <FormItem>
                   <LabelWithTooltip tooltip={GLOSSARY.expenseCategory}>Category</LabelWithTooltip>
@@ -203,7 +219,7 @@ function ExpensesPage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="description">
+            <TSFormField form={form} name="description" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Description</FormLabel>
@@ -228,6 +244,8 @@ function ExpensesPage() {
                     ariaLabel="More info about §179 candidate"
                     className="absolute top-3 right-3 z-10"
                   />
+                  {/* The hint as the checkbox's description (see LabelWithTooltip). */}
+                  <FormDescription className="sr-only">{GLOSSARY.section179}</FormDescription>
                   <FieldLabel>
                     <Field orientation="horizontal">
                       <FormControl>

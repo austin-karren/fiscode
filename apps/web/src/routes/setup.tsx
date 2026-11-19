@@ -124,6 +124,7 @@ function SetupPage() {
             <TSFormField
               form={form}
               name="filingStatus"
+              requirement="required"
               validators={{ onBlur: fieldSchemas.filingStatus }}
             >
               {(field) => (
@@ -143,7 +144,12 @@ function SetupPage() {
               )}
             </TSFormField>
 
-            <TSFormField form={form} name="state" validators={{ onBlur: fieldSchemas.state }}>
+            <TSFormField
+              form={form}
+              name="state"
+              requirement="required"
+              validators={{ onBlur: fieldSchemas.state }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>State of residence</FormLabel>
@@ -162,6 +168,7 @@ function SetupPage() {
             <TSFormField
               form={form}
               name="seStartDate"
+              requirement="required"
               validators={{ onBlur: fieldSchemas.seStartDate }}
             >
               {(field) => (
@@ -183,6 +190,7 @@ function SetupPage() {
             <TSFormField
               form={form}
               name="entityType"
+              requirement="required"
               validators={{ onBlur: fieldSchemas.entityType }}
             >
               {(field) => (

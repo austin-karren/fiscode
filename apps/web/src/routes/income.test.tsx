@@ -92,10 +92,10 @@ describe("income list with an archived client", () => {
     fireEvent.click(within(rowFor("Demo Archived Co")).getByRole("button", { name: "Edit" }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByLabelText("Client")).toHaveTextContent(
+    expect(within(dialog).getByLabelText("Client (optional)")).toHaveTextContent(
       "Demo Archived Co (archived)",
     );
-    fireEvent.change(within(dialog).getByLabelText("Description"), {
+    fireEvent.change(within(dialog).getByLabelText("Description (optional)"), {
       target: { value: "Demo consulting, edited" },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
@@ -109,7 +109,7 @@ describe("income list with an archived client", () => {
 
   it("does not offer an archived client for a new entry", async () => {
     renderPage();
-    fireEvent.click(screen.getByLabelText("Client"));
+    fireEvent.click(screen.getByLabelText("Client (optional)"));
     const listbox = await screen.findByRole("listbox");
     expect(within(listbox).getByRole("option", { name: "Demo Live Co" })).toBeInTheDocument();
     expect(within(listbox).queryByRole("option", { name: /Demo Archived Co/ })).toBeNull();
@@ -139,8 +139,10 @@ describe("adding a run of entries", () => {
 
     const card = within(addCard());
     expect(card.getByLabelText("Amount")).toHaveValue("1200.00");
-    expect(card.getByLabelText("Description")).toHaveValue("Demo consulting");
-    expect(card.getByRole("combobox", { name: "Client" })).toHaveTextContent("Demo Live Co");
+    expect(card.getByLabelText("Description (optional)")).toHaveValue("Demo consulting");
+    expect(card.getByRole("combobox", { name: "Client (optional)" })).toHaveTextContent(
+      "Demo Live Co",
+    );
     expect(card.getByLabelText("Date")).toHaveTextContent("Mar 1, 2026");
     await waitFor(() => expect(card.getByLabelText("Date")).toHaveFocus());
   });
@@ -148,9 +150,9 @@ describe("adding a run of entries", () => {
   it("Duplicate leaves out a client that has been archived", () => {
     renderPage();
     fireEvent.click(within(rowFor("Jan 15, 2026")).getByRole("button", { name: "Duplicate" }));
-    expect(within(addCard()).getByRole("combobox", { name: "Client" })).not.toHaveTextContent(
-      "Demo Archived Co",
-    );
+    expect(
+      within(addCard()).getByRole("combobox", { name: "Client (optional)" }),
+    ).not.toHaveTextContent("Demo Archived Co");
   });
 
   it("after Add, keeps the date, client and kind, clears the rest, and focuses Amount", async () => {
@@ -164,10 +166,29 @@ describe("adding a run of entries", () => {
     );
     const card = within(addCard());
     await waitFor(() => expect(card.getByLabelText("Amount")).toHaveValue(""));
-    expect(card.getByLabelText("Description")).toHaveValue("");
+    expect(card.getByLabelText("Description (optional)")).toHaveValue("");
     expect(card.getByLabelText("Date")).toHaveTextContent("Mar 1, 2026");
-    expect(card.getByRole("combobox", { name: "Client" })).toHaveTextContent("Demo Live Co");
+    expect(card.getByRole("combobox", { name: "Client (optional)" })).toHaveTextContent(
+      "Demo Live Co",
+    );
     expect(card.getByRole("combobox", { name: "Kind" })).toHaveTextContent("Consulting");
     await waitFor(() => expect(card.getByLabelText("Amount")).toHaveFocus());
+  });
+});
+
+describe("income form accessibility", () => {
+  it("names only elements that exist in every aria-describedby, after a failed submit too", async () => {
+    renderPage();
+    const ids = () =>
+      [...document.querySelectorAll("[aria-describedby]")].flatMap((el) =>
+        el.getAttribute("aria-describedby")!.split(/\s+/).filter(Boolean),
+      );
+    for (const id of ids()) expect(document.getElementById(id), `#${id}`).not.toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "abc" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await screen.findByText("Enter an amount, like 12.50");
+    expect(ids().length).toBeGreaterThan(0);
+    for (const id of ids()) expect(document.getElementById(id), `#${id}`).not.toBeNull();
   });
 });

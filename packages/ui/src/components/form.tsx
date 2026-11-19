@@ -25,14 +25,27 @@ import { cn } from "@fiscode/ui/lib/utils";
 
 type FormFieldError = { message?: string } | string | undefined;
 
+/**
+ * Whether a field must be filled. "required" sets aria-required on the
+ * control; "optional" adds a muted "(optional)" to the label. Left out (a
+ * checkbox, a toggle), the field is marked neither way.
+ */
+export type FieldRequirement = "required" | "optional";
+
 type FormFieldContextValue = {
   name: string;
   errors: FormFieldError[];
+  requirement?: FieldRequirement;
 };
 
 const FormFieldContext = React.createContext<FormFieldContextValue | undefined>(undefined);
 
-type FormItemContextValue = { id: string };
+type FormItemContextValue = {
+  id: string;
+  /** Whether a FormDescription is rendered in this item. */
+  described: boolean;
+  setDescribed: (described: boolean) => void;
+};
 const FormItemContext = React.createContext<FormItemContextValue | undefined>(undefined);
 
 export const useFormField = () => {
@@ -57,24 +70,32 @@ export const useFormField = () => {
     formItemId: `${item.id}-form-item`,
     formDescriptionId: `${item.id}-form-item-description`,
     formMessageId: `${item.id}-form-item-message`,
+    described: item.described,
+    setDescribed: item.setDescribed,
     error,
+    requirement: field.requirement,
   };
 };
 
 export type FormFieldProps = {
   name: string;
   errors: FormFieldError[] | undefined;
+  requirement?: FieldRequirement;
   children: React.ReactNode;
 };
 
-export function FormField({ name, errors, children }: FormFieldProps) {
-  const value = React.useMemo(() => ({ name, errors: errors ?? [] }), [name, errors]);
+export function FormField({ name, errors, requirement, children }: FormFieldProps) {
+  const value = React.useMemo(
+    () => ({ name, errors: errors ?? [], requirement }),
+    [name, errors, requirement],
+  );
   return <FormFieldContext.Provider value={value}>{children}</FormFieldContext.Provider>;
 }
 
 export function FormItem({ className, ...props }: React.ComponentProps<"div">) {
   const id = React.useId();
-  const value = React.useMemo(() => ({ id }), [id]);
+  const [described, setDescribed] = React.useState(false);
+  const value = React.useMemo(() => ({ id, described, setDescribed }), [id, described]);
   return (
     <FormItemContext.Provider value={value}>
       <div data-slot="form-item" className={cn("grid gap-1.5", className)} {...props} />
@@ -82,8 +103,8 @@ export function FormItem({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-export function FormLabel({ className, ...props }: React.ComponentProps<typeof Label>) {
-  const { error, formItemId } = useFormField();
+export function FormLabel({ className, children, ...props }: React.ComponentProps<typeof Label>) {
+  const { error, formItemId, requirement } = useFormField();
   return (
     <Label
       data-slot="form-label"
@@ -92,25 +113,46 @@ export function FormLabel({ className, ...props }: React.ComponentProps<typeof L
       className={cn("data-[error=true]:text-destructive", className)}
       htmlFor={formItemId}
       {...props}
-    />
+    >
+      {children}
+      {requirement === "optional" ? (
+        <>
+          {" "}
+          <span className="font-normal text-muted-foreground">(optional)</span>
+        </>
+      ) : null}
+    </Label>
   );
 }
 
 export function FormControl({ ...props }: React.ComponentProps<typeof Slot.Root>) {
-  const { error, formItemId, formDescriptionId, formMessageId } = useFormField();
+  const { error, formItemId, formDescriptionId, formMessageId, requirement, described } =
+    useFormField();
+  // Only ids that are on the page: the description when the item has one,
+  // the message when it holds an error.
+  const describedBy = [described ? formDescriptionId : null, error ? formMessageId : null]
+    .filter(Boolean)
+    .join(" ");
   return (
     <Slot.Root
       data-slot="form-control"
       id={formItemId}
-      aria-describedby={!error ? formDescriptionId : `${formDescriptionId} ${formMessageId}`}
+      aria-describedby={describedBy || undefined}
       aria-invalid={!!error}
+      aria-required={requirement === "required" ? true : undefined}
       {...props}
     />
   );
 }
 
 export function FormDescription({ className, ...props }: React.ComponentProps<"p">) {
-  const { formDescriptionId } = useFormField();
+  const { formDescriptionId, setDescribed } = useFormField();
+  // Tells the item's control it may name this description. This registers a
+  // rendered element with its item; it does not derive state from props.
+  React.useLayoutEffect(() => {
+    setDescribed(true);
+    return () => setDescribed(false);
+  }, [setDescribed]);
   return (
     <p
       data-slot="form-description"
@@ -121,15 +163,18 @@ export function FormDescription({ className, ...props }: React.ComponentProps<"p
   );
 }
 
-export function FormMessage({ className, children, ...props }: React.ComponentProps<"p">) {
+export function FormMessage({ className, children, role, ...props }: React.ComponentProps<"p">) {
   const { error, formMessageId } = useFormField();
   const body = error?.message ?? children;
-  if (!body) return null;
+  // Always rendered, one line tall when empty: an error then fills a line
+  // that was already there instead of pushing the form down.
   return (
     <p
       data-slot="form-message"
       id={formMessageId}
-      className={cn("text-sm text-destructive", className)}
+      className={cn("min-h-5 text-sm text-destructive", className)}
+      // An empty slot is not an alert; the role arrives with the message.
+      role={body ? role : undefined}
       {...props}
     >
       {body}
