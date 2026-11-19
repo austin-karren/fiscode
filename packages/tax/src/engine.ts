@@ -28,7 +28,26 @@ export type EstimateArgs = {
   input: TaxInput | AnnualizedInput;
 };
 
-export const estimateYear = ({ entity, method, input }: EstimateArgs): EstimateResult => {
+/**
+ * A spouse's W-2 wages and withholding belong on a joint return only. A
+ * single, head-of-household or married-filing-separately return reports the
+ * filer's own income and withholding (each spouse files their own when
+ * married filing separately). This is the one place the engine takes its
+ * input, so the 1040 estimate, the Form 2210 installments (both methods),
+ * the safe harbor and Utah's prepayment all see the same amounts.
+ */
+const spouseOnJointReturn = <T extends TaxInput>(input: T): T =>
+  input.filingStatus === "mfj"
+    ? input
+    : {
+        ...input,
+        spouseW2Wages: cents(0),
+        spouseFederalWithholding: cents(0),
+        spouseStateWithholding: cents(0),
+      };
+
+export const estimateYear = ({ entity, method, input: given }: EstimateArgs): EstimateResult => {
+  const input = spouseOnJointReturn(given);
   const cfg = getYearConfig(input.year);
   const strategy = strategyFor(entity);
   const estimate = strategy.compute(input, cfg);

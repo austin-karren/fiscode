@@ -178,6 +178,11 @@ Not modelled yet:
   threshold the deduction phases down to $0 across the band (then the $400 minimum applies).
 - Utah additions to and subtractions from income, itemized deductions, and the extra exemption
   for a dependent born in the year.
+- A spouse's W-2 wages and withholding count only when filing jointly; under any other status
+  fiscode counts none of them. Married filing separately in a community property state (AZ, CA,
+  ID, LA, NV, NM, TX, WA, WI) differs: each spouse reports half of the community income and
+  claims half of the withholding on it
+  ([Pub 555](https://www.irs.gov/pub/irs-pdf/p555.pdf)). Not modelled.
 
 `getYearConfig(year)` falls back to the nearest defined year and surfaces a console warning + UI
 banner — stale data is loud, not silent.
