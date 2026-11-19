@@ -4,7 +4,7 @@ import { config2025 } from "./config/2025.ts";
 import { config2026 } from "./config/2026.ts";
 import { computeQbi } from "./qbi.ts";
 
-// Rules (IRC §199A, https://www.law.cornell.edu/uscode/text/26/199A):
+// Rules (26 U.S.C. 199A, https://uscode.house.gov (release point through Pub. L. 119-142)):
 // - (b)(2): 20% of QBI, limited by the W-2 wage / property limit. fiscode
 //   models no W-2 wages or property, so that limit is $0.
 // - (b)(3)(A): at or below the threshold the wage limit does not apply.

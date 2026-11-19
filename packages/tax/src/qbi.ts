@@ -4,8 +4,7 @@ import type { YearConfig } from "./types.ts";
 
 /**
  * QBI deduction for a sole proprietor (non-SSTB) with no W-2 wages and no
- * qualified property, per IRC §199A
- * (https://www.law.cornell.edu/uscode/text/26/199A):
+ * qualified property, per 26 U.S.C. 199A, https://uscode.house.gov (release point through Pub. L. 119-142):
  *
  * - (b)(2): 20% of QBI, limited by the W-2 wage / property amount, which is $0
  *   here because fiscode models neither.
@@ -16,9 +15,13 @@ import type { YearConfig } from "./types.ts";
  * - (a): the result is at most 20% of taxable income before the deduction.
  * - (i), 2026 on: with at least $1,000 of QBI, the deduction is the greater of
  *   the above and $400 (it replaces the whole (a) amount, so the taxable-income
- *   cap does not lower it).
+ *   cap does not lower it). The minimum counts only QBI from an "active"
+ *   business, one the taxpayer materially participates in (§199A(i)(2),
+ *   §469(h)); fiscode assumes the owner does.
  *
  * Not modelled: specified service businesses (§199A(d)), W-2 wages, property.
+ * An SSTB above the band has no QBI from a qualified business, so it would get
+ * $0 and no minimum; fiscode treats every business as non-SSTB.
  */
 export const computeQbi = (
   qualifiedBusinessIncome: Cents,

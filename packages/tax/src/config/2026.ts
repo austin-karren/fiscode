@@ -91,7 +91,8 @@ export const config2026: YearConfig = {
       mfs: dollars(75_000),
       hoh: dollars(75_000),
     },
-    // IRC §199A(i) (https://www.law.cornell.edu/uscode/text/26/199A): the
+    // 26 U.S.C. 199A(i), added by Pub. L. 119-21 §70105
+    // (https://uscode.house.gov, release point through Pub. L. 119-142): the
     // deduction is "the greater of (A) the amount of such deduction determined
     // without regard to this subsection, or (B) $400" for a taxpayer with at
     // least $1,000 of active QBI. RP-2025-32 §2.12: years after Dec 31, 2025.
