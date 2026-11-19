@@ -10,6 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@tanstack/react-router-devtools", () => ({ TanStackRouterDevtools: () => null }));
 
+import { ThemeProvider } from "@fiscode/ui/components/theme";
+
 import { routeLabel } from "../lib/nav";
 import { Route } from "./__root";
 
@@ -50,7 +52,12 @@ async function renderAt(path: string) {
     routeTree: root.addChildren(pages),
     history: createMemoryHistory({ initialEntries: [path] }),
   });
-  render(<RouterProvider router={router} />);
+  // As in main.tsx: the sidebar's theme switcher needs the provider.
+  render(
+    <ThemeProvider>
+      <RouterProvider router={router} />
+    </ThemeProvider>,
+  );
   await screen.findByRole("heading", { name: `Page ${path}` });
   return router;
 }
@@ -133,6 +140,20 @@ describe("root layout", () => {
       await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
       expect(headerLabel()).toHaveTextContent("Mileage");
       await waitFor(() => expect(screen.getByRole("main")).toHaveFocus());
+    });
+
+    it("keeps the sheet open when a theme is picked in it", async () => {
+      await renderAt("/income");
+      const sheet = await openSheet();
+
+      fireEvent.click(within(sheet).getByRole("tab", { name: "Dark theme" }));
+
+      expect(within(sheet).getByRole("tab", { name: "Dark theme" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(headerLabel()).toHaveTextContent("Income");
     });
 
     it("closes the sheet on Escape and gives focus back to the button that opened it", async () => {

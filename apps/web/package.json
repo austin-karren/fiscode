@@ -9,7 +9,7 @@
     "build": "vite build",
     "serve": "vite preview",
     "start": "bun run server.ts",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run --passWithNoTests && bun test server.test.ts",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {

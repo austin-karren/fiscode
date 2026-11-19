@@ -58,15 +58,19 @@ function RootLayout() {
         {/* SidebarInset's markup, as a div: it renders a <main>, and the page
             content below is the one main landmark. */}
         <div className="relative flex w-full flex-1 flex-col bg-background">
-          <header className="flex h-12 shrink-0 items-center gap-2 bg-background/80 px-3 backdrop-blur sticky top-0 z-10">
+          <header className="flex h-12 shrink-0 items-center gap-2 bg-background/80 px-3 backdrop-blur sticky top-0 z-10 print:hidden">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mx-1 h-4 data-vertical:self-center" />
             <span data-testid="header-label" className="text-sm text-muted-foreground">
               {routeLabel(pathname)}
             </span>
           </header>
-          <Separator orientation="horizontal" className="w-full" />
-          <main id={MAIN_ID} tabIndex={-1} className="@container px-4 py-6 outline-none md:px-8">
+          <Separator orientation="horizontal" className="w-full print:hidden" />
+          <main
+            id={MAIN_ID}
+            tabIndex={-1}
+            className="@container px-4 py-6 outline-none md:px-8 print:p-0"
+          >
             <Outlet />
           </main>
         </div>

@@ -13,6 +13,7 @@ import {
   SidebarSeparator,
   useSidebar,
 } from "@fiscode/ui/components/sidebar";
+import { NavThemeSwitcher, useThemeCycle } from "@fiscode/ui/components/nav-theme-switcher";
 import { Link, useLocation } from "@tanstack/react-router";
 import { BookOpen, Github } from "lucide-react";
 
@@ -24,6 +25,30 @@ const EXTERNAL_LINKS = [
   { href: "https://docs.fiscode.app", label: "Docs", icon: BookOpen },
   { href: "https://github.com/austin-karren/fiscode", label: "GitHub", icon: Github },
 ] as const;
+
+// Expanded sidebar (and the mobile sheet): the three-way switcher. Collapsed
+// rail: one button that cycles through the three modes.
+function ThemeControl() {
+  const { Icon, label, toggleMode } = useThemeCycle();
+  return (
+    <>
+      <div className="px-2 pb-1 group-data-[collapsible=icon]:hidden">
+        <NavThemeSwitcher className="w-full" />
+      </div>
+      <SidebarMenu className="hidden px-2 pb-1 group-data-[collapsible=icon]:flex">
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            tooltip={`${label}. Click to change.`}
+            aria-label={`${label}. Change theme`}
+            onClick={toggleMode}
+          >
+            <Icon />
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </>
+  );
+}
 
 export function AppSidebar() {
   const { pathname } = useLocation();
@@ -139,6 +164,7 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        <ThemeControl />
         <div className="overflow-hidden whitespace-nowrap transition-[max-height] duration-150 delay-300 max-h-8 group-data-[collapsible=icon]:max-h-0 group-data-[collapsible=icon]:duration-75 group-data-[collapsible=icon]:delay-0">
           <div className="px-2 py-1 text-xs text-muted-foreground opacity-100 transition-discrete duration-150 delay-300 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:duration-75 group-data-[collapsible=icon]:delay-0">
             local-only · CSV is source of truth
