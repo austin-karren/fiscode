@@ -112,7 +112,7 @@ function Dashboard() {
                   key={p.quarter}
                   className={`rounded-md border border-border p-3 ${
                     isNext ? "ring-1 ring-foreground/40" : ""
-                  } ${past ? "opacity-60" : ""}`}
+                  } ${past ? "border-dashed" : ""}`}
                 >
                   <p className="text-xs text-muted-foreground">
                     Q{p.quarter} · {p.periodStart} → {p.periodEnd}
@@ -164,7 +164,7 @@ function Dashboard() {
             </Field>
           </div>
           {result.safeHarbor.firstYear ? (
-            <p className="mt-3 text-sm text-yellow-600/90 dark:text-yellow-300">
+            <p className="mt-3 text-sm text-yellow-800 dark:text-yellow-300">
               First-year filing: pay-as-you-go target is 90% of current-year tax. Owing the full
               balance at filing is allowed, but underpayment penalty risk applies if you pay too
               little throughout the year.

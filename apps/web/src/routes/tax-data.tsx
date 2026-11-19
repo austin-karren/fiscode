@@ -124,7 +124,9 @@ function YearCard({
             <span className="font-mono text-xs">
               {new Date(status.fetchedAt).toLocaleString()}{" "}
               {status.isStale ? (
-                <span className="ms-1 text-amber-600">(stale, &gt; 7 days)</span>
+                <span className="ms-1 text-amber-700 dark:text-amber-400">
+                  (stale, &gt; 7 days)
+                </span>
               ) : null}
             </span>
           ) : (
