@@ -13,6 +13,7 @@ import { ExportCard } from "../components/export-card";
 import { ImportCard } from "../components/import-card";
 import { BackupNudge } from "../components/backup-nudge";
 import { InfoTooltip } from "../components/info-tooltip";
+import { UtahPrepaymentLine } from "../components/utah-prepayment-line";
 
 export const Route = createFileRoute("/")({
   beforeLoad: async () => {
@@ -133,11 +134,7 @@ function Dashboard() {
             </p>
           ) : null}
           {result.statePrepayment ? (
-            <p className="mt-3 text-sm text-muted-foreground">
-              Utah: pay at least {formatUSD(result.statePrepayment.minimum)} by{" "}
-              <span className="font-mono">{result.statePrepayment.dueDate}</span> (90% of this
-              year&apos;s Utah tax, less Utah withholding).
-            </p>
+            <UtahPrepaymentLine prepayment={result.statePrepayment} />
           ) : null}
           {upcoming && recommendedPrep ? (
             <p className="mt-3 text-sm text-muted-foreground">
