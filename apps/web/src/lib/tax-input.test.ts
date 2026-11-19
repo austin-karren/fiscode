@@ -1,3 +1,4 @@
+import { expenseTotalsByCategory } from "./year-end";
 import { describe, expect, it } from "vitest";
 import type { Bundle } from "@fiscode/csv";
 import { buildAnnualizedInput, buildTaxInput, deriveYear } from "./tax-input.ts";
@@ -225,12 +226,74 @@ describe("deriveYear — mileage deduction", () => {
         { ...expense("startup", "2026-02-01", 45_00), startupExpense: true }, // counted
         expense("ok", "2026-04-01", 250_00), // counted
         { ...expense("gone", "2026-03-01", 10_00), deletedAt: FIXED }, // deleted: neither
-        { ...expense("old", "2025-12-31", 7_00), startupExpense: true }, // prior year: neither
+        // Paid in 2025 before a 2026 start: counts in 2026, the year the business begins
+        // (§195(b)); not "excluded", since it isn't dated in 2026.
+        { ...expense("old", "2025-12-31", 7_00), startupExpense: true },
       ],
     });
     const d = deriveYear(b, 2026);
-    expect(d.directExpenses).toBe(295_00);
+    expect(d.directExpenses).toBe(302_00);
     expect(d.excludedBeforeSeStart.expense).toBe(1);
+  });
+});
+
+describe("bug A: a startup cost counts in the year the business begins (IRC §195(b))", () => {
+  // Paid 2025-12-15, SE start 2026-02-01: §195(b)(1)(A) allows it "for the taxable year in which the
+  // active trade or business begins", so 2025: 0, 2026: 1, counted on the start date.
+  const startup = { ...expense("s", "2025-12-15", 900_00), startupExpense: true };
+  const profile = { ...makeBundle().profile!, seStartDate: "2026-02-01" };
+
+  it("year totals: 2025 none, 2026 the full amount", () => {
+    const b = makeBundle({ profile, expenses: [startup] });
+    expect(deriveYear(b, 2025).directExpenses).toBe(0);
+    expect(deriveYear(b, 2026).directExpenses).toBe(900_00);
+    // Not "excluded" in 2025: it is deducted under §195 in 2026.
+    expect(deriveYear(b, 2025).excludedBeforeSeStart.expense).toBe(0);
+    expect(deriveYear(b, 2026).excludedBeforeSeStart.expense).toBe(0);
+  });
+
+  it("annualized: lands in the period that holds the SE start", () => {
+    const b = makeBundle({
+      profile: { ...profile, seStartDate: "2026-07-01" },
+      income: [income("i1", "2026-07-15", 10_000_00)],
+      expenses: [startup],
+    });
+    const ann = buildAnnualizedInput(b, 2026);
+    // Start Jul 1: Q1 (Mar 31) and Q2 (May 31) carry none; Q3 (Aug 31) and Q4 carry $900.
+    expect(ann.periods[0].cumulativeDeductibleExpenses).toBe(0);
+    expect(ann.periods[1].cumulativeDeductibleExpenses).toBe(0);
+    expect(ann.periods[2].cumulativeDeductibleExpenses).toBe(900_00);
+    expect(ann.periods[3].cumulativeDeductibleExpenses).toBe(900_00);
+  });
+
+  it("the home office's profit window sees it on the SE start date", () => {
+    // Office from Feb 1 (the start), $1,000 income, $900 startup cost: profit $100, so the
+    // simplified $750 × 11/12 months = $687.50 is limited to $100.
+    const b = makeBundle({
+      profile,
+      income: [income("i1", "2026-03-15", 1_000_00)],
+      expenses: [startup],
+      homeOffice: [homeOffice("ho", "2026-02-01", null, 150)],
+    });
+    expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(100_00);
+  });
+
+  it("year-end: its own §195 line in 2026 (deducted and total), not a category", () => {
+    const b = makeBundle({ profile, expenses: [startup] });
+    expect(expenseTotalsByCategory([startup], 2026, "2026-02-01")).toEqual({});
+    expect(deriveYear(b, 2026).startupCosts).toEqual({ deductedThisYear: 900_00, total: 900_00 });
+    expect(deriveYear(b, 2025).startupCosts).toEqual({ deductedThisYear: 0, total: 900_00 });
+  });
+
+  it("§195(b) limit: $12,000 paid before a Mar 2 start deducts $5,388.89, then $466.67", () => {
+    const big = { ...expense("s", "2025-12-15", 12_000_00), startupExpense: true };
+    const b = makeBundle({
+      profile: { ...profile, seStartDate: "2026-03-02" },
+      income: [income("i1", "2026-05-15", 50_000_00)],
+      expenses: [big],
+    });
+    expect(deriveYear(b, 2026).directExpenses).toBe(5_388_89);
+    expect(deriveYear(b, 2027).directExpenses).toBe(466_67);
   });
 });
 
