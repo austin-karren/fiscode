@@ -24,6 +24,7 @@ import { ParentName } from "../components/parent-name";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { useToday } from "../lib/use-today";
+import { formatDate } from "../lib/format-date";
 
 const mileageSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -222,7 +223,7 @@ function MileagePage() {
                 <DataTable.Row key={m.id}>
                   <DataTable.Cell>
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="font-mono">{m.date}</span>
+                      <span className="whitespace-nowrap">{formatDate(m.date)}</span>
                       <PreSeStartBadge rowDate={m.date} seStartDate={profile?.seStartDate} />
                     </span>
                   </DataTable.Cell>

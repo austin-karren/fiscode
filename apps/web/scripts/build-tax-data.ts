@@ -24,7 +24,7 @@ const PAYLOADS = [
 const outDir = resolve(import.meta.dir, "..", "public", "tax-data", TAX_YEAR_WIRE_SCHEMA_VERSION);
 
 for (const { year, cfg } of PAYLOADS) {
-  const wire = yearConfigToWire(cfg, `fiscode-bundled ${year}`, generatedAt);
+  const wire = yearConfigToWire(cfg, `fiscode ${year}`, generatedAt);
   const path = resolve(outDir, `${year}.json`);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${JSON.stringify(wire, null, 2)}\n`);

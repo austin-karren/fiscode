@@ -22,6 +22,7 @@ import { ArchivedNote } from "../components/parent-name";
 import { restoreRow, softDeleteWithUndo } from "../lib/soft-delete";
 import { InfoTooltip } from "../components/info-tooltip";
 import { GLOSSARY } from "../lib/tax-glossary";
+import { VEHICLE_METHOD_LABELS, labelFor } from "@fiscode/core";
 
 const vehicleSchema = z.object({
   make: z.string().min(1, "Make is required"),
@@ -238,7 +239,7 @@ function VehiclesPage() {
                   </DataTable.Cell>
                   <DataTable.Cell>{v.year ?? "—"}</DataTable.Cell>
                   <DataTable.Cell>{v.mpg ?? "—"}</DataTable.Cell>
-                  <DataTable.Cell>{v.method}</DataTable.Cell>
+                  <DataTable.Cell>{labelFor(VEHICLE_METHOD_LABELS, v.method)}</DataTable.Cell>
                   <DataTable.Cell align="right">
                     {v.deletedAt ? (
                       <Button variant="ghost" size="sm" onClick={() => unarchive(v)}>

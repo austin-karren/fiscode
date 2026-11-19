@@ -12,8 +12,10 @@ import {
   ENTITY_TYPE_LABELS,
   FILING_STATUS_LABELS,
   QUARTERLY_METHOD_LABELS,
+  labelFor,
   labelOptions,
 } from "@fiscode/core";
+import { formatDate } from "../lib/format-date";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -36,6 +38,11 @@ import { InfoTooltip } from "../components/info-tooltip";
 import { SetupRequiredEmpty } from "../components/empty-states/setup-required";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditEntityDialog } from "../components/edit-entity-dialog";
+import {
+  entityPeriodFieldError,
+  periodErrorFor,
+  type EntityPeriodFieldError,
+} from "../lib/entity-period-error";
 import { EditSpouseDialog } from "../components/edit-spouse-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
 
@@ -155,7 +162,8 @@ function ProfileFormPanel({
   });
 
   // Set when the repo blocks an entity period: an overlap, or an end before the start.
-  const [entityError, setEntityError] = useState<string | null>(null);
+  // Set when the repo blocks the dates; shown on the field it is about.
+  const [entityError, setEntityError] = useState<EntityPeriodFieldError | null>(null);
 
   const entityForm = useForm({
     defaultValues: {
@@ -176,7 +184,8 @@ function ProfileFormPanel({
         });
       } catch (err) {
         if (!(err instanceof EntityPeriodError)) throw err;
-        setEntityError(err.message);
+        // Taken with the saved periods: it lapses once one of them changes.
+        setEntityError(entityPeriodFieldError(err, entities));
         return;
       }
       toast.success("Entity period added.");
@@ -453,10 +462,10 @@ function ProfileFormPanel({
             <ul className="space-y-1 text-sm">
               {entities.map((e) => (
                 <li key={e.id} className="flex items-center gap-3">
-                  <span className="font-mono">
-                    {e.startDate} – {e.endDate ?? "open"}
+                  <span className="whitespace-nowrap">
+                    {formatDate(e.startDate)} – {e.endDate ? formatDate(e.endDate) : "open"}
                   </span>
-                  <span>{e.type}</span>
+                  <span>{labelFor(ENTITY_TYPE_LABELS, e.type)}</span>
                   <div className="ms-auto inline-flex gap-1">
                     <EditEntityDialog entity={e} onSaved={() => router.invalidate()} />
                     {e.endDate ? null : (
@@ -467,7 +476,7 @@ function ProfileFormPanel({
                           </Button>
                         }
                         title="End this entity period today?"
-                        description={`This ${e.type} period (started ${e.startDate}) will close at today's date. You can edit the end date later from your data.`}
+                        description={`This ${labelFor(ENTITY_TYPE_LABELS, e.type)} period (started ${formatDate(e.startDate)}) will close at today's date. You can edit the end date later from your data.`}
                         confirmLabel="End it"
                         confirmVariant="destructive"
                         onConfirm={() => void endEntityNow(e.id)}
@@ -502,7 +511,12 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={entityForm} name="startDate" validators={{ onBlur: efs.startDate }}>
+            <TSFormField
+              form={entityForm}
+              name="startDate"
+              validators={{ onBlur: efs.startDate }}
+              error={periodErrorFor(entityError, "startDate", entities)}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Start</FormLabel>
@@ -511,14 +525,22 @@ function ProfileFormPanel({
                       yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
-                      onValueChange={(d) => field.handleChange(d)}
+                      onValueChange={(d) => {
+                        // A new date is a new attempt; the old refusal no longer applies.
+                        setEntityError(null);
+                        field.handleChange(d);
+                      }}
                     />
                   </FormControl>
-                  <FormMessage />
+                  <FormMessage role="alert" />
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={entityForm} name="endDate">
+            <TSFormField
+              form={entityForm}
+              name="endDate"
+              error={periodErrorFor(entityError, "endDate", entities)}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>End (optional)</FormLabel>
@@ -527,22 +549,18 @@ function ProfileFormPanel({
                       yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
-                      onValueChange={(d) => field.handleChange(d)}
+                      onValueChange={(d) => {
+                        setEntityError(null);
+                        field.handleChange(d);
+                      }}
                       disableFuture={false}
                     />
                   </FormControl>
-                  <FormMessage />
+                  <FormMessage role="alert" />
                 </FormItem>
               )}
             </TSFormField>
           </CardContent>
-          {entityError ? (
-            <CardContent>
-              <p role="alert" className="text-sm text-destructive">
-                {entityError}
-              </p>
-            </CardContent>
-          ) : null}
           <CardFooter className="justify-end">
             <entityForm.Subscribe
               selector={(s) => ({
@@ -660,8 +678,8 @@ function ProfileFormPanel({
             <ul className="space-y-1 text-sm">
               {spouses.map((s) => (
                 <li key={s.id} className="flex items-center gap-3">
-                  <span className="font-mono">
-                    {s.startDate} – {s.endDate ?? "open"} · $
+                  <span>
+                    {formatDate(s.startDate)} – {s.endDate ? formatDate(s.endDate) : "open"} · $
                     {(s.annualW2WagesCents / 100).toLocaleString()}
                   </span>
                   <div className="ms-auto inline-flex gap-1">

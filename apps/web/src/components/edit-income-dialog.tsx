@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +24,7 @@ import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { archivedSuffix, pickableParents } from "./parent-name";
 import { useToday } from "../lib/use-today";
+import { useEditDialog } from "../hooks/use-edit-dialog";
 
 const KIND_OPTIONS = [
   { value: "recurring", label: "Recurring" },
@@ -50,8 +50,6 @@ export function EditIncomeDialog({
   clients: ClientRow[];
   onSaved: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-
   const today = useToday();
   const form = useForm({
     defaultValues: {
@@ -75,9 +73,10 @@ export function EditIncomeDialog({
       onSaved();
     },
   });
+  const { open, setOpen, onOpenChange } = useEditDialog(form);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">

@@ -17,15 +17,21 @@ import type { ZodTypeAny } from "zod";
 // type parameters; constraining it in the bridge gives no benefit and a lot
 // of friction. Callers still get full type safety on `field.state.value`
 // because the field arg uses TanStack's own inference.
+//
+// `error` adds a message from outside the form's validators (a save the repo
+// refused). It marks the field invalid and shows under it, but unlike a
+// validator error it does not disable submit; the caller clears it.
 export function TSFormField({
   form,
   name,
   validators,
+  error,
   children,
 }: {
   form: any;
   name: string;
   validators?: { onBlur?: ZodTypeAny };
+  error?: string;
   children: (field: AnyFieldApi) => ReactNode;
 }) {
   const FieldComp = form.Field as React.ComponentType<{
@@ -38,7 +44,10 @@ export function TSFormField({
       {(field: AnyFieldApi) => (
         <FormField
           name={field.name}
-          errors={field.state.meta.errors as Array<{ message?: string } | string>}
+          errors={[
+            ...(error ? [{ message: error }] : []),
+            ...(field.state.meta.errors as Array<{ message?: string } | string>),
+          ]}
         >
           {children(field)}
         </FormField>

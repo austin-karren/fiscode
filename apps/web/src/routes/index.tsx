@@ -3,7 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@fiscode/ui/components
 import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
 import { buildBundle, profileRepo } from "@fiscode/db";
 import { estimateYear, getYearConfig, nextDueQuarter, recommendedPrepDate } from "@fiscode/tax";
-import { formatUSD, todayIso, yearOf, type Cents } from "@fiscode/core";
+import {
+  FILING_STATUS_LABELS,
+  formatUSD,
+  labelFor,
+  todayIso,
+  yearOf,
+  type Cents,
+} from "@fiscode/core";
+import { Badge } from "@fiscode/ui/components/badge";
 import { CircleAlert } from "lucide-react";
 
 import { buildAnnualizedInput, buildTaxInput, deriveYear } from "../lib/tax-input";
@@ -14,6 +22,26 @@ import { ImportCard } from "../components/import-card";
 import { BackupNudge } from "../components/backup-nudge";
 import { InfoTooltip } from "../components/info-tooltip";
 import { UtahPrepaymentLine } from "../components/utah-prepayment-line";
+import { formatDate } from "../lib/format-date";
+import { US_STATE_BY_CODE } from "../lib/us-states";
+
+// "Single filer · Utah · annualized installments": the profile's settings
+// that shape this estimate, in words. "Single" alone reads like an adjective
+// in a list, so it gets "filer"; the other statuses already read as one.
+const dashboardSubtitle = (profile: {
+  filingStatus: string;
+  state: string;
+  quarterlyMethod: string;
+}): string => {
+  const filing =
+    profile.filingStatus === "single"
+      ? "Single filer"
+      : labelFor(FILING_STATUS_LABELS, profile.filingStatus);
+  const state = US_STATE_BY_CODE[profile.state] ?? profile.state;
+  const method =
+    profile.quarterlyMethod === "annualized" ? "annualized installments" : "even quarters";
+  return `${filing} · ${state} · ${method}`;
+};
 
 export const Route = createFileRoute("/")({
   beforeLoad: async () => {
@@ -56,10 +84,7 @@ function Dashboard() {
     : undefined;
 
   return (
-    <Page
-      title={`${year} estimate`}
-      description={`${profile.filingStatus.toUpperCase()} · ${profile.state} · ${profile.quarterlyMethod === "annualized" ? "annualized installments" : "even quarters"}`}
-    >
+    <Page title={`${year} estimate`} description={dashboardSubtitle(profile)}>
       {!hasExact ? (
         <Alert>
           <CircleAlert />
@@ -113,15 +138,17 @@ function Dashboard() {
                   key={p.quarter}
                   className={`rounded-md border border-border p-3 ${
                     isNext ? "ring-1 ring-foreground/40" : ""
-                  } ${past ? "border-dashed" : ""}`}
+                  } ${past ? "border-dashed text-muted-foreground" : ""}`}
                 >
-                  <p className="text-xs text-muted-foreground">
-                    Q{p.quarter} · {p.periodStart} → {p.periodEnd}
+                  <p className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>
+                      Q{p.quarter} · {formatDate(p.periodStart)} – {formatDate(p.periodEnd)}
+                    </span>
+                    {isNext ? <Badge variant="secondary">Next</Badge> : null}
                   </p>
                   <p className="mt-1 text-lg font-semibold tabular-nums">{formatUSD(p.amount)}</p>
                   <p className="mt-1 text-xs">
-                    due <span className="font-mono">{p.dueDate}</span>
-                    {past ? " (past)" : isNext ? " (next)" : ""}
+                    {past ? "Was due" : "Due"} {formatDate(p.dueDate)}
                   </p>
                 </div>
               );
@@ -138,8 +165,8 @@ function Dashboard() {
           ) : null}
           {upcoming && recommendedPrep ? (
             <p className="mt-3 text-sm text-muted-foreground">
-              Next due <span className="font-mono">{upcoming.dueDate}</span>. Start preparing around{" "}
-              <span className="font-mono">{recommendedPrep}</span>.
+              Next due {formatDate(upcoming.dueDate)}. Start preparing around{" "}
+              {formatDate(recommendedPrep)}.
             </p>
           ) : null}
         </CardContent>
@@ -297,8 +324,9 @@ function ExcludedBeforeSeAlert({ derived }: { derived: ReturnType<typeof deriveY
       <CircleAlert />
       <AlertTitle>Some rows are dated before your SE start date</AlertTitle>
       <AlertDescription>
-        {summary} dated before {derived.seStartDate} are not counted in this estimate. They stay in
-        your data — edit them or change your start date on <Link to="/profile">your profile</Link>.
+        {summary} dated before {formatDate(derived.seStartDate)} are not counted in this estimate.
+        They stay in your data — edit them or change your start date on{" "}
+        <Link to="/profile">your profile</Link>.
       </AlertDescription>
     </Alert>
   );

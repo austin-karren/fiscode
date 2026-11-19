@@ -15,7 +15,12 @@ const NOT_TYPED_IN = new Set(["checkbox", "radio", "button", "submit", "reset", 
 // error. Enter therefore counts as "done with this field": the input is
 // blurred and focused again, which re-runs its blur validator, and then the
 // form is submitted.
-export function EnterToSubmitForm({ onKeyDown, ...props }: ComponentProps<"form">) {
+//
+// A dialog's form is portaled out of the DOM, but React still bubbles its
+// submit event along the component tree. When the dialog's trigger sits inside
+// another form (Edit buttons in a profile card), that form would submit too.
+// The submit therefore stops here.
+export function EnterToSubmitForm({ onKeyDown, onSubmit, ...props }: ComponentProps<"form">) {
   const ref = useRef<HTMLFormElement>(null);
   useSubmitOnEnter(ref);
 
@@ -34,5 +39,15 @@ export function EnterToSubmitForm({ onKeyDown, ...props }: ComponentProps<"form"
     ref.current?.requestSubmit();
   };
 
-  return <form ref={ref} onKeyDown={submitFromInput} {...props} />;
+  return (
+    <form
+      ref={ref}
+      onKeyDown={submitFromInput}
+      onSubmit={(e) => {
+        e.stopPropagation();
+        onSubmit?.(e);
+      }}
+      {...props}
+    />
+  );
 }
