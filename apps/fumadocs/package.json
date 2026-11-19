@@ -31,9 +31,12 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "^6.3.0",
-    "nitro": "3.0.260522-beta",
+    "nitro": "3.0.261103-rc",
     "tailwindcss": "^4.3.5",
     "typescript": "catalog:",
     "vite": "^8.3.8"
+  },
+  "engines": {
+    "node": "24.x"
   }
 }
