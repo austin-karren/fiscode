@@ -30,6 +30,7 @@ import { NoDataEmpty } from "../components/empty-states/no-data";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditHomeOfficeDialog } from "../components/edit-home-office-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
+import { useToday } from "../lib/use-today";
 
 const METHOD_OPTIONS = labelOptions(HOME_OFFICE_METHOD_LABELS);
 
@@ -55,9 +56,10 @@ function HomeOfficePage() {
   const { rows } = useLoaderData({ from: "/home-office" });
   const router = useRouter();
 
+  const today = useToday();
   const form = useForm({
     defaultValues: {
-      startDate: new Date() as Date | undefined,
+      startDate: today as Date | undefined,
       method: "simplified",
       officeSqft: "",
       homeSqft: "",

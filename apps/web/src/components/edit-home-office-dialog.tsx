@@ -23,6 +23,7 @@ import { TSFormField } from "./forms/ts-form-field";
 import { CONFIG_YEARS_BACK, DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
+import { useToday } from "../lib/use-today";
 
 const METHOD_OPTIONS = labelOptions(HOME_OFFICE_METHOD_LABELS);
 
@@ -43,9 +44,10 @@ export function EditHomeOfficeDialog({
 }) {
   const [open, setOpen] = useState(false);
 
+  const today = useToday();
   const form = useForm({
     defaultValues: {
-      startDate: isoToDate(row.startDate) ?? new Date(),
+      startDate: isoToDate(row.startDate) ?? today,
       endDate: row.endDate ? isoToDate(row.endDate) : (undefined as Date | undefined),
       method: (row.method as "simplified" | "actual") ?? "simplified",
       officeSqft: row.officeSqft === null ? "" : String(row.officeSqft),

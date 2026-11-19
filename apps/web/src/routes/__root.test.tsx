@@ -143,7 +143,8 @@ describe("root layout", () => {
       await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), slow);
       expect(headerLabel()).toHaveTextContent("Mileage");
       await waitFor(() => expect(screen.getByRole("main")).toHaveFocus(), slow);
-    });
+      // The test as a whole needs room for those waits; vitest's default is 5 s.
+    }, 15000);
 
     it("keeps the sheet open when a theme is picked in it", async () => {
       await renderAt("/income");
