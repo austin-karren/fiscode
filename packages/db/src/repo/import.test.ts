@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 import { setupTestDb, teardownTestDb } from "../test/setup-db.ts";
 import { emptyBundle, type Bundle } from "../bundle.ts";
+import { exportBundle } from "@fiscode/csv";
 import { buildBundle, clientRepo, expenseRepo, historyRepo, importBundle } from "./index.ts";
 
 const FIXED = "2026-06-04T12:00:00.000Z";
@@ -61,9 +62,9 @@ afterEach(() => {
   teardownTestDb(sqlite);
 });
 
-describe("importBundle — overwrite", () => {
+describe("importBundle — restore", () => {
   it("loads the bundle into an empty DB and buildBundle returns the same shape", async () => {
-    await importBundle(fullBundle(), "import-overwrite");
+    await importBundle(fullBundle(), "import-restore");
     const round = await buildBundle();
     expect(round.profile?.filingStatus).toBe("mfj");
     expect(round.clients.map((c) => c.id).sort()).toEqual(["cl_1", "cl_2"]);
@@ -80,11 +81,11 @@ describe("importBundle — overwrite", () => {
       defaultCommissionRate: null,
       deletedAt: null,
     });
-    await importBundle(fullBundle(), "import-overwrite");
+    await importBundle(fullBundle(), "import-restore");
     const snapshots = (await historyRepo.listAll()).filter((h) => h.entity === "__import_snapshot");
     expect(snapshots).toHaveLength(1);
     const snap = snapshots[0]!;
-    expect(snap.entityId).toBe("import-overwrite");
+    expect(snap.entityId).toBe("import-restore");
     const before = JSON.parse(snap.beforeJson!);
     expect(before.clients.some((c: { name: string }) => c.name === "Prior")).toBe(true);
   });
@@ -98,7 +99,7 @@ describe("importBundle — overwrite", () => {
       defaultCommissionRate: null,
       deletedAt: null,
     });
-    await importBundle(fullBundle(), "import-overwrite");
+    await importBundle(fullBundle(), "import-restore");
     const round = await buildBundle();
     expect(round.clients.map((c) => c.name).sort()).toEqual(["Acme", "Zeta"]);
   });
@@ -116,12 +117,76 @@ describe("importBundle — overwrite", () => {
     const beforeHist = await historyRepo.listFor("client", c.id);
     expect(beforeHist).toHaveLength(1);
 
-    await importBundle(fullBundle(), "import-overwrite");
+    await importBundle(fullBundle(), "import-restore");
 
     // After: that history row still exists.
     const afterHist = await historyRepo.listFor("client", c.id);
     expect(afterHist).toHaveLength(1);
     expect(afterHist[0]!.op).toBe("insert");
+  });
+});
+
+describe("importBundle — all or nothing", () => {
+  const fullExport = async () =>
+    exportBundle(await buildBundle({ includeDeleted: true, includeHistory: true }), {
+      scope: "full",
+    });
+
+  const seed = async () => {
+    await importBundle(fullBundle(), "import-restore");
+    // An edit and a delete, so the prior state has history and a deleted row.
+    const extra = await clientRepo.create({
+      name: "Added later",
+      type: null,
+      notes: null,
+      defaultRateCents: null,
+      defaultCommissionRate: null,
+      deletedAt: null,
+    });
+    await clientRepo.softDelete(extra.id);
+  };
+
+  // Two income rows with one id: the second insert breaks the primary key,
+  // after the snapshot, the deletes and most inserts have already run.
+  const failsMidway = (): Bundle => ({
+    ...emptyBundle(),
+    profile: { ...profile(), state: "CA" },
+    clients: [client("cl_9", "Never lands")],
+    income: [income("in_dup", "2026-02-01", 1), income("in_dup", "2026-02-02", 2)],
+  });
+
+  it("a restore that fails midway leaves the prior state byte-identical on export", async () => {
+    await seed();
+    const before = await fullExport();
+
+    await expect(importBundle(failsMidway(), "import-restore")).rejects.toThrow();
+
+    expect(await fullExport()).toBe(before);
+    // Not even the snapshot entry, which is written first, survives.
+    const snapshots = (await historyRepo.listAll()).filter((h) => h.entity === "__import_snapshot");
+    expect(snapshots).toHaveLength(0);
+  });
+
+  it("an append that fails midway adds nothing", async () => {
+    await seed();
+    const before = await fullExport();
+    // Append ignores id collisions, so break it with a row the table rejects.
+    const bad = {
+      ...emptyBundle(),
+      clients: [client("cl_new", "Lands first"), { ...client("cl_bad", "x"), name: null as never }],
+    };
+
+    await expect(importBundle(bad, "import-append")).rejects.toThrow();
+
+    expect(await fullExport()).toBe(before);
+  });
+
+  it("a failed restore into an empty database leaves it empty", async () => {
+    await expect(importBundle(failsMidway(), "import-restore")).rejects.toThrow();
+    expect(await fullExport()).toBe(
+      exportBundle({ ...emptyBundle(), history: [] }, { scope: "full" }),
+    );
+    expect(await historyRepo.listAll()).toEqual([]);
   });
 });
 
@@ -210,7 +275,7 @@ describe("importBundle → buildBundle — full round-trip parity", () => {
         },
       ],
     };
-    await importBundle(bundle, "import-overwrite");
+    await importBundle(bundle, "import-restore");
     const round = await buildBundle();
     expect(round.profile).toEqual(bundle.profile);
     expect(round.clients.sort((a, b) => a.id.localeCompare(b.id))).toEqual(bundle.clients);

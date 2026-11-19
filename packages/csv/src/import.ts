@@ -221,6 +221,8 @@ export type ImportResult = {
   bundle: Bundle;
   provenance: Partial<Provenance>;
   validationErrors: ImportError[];
+  /** How many header rows (rows starting with `record_type`) the file has. */
+  tables: number;
 };
 
 export type ImportError = {
@@ -337,6 +339,7 @@ export const parseCsv = (raw: string): ImportResult => {
     return {
       bundle: emptyBundle(),
       provenance,
+      tables: 0,
       validationErrors: [
         {
           rowIndex: -1,
@@ -355,6 +358,7 @@ export const parseCsv = (raw: string): ImportResult => {
   const validationErrors: ImportResult["validationErrors"] = [];
   const validated: CsvRow[] = [];
   let header: string[] | undefined;
+  let tables = 0;
   let rowIndex = -1;
   let profileLine = 0;
   all.forEach((row, index) => {
@@ -362,6 +366,7 @@ export const parseCsv = (raw: string): ImportResult => {
     // Header names are matched without regard to case or outer spaces.
     if (row[0]!.trim().toLowerCase() === "record_type") {
       header = row.map((name) => name.trim().toLowerCase());
+      tables++;
       return;
     }
     rowIndex++;
@@ -440,7 +445,7 @@ export const parseCsv = (raw: string): ImportResult => {
       message: "profile.se_start_date is required but missing or empty",
     });
   }
-  return { bundle, provenance, validationErrors };
+  return { bundle, provenance, validationErrors, tables };
 };
 
 export { rowToBundle };

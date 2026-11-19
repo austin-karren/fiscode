@@ -103,7 +103,7 @@ download:
 <Cards>
   <Card title="example.csv" href="/downloads/example.csv" external>
     Download — a synthetic full bundle (sole-prop, MFJ, 2026). Open it in a spreadsheet, edit the
-    rows, then `Import → overwrite` in the app.
+    rows, then choose it under **Import CSV** in the app.
   </Card>
 </Cards>
 
@@ -463,21 +463,33 @@ they're stored and surfaced in the dashboard but don't yet flow into the deducti
 
 ## Import modes
 
-When you upload a CSV to fiscode you pick one of three modes:
+You choose the file first. The app reads it, tells you how many rows, deleted rows and history
+entries it holds, and then asks what to do with it. Nothing changes until you confirm.
 
-- **append** (the default) — keep existing rows; add the new ones by ID. Collisions are reported
-  and existing rows win. Use this when adding a batch.
-- **overwrite** — snapshot the current state into history, clear all data tables, load the CSV.
-  Use this when the CSV is the source of truth (the typical CSV-first workflow).
-- **restore** — the same as overwrite, with wording for reverting to a known-good backup.
+- **Restore** — replace everything in the app with the file. Use this for a full backup. The
+  dialog says how many rows are replaced and how many rows in the app are not in the file.
+- **Add rows** — keep everything in the app and add the file's rows whose `id` is not there yet.
+  Rows already there are skipped and stay as they are; the dialog counts them.
 
-Every import over existing data appends a history entry holding the full pre-import state, so you
-can revert.
+Neither is chosen for you. Three cases differ:
+
+- **An empty app** (a new install): there is nothing to keep, so there is no question. The setup
+  screen has **Restore from a backup**, and the file brings its own profile. A full export
+  restored this way exports again as the same bytes.
+- **A yearly file**: Restore is refused once the app holds data, because a yearly file holds one
+  year and no deleted rows. Add rows still works.
+- **A file with no rows, or one that is not a fiscode CSV**: refused, with the reason on screen.
+
+An import is all or nothing. If any row cannot be written, or the page is closed before it
+finishes, the app is exactly as it was.
+
+Every import over existing data appends a history entry holding the full pre-import state.
 
 ## Validation
 
 The importer checks every row rather than stopping at the first bad cell. A file with any
-rejected row is not imported at all. The app shows the first few problems on screen, each with the
+rejected row is not imported at all. The app lists the first ten problems in the import card, with a
+count of the rest, and keeps them there until you choose another file. Each has the
 row number as your spreadsheet shows it, the record type, the column, and what was expected:
 
 ```

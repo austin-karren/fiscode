@@ -1,3 +1,16 @@
+import {
+  ENTITY_TYPE_LABELS,
+  EXPENSE_CATEGORY_LABELS,
+  FILING_STATUS_LABELS,
+  HOME_OFFICE_METHOD_LABELS,
+  INCOME_KIND_LABELS,
+  INCOME_SOURCE_TYPE_LABELS,
+  QUARTERLY_METHOD_LABELS,
+  RETIREMENT_ACCOUNT_LABELS,
+  VEHICLE_METHOD_LABELS,
+  type LabelMap,
+} from "@fiscode/core";
+
 import { CSV_COLUMNS, type CsvRow, type RecordType } from "./schema.ts";
 
 // The v2 layout: one small table per record type instead of one 50-column
@@ -39,51 +52,17 @@ export type Section = { recordType: RecordType; title: string; columns: Column[]
 
 export const isStored = (c: Column): c is StoredColumn => "key" in c;
 
-const LABELS: Record<string, Record<string, string>> = {
-  "profile.filing_status": {
-    single: "Single",
-    mfj: "Married filing jointly",
-    mfs: "Married filing separately",
-    hoh: "Head of household",
-  },
-  "profile.quarterly_method": {
-    annualized: "Annualized installment",
-    even: "Even split (annual / 4)",
-  },
-  "entity.type": {
-    sole_prop: "Sole proprietor",
-    single_member_llc: "Single-member LLC",
-    s_corp: "S corp",
-  },
-  "income.source_type": { "1099": "1099 self-employment", w2: "W-2 wages" },
-  "income.kind": {
-    recurring: "Recurring",
-    bonus: "Bonus",
-    consulting: "Consulting",
-    other: "Other",
-  },
-  "vehicle.method": { standard_mileage: "Standard mileage", actual: "Actual expenses" },
-  "home_office.method": { simplified: "Simplified", actual: "Actual expenses" },
-  "expense.category": {
-    health_insurance: "Self-employed health insurance",
-    phone_internet: "Phone / internet",
-    software_subs: "Software & subscriptions",
-    professional_services: "Professional services",
-    meals: "Business meals (50%)",
-    equipment: "Equipment",
-    home_office: "Home office",
-    vehicle: "Vehicle",
-    supplies: "Supplies",
-    travel: "Travel",
-    advertising: "Advertising",
-    other: "Other",
-  },
-  "retirement_contribution.account": {
-    sep: "SEP IRA",
-    solo_401k: "Solo 401(k)",
-    roth_ira: "Roth IRA",
-    trad_ira: "Traditional IRA",
-  },
+// The label text lives in @fiscode/core, shared with the app's screens.
+const LABELS: Record<string, LabelMap> = {
+  "profile.filing_status": FILING_STATUS_LABELS,
+  "profile.quarterly_method": QUARTERLY_METHOD_LABELS,
+  "entity.type": ENTITY_TYPE_LABELS,
+  "income.source_type": INCOME_SOURCE_TYPE_LABELS,
+  "income.kind": INCOME_KIND_LABELS,
+  "vehicle.method": VEHICLE_METHOD_LABELS,
+  "home_office.method": HOME_OFFICE_METHOD_LABELS,
+  "expense.category": EXPENSE_CATEGORY_LABELS,
+  "retirement_contribution.account": RETIREMENT_ACCOUNT_LABELS,
 };
 
 // `name` is the header a person sees. It differs from the flat key where the

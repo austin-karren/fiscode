@@ -11,7 +11,11 @@ import {
   FieldLabel,
   FieldTitle,
 } from "@fiscode/ui/components/field";
-import { optionalNonNegativeIntegerString } from "@fiscode/core";
+import {
+  HOME_OFFICE_METHOD_LABELS,
+  labelOptions,
+  optionalNonNegativeIntegerString,
+} from "@fiscode/core";
 import { homeOfficeRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Home } from "lucide-react";
@@ -30,10 +34,7 @@ import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditHomeOfficeDialog } from "../components/edit-home-office-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
 
-const METHOD_OPTIONS = [
-  { value: "simplified", label: "Simplified" },
-  { value: "actual", label: "Actual (advanced)" },
-];
+const METHOD_OPTIONS = labelOptions(HOME_OFFICE_METHOD_LABELS);
 
 // Per-field schemas (onBlur). Form-level adds the cross-field "ack required"
 // refine and runs on submit. sqft inputs are optional non-negative integers —

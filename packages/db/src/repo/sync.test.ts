@@ -165,7 +165,7 @@ const normalize = (b: DbBundle): DbBundle => ({
 describe("CSV ↔ DB sync (full chain)", () => {
   it("export → parse → applyImport → importBundle → buildBundle equals the seed bundle", async () => {
     // 1. Seed the DB with the original bundle.
-    await importBundle(bundle, "import-overwrite");
+    await importBundle(bundle, "import-restore");
 
     // 2. Export to CSV.
     const csv = exportBundle(await buildBundle(), {
@@ -177,10 +177,10 @@ describe("CSV ↔ DB sync (full chain)", () => {
     expect(validationErrors).toEqual([]);
 
     // 4. Merge against an empty bundle (overwrite semantics).
-    const applied = applyImport(emptyCsvBundle(), parsed, "overwrite");
+    const applied = applyImport(emptyCsvBundle(), parsed, "restore");
 
     // 5. Wipe the DB and re-import via the merged bundle.
-    await importBundle(applied.next as DbBundle, "import-overwrite");
+    await importBundle(applied.next as DbBundle, "import-restore");
 
     // 6. Read everything back; compare cents-exact.
     const round = await buildBundle();
@@ -188,14 +188,14 @@ describe("CSV ↔ DB sync (full chain)", () => {
   });
 
   it("export with scope='yearly' filters dated rows and survives the full chain", async () => {
-    await importBundle(bundle, "import-overwrite");
+    await importBundle(bundle, "import-restore");
     const csv = exportBundle(await buildBundle(), {
       scope: "yearly",
       year: 2026,
     });
     const { bundle: parsed } = parseCsv(csv);
-    const applied = applyImport(emptyCsvBundle(), parsed, "overwrite");
-    await importBundle(applied.next as DbBundle, "import-overwrite");
+    const applied = applyImport(emptyCsvBundle(), parsed, "restore");
+    await importBundle(applied.next as DbBundle, "import-restore");
     const round = await buildBundle();
     // Income, mileage, expenses are all dated in 2026 — present.
     expect(round.income.map((r) => r.id)).toEqual(["in_1"]);
@@ -223,7 +223,7 @@ describe("CSV ↔ DB sync (full chain)", () => {
           },
         ],
       },
-      "import-overwrite",
+      "import-restore",
     );
 
     // Now feed `bundle` in via the append chain.
@@ -258,7 +258,7 @@ describe("CSV ↔ DB sync (full chain)", () => {
           },
         ],
       },
-      "import-overwrite",
+      "import-restore",
     );
     const csv = exportBundle(bundle, { scope: "full" });
     const { bundle: parsed } = parseCsv(csv);
@@ -285,8 +285,8 @@ describe("the export is the whole state, and the same bytes every time", () => {
     );
     const { bundle: parsed, validationErrors } = parseCsv(csv);
     expect(validationErrors).toEqual([]);
-    const applied = applyImport(emptyCsvBundle(), parsed, "overwrite");
-    await importBundle(applied.next as DbBundle, "import-overwrite");
+    const applied = applyImport(emptyCsvBundle(), parsed, "restore");
+    await importBundle(applied.next as DbBundle, "import-restore");
   };
 
   afterEach(() => {
@@ -294,7 +294,7 @@ describe("the export is the whole state, and the same bytes every time", () => {
   });
 
   it("two exports of the same state at different clock times are equal bytes", async () => {
-    await importBundle(bundle, "import-overwrite");
+    await importBundle(bundle, "import-restore");
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-03-01T08:00:00.000Z"));
     const first = await exportAll();
@@ -305,14 +305,14 @@ describe("the export is the whole state, and the same bytes every time", () => {
   });
 
   it("export -> import into an empty db -> export is equal bytes", async () => {
-    await importBundle(bundle, "import-overwrite");
+    await importBundle(bundle, "import-restore");
     const first = await exportAll();
     await restoreIntoEmptyDb(first);
     expect(await exportAll()).toBe(first);
   });
 
   it("a soft-deleted row is exported with deleted_at and restored as deleted", async () => {
-    await importBundle(bundle, "import-overwrite");
+    await importBundle(bundle, "import-restore");
     expect(await expenseRepo.softDelete("ex_1")).toBe(true);
     const deleted = (await expenseRepo.listIncludingDeleted()).find((r) => r.id === "ex_1")!;
     expect(deleted.deletedAt).not.toBeNull();
@@ -329,7 +329,7 @@ describe("the export is the whole state, and the same bytes every time", () => {
   });
 
   it("the edit history is exported and restored into an empty db as the same log", async () => {
-    await importBundle(bundle, "import-overwrite");
+    await importBundle(bundle, "import-restore");
     // Make real history: an insert, an update and a delete.
     const made = await clientRepo.create({
       name: 'Quote "and", comma',
@@ -356,7 +356,7 @@ describe("the export is the whole state, and the same bytes every time", () => {
   });
 
   it("an import over existing state adds one snapshot entry and keeps both logs", async () => {
-    await importBundle(bundle, "import-overwrite");
+    await importBundle(bundle, "import-restore");
     await expenseRepo.softDelete("ex_1");
     const first = await exportAll();
     const before = await historyRepo.listAll();
@@ -364,7 +364,7 @@ describe("the export is the whole state, and the same bytes every time", () => {
 
     // Same database, not emptied: the import must stay revertible.
     const { bundle: parsed } = parseCsv(first);
-    await importBundle(parsed as DbBundle, "import-overwrite");
+    await importBundle(parsed as DbBundle, "import-restore");
     const after = await historyRepo.listAll();
     expect(after).toHaveLength(2);
     const snapshot = after.find((h) => h.entity === "__import_snapshot")!;
@@ -375,7 +375,7 @@ describe("the export is the whole state, and the same bytes every time", () => {
   });
 
   it("the full file keeps a deleted row in a table of its own, after the live rows", async () => {
-    await importBundle(bundle, "import-overwrite");
+    await importBundle(bundle, "import-restore");
     const live = await expenseRepo.create({
       date: "2026-03-06",
       amountCents: 8950,
@@ -398,7 +398,7 @@ describe("the export is the whole state, and the same bytes every time", () => {
   });
 
   it("an archived client and vehicle keep their live income and mileage rows through a restore", async () => {
-    await importBundle(bundle, "import-overwrite");
+    await importBundle(bundle, "import-restore");
     const car = await vehicleRepo.create({
       make: "Toyota",
       model: "RAV4",
@@ -463,7 +463,7 @@ describe("the export is the whole state, and the same bytes every time", () => {
   });
 
   it("the yearly file leaves out deleted rows and history", async () => {
-    await importBundle(bundle, "import-overwrite");
+    await importBundle(bundle, "import-restore");
     await expenseRepo.softDelete("ex_1");
     const yearly = exportBundle(await buildBundle({ includeDeleted: true, includeHistory: true }), {
       scope: "yearly",
@@ -477,7 +477,7 @@ describe("the export is the whole state, and the same bytes every time", () => {
   });
 
   it("the default bundle still holds live rows only", async () => {
-    await importBundle(bundle, "import-overwrite");
+    await importBundle(bundle, "import-restore");
     await expenseRepo.softDelete("ex_1");
     expect((await buildBundle()).expenses).toEqual([]);
     expect((await buildBundle({ includeDeleted: true })).expenses.map((r) => r.id)).toEqual([

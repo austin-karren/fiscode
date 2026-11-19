@@ -35,7 +35,7 @@ const profile = (id = "profile") => ({
 });
 
 describe("applyImport", () => {
-  it("overwrite replaces wholesale; replaced captures the prior state", () => {
+  it("restore replaces wholesale; replaced captures the prior state", () => {
     const existing: Bundle = {
       ...emptyBundle(),
       profile: profile(),
@@ -46,13 +46,13 @@ describe("applyImport", () => {
       profile: { ...profile(), state: "CA" },
       income: [incomeRow("in_new", "2026-05-01", 555_00)],
     };
-    const r = applyImport(existing, incoming, "overwrite");
+    const r = applyImport(existing, incoming, "restore");
     expect(r.next).toEqual(incoming);
     expect(r.replaced).toEqual(existing);
     expect(r.conflicts).toEqual([]);
   });
 
-  it("restore behaves like overwrite", () => {
+  it("restore takes the profile from the file", () => {
     const existing: Bundle = { ...emptyBundle(), profile: profile() };
     const incoming: Bundle = {
       ...emptyBundle(),
@@ -119,7 +119,7 @@ describe("applyImport", () => {
     expect(r.next.profile).toEqual(profile());
   });
 
-  it("CSV round trip → applyImport(overwrite) on empty existing → equals original", () => {
+  it("CSV round trip → applyImport(restore) on empty existing → equals original", () => {
     const original: Bundle = {
       ...emptyBundle(),
       profile: profile(),
@@ -127,7 +127,7 @@ describe("applyImport", () => {
     };
     const csv = exportBundle(original, { scope: "full" });
     const { bundle: parsed } = parseCsv(csv);
-    const r = applyImport(emptyBundle(), parsed, "overwrite");
+    const r = applyImport(emptyBundle(), parsed, "restore");
     expect(r.next).toEqual(original);
   });
 

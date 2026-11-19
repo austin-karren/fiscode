@@ -13,7 +13,7 @@ import {
   FieldTitle,
 } from "@fiscode/ui/components/field";
 import { expenseRepo, profileRepo } from "@fiscode/db";
-import { cents, formatUSD, parseUSD } from "@fiscode/core";
+import { cents, EXPENSE_CATEGORY_LABELS, formatUSD, parseUSD } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { Receipt } from "lucide-react";
 import { toast } from "sonner";
@@ -34,20 +34,7 @@ import { softDeleteWithUndo } from "../lib/soft-delete";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@fiscode/ui/components/tooltip";
 import { GLOSSARY } from "../lib/tax-glossary";
 
-const CATEGORIES = [
-  ["health_insurance", "Self-employed health insurance"],
-  ["phone_internet", "Phone / internet"],
-  ["software_subs", "Software & subscriptions"],
-  ["professional_services", "Professional services"],
-  ["meals", "Business meals (50%)"],
-  ["equipment", "Equipment (§179 / bonus)"],
-  ["home_office", "Home office"],
-  ["vehicle", "Vehicle"],
-  ["supplies", "Supplies"],
-  ["travel", "Travel"],
-  ["advertising", "Advertising"],
-  ["other", "Other"],
-] as const;
+const CATEGORIES = Object.entries(EXPENSE_CATEGORY_LABELS);
 
 const labelFor = (code: string) => CATEGORIES.find(([c]) => c === code)?.[1] ?? code;
 
