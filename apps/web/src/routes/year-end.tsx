@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Page } from "../components/page";
 import { buildAnnualizedInput, buildTaxInput, deriveYear } from "../lib/tax-input";
 import { GLOSSARY } from "../lib/tax-glossary";
+import { expenseTotalsByCategory } from "../lib/year-end";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { SetupRequiredEmpty } from "../components/empty-states/setup-required";
 import { InfoTooltip } from "../components/info-tooltip";
@@ -47,12 +48,7 @@ export const Route = createFileRoute("/year-end")({
       input,
     });
     const derived = deriveYear(bundle, year);
-    const totalsByCategory: Record<string, number> = {};
-    for (const e of bundle.expenses) {
-      if (e.deletedAt !== null) continue;
-      if (e.date.slice(0, 4) !== String(year)) continue;
-      totalsByCategory[e.category] = (totalsByCategory[e.category] ?? 0) + e.amountCents;
-    }
+    const totalsByCategory = expenseTotalsByCategory(bundle.expenses, year, profile.seStartDate);
     return { bundle, profile, year, result, derived, totalsByCategory } as const;
   },
   component: YearEndPage,
