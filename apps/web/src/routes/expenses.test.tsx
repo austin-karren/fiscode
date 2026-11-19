@@ -1,10 +1,12 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { create } = vi.hoisted(() => ({ create: vi.fn(async () => undefined) }));
 
 // The database is SQLite over OPFS and the router needs a browser history;
 // neither exists in jsdom. Both are replaced at the package boundary.
 vi.mock("@fiscode/db", () => ({
-  expenseRepo: { list: async () => [], create: vi.fn(), update: vi.fn(), softDelete: vi.fn() },
+  expenseRepo: { list: async () => [], create, update: vi.fn(), softDelete: vi.fn() },
   profileRepo: { get: async () => null },
 }));
 
@@ -18,7 +20,50 @@ import { Route } from "./expenses";
 
 const ExpensesPage = Route.options.component!;
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+describe("expense amount", () => {
+  const submit = (amount: string) => {
+    render(<ExpensesPage />);
+    const input = screen.getByLabelText("Amount");
+    fireEvent.change(input, { target: { value: amount } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    return input;
+  };
+
+  it.each([
+    ["-50", "Enter an amount greater than 0, like 12.50"],
+    ["0", "Enter an amount greater than 0, like 12.50"],
+    ["1e3", "Enter an amount greater than 0, like 12.50"],
+    ["12.345", "Use at most 2 decimal places, like 12.50"],
+    ["999999999999", "Enter an amount below $100,000,000"],
+  ])("does not save %j and says what is allowed", async (amount, message) => {
+    const input = submit(amount);
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("shows the message as soon as focus leaves the field", async () => {
+    render(<ExpensesPage />);
+    const input = screen.getByLabelText("Amount");
+    fireEvent.change(input, { target: { value: "-50" } });
+    fireEvent.blur(input);
+    expect(
+      await screen.findByText("Enter an amount greater than 0, like 12.50"),
+    ).toBeInTheDocument();
+  });
+
+  it("saves a plain amount in cents", async () => {
+    submit("12.50");
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ amountCents: 1250 })),
+    );
+  });
+});
 
 describe("expense form choice cards", () => {
   it("names each checkbox by its card text, without the info button", () => {

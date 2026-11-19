@@ -13,11 +13,12 @@ import { Input } from "@fiscode/ui/components/input";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { spouseRepo } from "@fiscode/db";
 import type { SpouseRow } from "@fiscode/csv";
-import { cents, optionalUsdString } from "@fiscode/core";
+import { cents } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { optionalMoneyAmountOrZero } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
@@ -25,9 +26,9 @@ import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 const editSchema = z.object({
   startDate: z.date({ message: "Pick a start date" }),
   endDate: z.date().optional(),
-  wages: optionalUsdString,
-  fedWH: optionalUsdString,
-  stateWH: optionalUsdString,
+  wages: optionalMoneyAmountOrZero,
+  fedWH: optionalMoneyAmountOrZero,
+  stateWH: optionalMoneyAmountOrZero,
 });
 
 const centsToDollarsStr = (c: number) => (c / 100).toFixed(2);
@@ -111,7 +112,7 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="wages">
+            <TSFormField form={form} name="wages" validators={{ onBlur: editSchema.shape.wages }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>Annual W-2 wages</FormLabel>
@@ -127,7 +128,7 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="fedWH">
+            <TSFormField form={form} name="fedWH" validators={{ onBlur: editSchema.shape.fedWH }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>Fed withholding</FormLabel>
@@ -143,7 +144,11 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="stateWH">
+            <TSFormField
+              form={form}
+              name="stateWH"
+              validators={{ onBlur: editSchema.shape.stateWH }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>State withholding</FormLabel>

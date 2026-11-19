@@ -3,13 +3,13 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
-import { positiveIntegerString } from "@fiscode/core";
 import { mileageRepo, profileRepo, vehicleRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Car } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { tripMiles } from "../lib/field-schemas";
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
@@ -26,8 +26,7 @@ import { GLOSSARY } from "../lib/tax-glossary";
 
 const mileageSchema = z.object({
   date: z.date({ message: "Pick a date" }),
-  // positiveIntegerString rejects NaN, blanks, decimals, and zero/negative.
-  miles: positiveIntegerString,
+  miles: tripMiles,
   vehicleId: z.string(),
   purpose: z.string(),
 });
@@ -58,9 +57,6 @@ function MileagePage() {
     },
     validators: { onSubmit: mileageSchema },
     onSubmit: async ({ value, formApi }) => {
-      // `value.miles` is parsed by positiveIntegerString → typed number.
-      // No Math.round/Number coercion needed; the schema already guarantees
-      // a positive integer.
       const parsed = mileageSchema.parse(value);
       await mileageRepo.create({
         date: dateToIso(value.date!),
@@ -133,8 +129,8 @@ function MileagePage() {
                   </LabelWithTooltip>
                   <FormControl>
                     <Input
-                      type="number"
-                      min={1}
+                      type="text"
+                      inputMode="numeric"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}

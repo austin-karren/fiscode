@@ -13,11 +13,12 @@ import { Input } from "@fiscode/ui/components/input";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { incomeRepo } from "@fiscode/db";
 import type { ClientRow, IncomeRow } from "@fiscode/csv";
-import { cents, formatUSD, parseUSD } from "@fiscode/core";
+import { cents, formatUSD } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { moneyAmount } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
@@ -33,7 +34,7 @@ const KIND_OPTIONS = [
 
 const editSchema = z.object({
   date: z.date({ message: "Pick a date" }),
-  amount: z.string().refine((v) => parseUSD(v) !== undefined, "Enter a valid amount"),
+  amount: moneyAmount,
   clientId: z.string(),
   kind: z.enum(["recurring", "bonus", "consulting", "other"], { message: "Pick a kind" }),
   description: z.string(),
@@ -62,7 +63,7 @@ export function EditIncomeDialog({
     onSubmit: async ({ value }) => {
       await incomeRepo.update(income.id, {
         date: dateToIso(value.date!),
-        amountCents: parseUSD(value.amount)!,
+        amountCents: moneyAmount.parse(value.amount),
         clientId: value.clientId || null,
         kind: value.kind,
         description: value.description || null,
@@ -109,7 +110,7 @@ export function EditIncomeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="amount">
+            <TSFormField form={form} name="amount" validators={{ onBlur: editSchema.shape.amount }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>Amount</FormLabel>

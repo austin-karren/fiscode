@@ -5,7 +5,7 @@ import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { clientRepo, expenseRepo, incomeRepo, timeRepo } from "@fiscode/db";
-import { cents, formatUSD, parseUSD } from "@fiscode/core";
+import { cents, formatUSD } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { Briefcase } from "lucide-react";
 import { toast } from "sonner";
@@ -19,12 +19,13 @@ import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditClientDialog } from "../components/edit-client-dialog";
 import { ArchiveDialog, type ArchiveReference } from "../components/archive-dialog";
 import { ParentName } from "../components/parent-name";
+import { optionalMoneyAmount } from "../lib/field-schemas";
 import { restoreRow, softDeleteWithUndo } from "../lib/soft-delete";
 
 const clientSchema = z.object({
   name: z.string().min(1, "Name is required"),
   type: z.string(),
-  defaultRate: z.string(),
+  defaultRate: optionalMoneyAmount,
 });
 const fs = clientSchema.shape;
 
@@ -78,7 +79,7 @@ function ClientsPage() {
         name: value.name.trim(),
         type: value.type.trim() || null,
         notes: null,
-        defaultRateCents: value.defaultRate ? (parseUSD(value.defaultRate) ?? null) : null,
+        defaultRateCents: optionalMoneyAmount.parse(value.defaultRate),
         defaultCommissionRate: null,
         deletedAt: null,
       });
@@ -151,7 +152,7 @@ function ClientsPage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="defaultRate">
+            <TSFormField form={form} name="defaultRate" validators={{ onBlur: fs.defaultRate }}>
               {(field) => (
                 <FormItem>
                   <FormLabel>Default rate</FormLabel>
