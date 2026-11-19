@@ -86,10 +86,6 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
         <EnterToSubmitForm
           onSubmit={(e) => {
             e.preventDefault();
-            // The trigger sits inside the add-period form on the profile page,
-            // and a React submit event bubbles through the dialog's portal.
-            // Without this, saving here would submit that form as well.
-            e.stopPropagation();
             void form.handleSubmit();
           }}
         >
