@@ -218,6 +218,21 @@ describe("DatePicker keyboard", () => {
     }
   });
 
+  it("ends the picker's tab order with a Close button that changes nothing", async () => {
+    const { onValueChange, onBlur } = setup({ value: new Date(2026, 9, 10) });
+    await openWithKeyboard();
+    const popup = calendar().closest<HTMLElement>("[data-slot=popover-content]")!;
+    const stops = popup.querySelectorAll("input, select, button:not([tabindex='-1'])");
+    const close = within(popup).getByRole("button", { name: "Close" });
+    expect(stops[stops.length - 1]).toBe(close);
+
+    fireEvent.click(close);
+
+    await waitFor(() => expect(document.querySelector("[data-slot=calendar]")).toBeNull());
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(onBlur).not.toHaveBeenCalled();
+  });
+
   it("closes on Escape without a change or a blur, with focus back on the field", async () => {
     const { onValueChange, onBlur } = setup({ value: new Date(2026, 9, 10) });
     await openWithKeyboard();

@@ -1,7 +1,12 @@
 import { Button } from "@fiscode/ui/components/button";
 import { Calendar } from "@fiscode/ui/components/calendar";
 import { Input } from "@fiscode/ui/components/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@fiscode/ui/components/popover";
+import {
+  Popover,
+  PopoverClose,
+  PopoverContent,
+  PopoverTrigger,
+} from "@fiscode/ui/components/popover";
 import { cn } from "@fiscode/ui/lib/utils";
 import { CalendarIcon } from "lucide-react";
 import { useId, useRef, useState, type Ref } from "react";
@@ -102,7 +107,9 @@ export function DatePicker({
   const [open, setOpen] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    // Tab stays inside the open picker. Left free, Tab from the day grid fell
+    // out to the page, also to the page behind a dialog.
+    <Popover open={open} onOpenChange={setOpen} modal="trap-focus">
       <PopoverTrigger
         render={
           <Button
@@ -250,6 +257,11 @@ function DatePickerPanel({
         captionLayout="dropdown"
         onSelect={onPick}
       />
+      {/* Last stop before Tab wraps to the text box; shown only when focused.
+          It also lets a touch screen reader leave the trapped popover. */}
+      <PopoverClose className="sr-only focus-visible:not-sr-only focus-visible:m-2 focus-visible:mt-0 focus-visible:rounded-md focus-visible:px-2 focus-visible:py-1 focus-visible:text-xs focus-visible:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring">
+        Close
+      </PopoverClose>
     </div>
   );
 }
