@@ -176,9 +176,11 @@ const countExcludedBeforeSeStart = (
     income: bundle.income.filter(
       (i) => i.deletedAt === null && i.sourceType === "1099" && isExcluded(i.date),
     ).length,
-    expense: bundle.expenses.filter(
-      (e) => e.deletedAt === null && isExcluded(e.date) && e.startupExpense !== true,
-    ).length,
+    // Every live expense in the year that the core rule leaves out, so the
+    // banner always matches what "Direct expenses" counts.
+    expense:
+      bundle.expenses.filter((e) => e.deletedAt === null && inYear(e.date)).length -
+      expensesCountedForYear(bundle.expenses, year, seStartDate).length,
     mileage: bundle.mileage.filter((m) => m.deletedAt === null && isExcluded(m.date)).length,
   };
 };
