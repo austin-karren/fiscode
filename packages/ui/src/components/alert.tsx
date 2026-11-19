@@ -29,7 +29,9 @@ function Alert({
   return (
     <div
       data-slot="alert"
-      role="alert"
+      // Only an error that appears in response to an action interrupts a
+      // screen reader; a warning or note on the page is static text.
+      role={variant === "destructive" ? "alert" : undefined}
       className={cn(alertVariants({ variant }), className)}
       {...props}
     />

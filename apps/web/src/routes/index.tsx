@@ -80,6 +80,8 @@ function Dashboard() {
   });
   const today = todayIso();
   const upcoming = nextDueQuarter(result.quarterly, today);
+  // The $1,000 rule (packages/tax): no federal estimated payment is required.
+  const noPayment = result.quarterly.noInstallmentsRequired === true;
   const recommendedPrep = upcoming
     ? recommendedPrepDate(upcoming.dueDate, profile.prepLeadDays)
     : undefined;
@@ -138,7 +140,8 @@ function Dashboard() {
           <div className="grid gap-2 @md:grid-cols-4">
             {result.quarterly.payments.map((p) => {
               const past = p.dueDate < today;
-              const isNext = upcoming?.quarter === p.quarter;
+              // Under the $1,000 rule no quarter is due, so none is "next".
+              const isNext = !noPayment && upcoming?.quarter === p.quarter;
               return (
                 <div
                   key={p.quarter}
@@ -154,25 +157,30 @@ function Dashboard() {
                   </p>
                   <p className="mt-1 text-lg font-semibold tabular-nums">{formatUSD(p.amount)}</p>
                   <p className="mt-1 text-xs">
-                    {past ? "Was due" : "Due"} {formatDate(p.dueDate)}
+                    {past
+                      ? `Was due ${formatDate(p.dueDate)}`
+                      : noPayment
+                        ? "No payment required"
+                        : `Due ${formatDate(p.dueDate)}`}
                   </p>
                 </div>
               );
             })}
           </div>
-          {result.quarterly.noInstallmentsRequired ? (
-            <p className="mt-3 text-sm text-muted-foreground">
-              No IRS estimated payments are needed: you owe the IRS less than $1,000 after federal
-              withholding, so there is no federal underpayment penalty.
+          {noPayment ? (
+            <p className="mt-3 text-sm">
+              <span className="font-medium">No payment required.</span>{" "}
+              <span className="text-muted-foreground">
+                You owe the IRS less than $1,000 after federal withholding, so there is no federal
+                underpayment penalty.
+              </span>
             </p>
           ) : null}
           {result.statePrepayment ? (
             <UtahPrepaymentLine prepayment={result.statePrepayment} />
           ) : null}
           {/* Under the $1,000 rule there is nothing to prepare for. */}
-          {result.quarterly.noInstallmentsRequired ? (
-            <p className="mt-3 text-sm font-medium">No payment required</p>
-          ) : upcoming && recommendedPrep ? (
+          {!noPayment && upcoming && recommendedPrep ? (
             <p className="mt-3 text-sm text-muted-foreground">
               Next due {formatDate(upcoming.dueDate)}. Start preparing around{" "}
               {formatDate(recommendedPrep)}.
