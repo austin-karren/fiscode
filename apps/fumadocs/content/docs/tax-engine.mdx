@@ -26,9 +26,35 @@ not a global. Today there are two strategies:
 
 ## Year config
 
-`packages/tax/src/config/<year>.ts` is the canonical example. Constants that change annually
-(brackets, SS wage base, mileage rate, standard deduction, QBI thresholds, etc.) are marked
-`// todo: verify against IRS/SSA for <year>` in the source.
+`packages/tax/src/config/<year>.ts` holds the constants that change annually (brackets, SS wage
+base, mileage rates, standard deduction, QBI thresholds, state rates). Each sourced constant has
+its primary source in a comment beside it; anything not yet checked is marked
+`// todo: verify against IRS/SSA for <year>`.
+
+### 2026 figures
+
+| Figure                                    | 2026                                                           | Source                                                                                                                      |
+| ----------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Standard deduction                        | $16,100 single and MFS, $32,200 MFJ, $24,150 HOH               | [Rev. Proc. 2025-32](https://www.irs.gov/pub/irs-drop/rp-25-32.pdf) §4.14                                                   |
+| Bracket tops (10/12/22/24/32/35%), single | $12,400 / $50,400 / $105,700 / $201,775 / $256,225 / $640,600  | Rev. Proc. 2025-32 §4.01, Table 3                                                                                           |
+| Bracket tops, MFJ                         | $24,800 / $100,800 / $211,400 / $403,550 / $512,450 / $768,700 | Table 1                                                                                                                     |
+| Bracket tops, MFS                         | $12,400 / $50,400 / $105,700 / $201,775 / $256,225 / $384,350  | Table 4                                                                                                                     |
+| Bracket tops, HOH                         | $17,700 / $67,450 / $105,700 / $201,750 / $256,200 / $640,600  | Table 2                                                                                                                     |
+| QBI threshold                             | $201,750 single and HOH, $201,775 MFS, $403,500 MFJ            | Rev. Proc. 2025-32 §4.26                                                                                                    |
+| Social Security wage base                 | $184,500                                                       | [Schedule SE instructions](https://www.irs.gov/instructions/i1040sse)                                                       |
+| Business mileage                          | 72.5¢ Jan 1 – Jun 30; 76¢ from Jul 1                           | [Notice 2026-10](https://www.irs.gov/pub/irs-drop/n-26-10.pdf), [Announcement 2026-11](https://www.irs.gov/irb/2026-29_irb) |
+| Utah rate                                 | 4.45%                                                          | [Utah Code 59-10-104](https://le.utah.gov/xcode/title59/chapter10/C59-10-S104_2026050620260506.pdf)                         |
+
+The mileage rate changed mid-year, so each trip is deducted at the rate in force on its date.
+
+Not modelled yet:
+
+- The 2026 QBI minimum deduction: $400 for $1,000 or more of QBI (Rev. Proc. 2025-32 §2.12).
+- The QBI phase-in above the threshold.
+- Utah's taxpayer tax credit. The estimate applies the flat rate.
+- The safe-harbor prior-year AGI threshold for married filing separately, $75,000
+  ([2026 Form 1040-ES](https://www.irs.gov/pub/irs-pdf/f1040es.pdf)). The estimate uses $150,000
+  for every filing status.
 
 `getYearConfig(year)` falls back to the nearest defined year and surfaces a console warning + UI
 banner — stale data is loud, not silent.

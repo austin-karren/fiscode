@@ -18,7 +18,12 @@ export type YearConfig = {
     rate: number; // 0.20
     taxableIncomeLimit: Record<FilingStatus, Cents>;
   };
-  mileageRatePerMile: number; // dollars per business mile
+  /**
+   * Business standard mileage rates, in dollars per mile, oldest first. Each
+   * applies from its `from` date until the next one; the IRS can change the
+   * rate mid-year (2026 did on July 1). See `mileageRateOn`.
+   */
+  mileageRates: Array<{ from: IsoDate; ratePerMile: number }>;
   homeOffice: {
     simplifiedRatePerSqft: Cents;
     simplifiedMaxSqft: number;

@@ -18,10 +18,11 @@ export default defineConfig({
       },
     }),
     react(),
-    // Node-server output, deployed as a Docker container on Dokploy.
-    // See apps/fumadocs/Dockerfile.
+    // Vercel sets VERCEL=1 in its builds and needs Nitro's Vercel output.
+    // Elsewhere: node-server, run as a Docker container on Dokploy
+    // (apps/fumadocs/Dockerfile).
     nitro({
-      preset: "node-server",
+      preset: process.env.VERCEL ? "vercel" : "node-server",
     }),
   ],
   resolve: {

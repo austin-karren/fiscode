@@ -178,12 +178,13 @@ describe("deriveYear — 1099 income summing", () => {
 });
 
 describe("deriveYear — mileage deduction", () => {
-  it("multiplies miles by the year's mileage rate ($0.725/mi for 2026)", () => {
+  it("multiplies miles by the 2026 rate in force on each trip's date", () => {
     const b = makeBundle({
       mileage: [mileage("m1", "2026-02-10", 100), mileage("m2", "2026-08-22", 50)],
     });
-    // 150 mi × $0.725 = $108.75 = 10875 cents
-    expect(deriveYear(b, 2026).mileageDeduction).toBe(10_875);
+    // 100 mi × $0.725 = $72.50 (Feb) + 50 mi × $0.76 = $38.00 (Aug) = $110.50.
+    // Before the July 1 rate change was modelled this read $108.75.
+    expect(deriveYear(b, 2026).mileageDeduction).toBe(110_50);
   });
 
   it("uses 2025 rate ($0.70/mi) for 2025 derivation", () => {
@@ -194,6 +195,14 @@ describe("deriveYear — mileage deduction", () => {
     });
     // 200 × $0.70 = $140 = 14000 cents
     expect(deriveYear(b, 2025).mileageDeduction).toBe(14_000);
+  });
+
+  it("2026: deducts each trip at the rate in force on its date", () => {
+    const b = makeBundle({
+      mileage: [mileage("jun", "2026-06-30", 100), mileage("jul", "2026-07-01", 100)],
+    });
+    // 100 mi × $0.725 (to June 30) = $72.50; 100 mi × $0.76 (from July 1) = $76.00
+    expect(deriveYear(b, 2026).mileageDeduction).toBe(148_50);
   });
 
   it("excludes pre-SE-start mileage rows", () => {

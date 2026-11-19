@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Generate static tax-year wire payloads into apps/web/public/tax-data/v1/{year}.json
+ * Generate static tax-year wire payloads into apps/web/public/tax-data/<schema version>/{year}.json
  * so the SPA can fetch them same-origin at runtime. Runs as a prebuild/predev hook.
  */
 import { mkdir, writeFile } from "node:fs/promises";
