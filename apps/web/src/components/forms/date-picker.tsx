@@ -230,6 +230,8 @@ function DatePickerPanel({
           className="h-8"
           value={text}
           onChange={(event) => setText(event.target.value)}
+          // Typing replaces the date shown, rather than adding to it.
+          onFocus={(event) => event.currentTarget.select()}
           // Leaving the box only checks it. It must not save: Escape and a
           // click outside also blur it, and those cancel.
           onBlur={() => {

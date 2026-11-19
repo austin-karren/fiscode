@@ -24,7 +24,7 @@ import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { archivedSuffix, pickableParents } from "./parent-name";
 import { useToday } from "../lib/use-today";
-import { useEditDialog } from "../hooks/use-edit-dialog";
+import { noChangesToSave, useEditDialog } from "../hooks/use-edit-dialog";
 import { recordLabel } from "../lib/record-label";
 
 const editSchema = z.object({
@@ -52,7 +52,8 @@ export function EditMileageDialog({
       purpose: mileage.purpose ?? "",
     },
     validators: { onSubmit: editSchema },
-    onSubmit: async ({ value }) => {
+    onSubmit: async ({ value, formApi }) => {
+      if (noChangesToSave(formApi)) return setOpen(false);
       const parsed = editSchema.parse(value);
       await mileageRepo.update(mileage.id, {
         date: dateToIso(value.date!),

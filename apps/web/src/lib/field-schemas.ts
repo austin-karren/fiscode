@@ -59,9 +59,23 @@ export const optionalMoneyAmountOrZero = z
 
 // ─── Hours ──────────────────────────────────────────────────────────────────
 
-/** Hours on one time entry: above 0, at most 24, in quarter-hour steps. */
+// h:mm, the exact form of a stored value that is not a quarter hour ("1:23").
+const HOURS_MINUTES = /^(\d{1,2}):([0-5]\d)$/;
+
+/**
+ * Hours on one time entry: above 0, at most 24. Typed as decimal hours in
+ * quarter-hour steps ("1.25"), or as h:mm to the minute ("1:23"), which is
+ * how the form shows a stored value off the quarter-hour step.
+ */
 export const hoursWorked = z.string().transform((s, ctx): number => {
   const trimmed = s.trim();
+  const hm = HOURS_MINUTES.exec(trimmed);
+  if (hm) {
+    const minutes = Number(hm[1]) * 60 + Number(hm[2]);
+    if (minutes === 0) return fail(ctx, "Must be more than 0");
+    if (minutes > 24 * 60) return fail(ctx, "24 hours at most");
+    return minutes / 60;
+  }
   if (!PLAIN_DECIMAL.test(trimmed)) return fail(ctx, "Enter hours, like 1.5");
   const hours = Number(trimmed);
   if (hours === 0) return fail(ctx, "Must be more than 0");
@@ -71,12 +85,14 @@ export const hoursWorked = z.string().transform((s, ctx): number => {
 });
 
 /**
- * Stored minutes as the hours text the time form takes: the nearest quarter
- * hour, at least 0.25. A row imported with odd minutes (83) would otherwise
- * fill the form with "1.3833333333333333", which the form then refuses.
+ * Stored minutes as the hours text the time form takes, never rounded: decimal
+ * hours on a quarter-hour step (75 → "1.25"), h:mm otherwise (83 → "1:23").
+ * Saving the text unchanged stores the same minutes.
  */
 export const hoursField = (minutes: number): string =>
-  String(Math.max(1, Math.round(minutes / 15)) / 4);
+  minutes > 0 && minutes % 15 === 0
+    ? String(minutes / 60)
+    : `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
 
 // ─── Whole numbers ──────────────────────────────────────────────────────────
 

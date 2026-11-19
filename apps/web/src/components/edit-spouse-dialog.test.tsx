@@ -48,7 +48,11 @@ describe("edit spouse dialog", () => {
     update.mockResolvedValueOnce(spouse);
     const { outerSubmit, onSaved } = renderInsideAddForm();
     fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    // A save with no change writes nothing, so change the wages first.
+    fireEvent.change(await screen.findByLabelText("Annual W-2 wages (optional)"), {
+      target: { value: "46000" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
     expect(update).toHaveBeenCalledTimes(1);
@@ -60,6 +64,7 @@ describe("edit spouse dialog", () => {
     const { outerSubmit, onSaved } = renderInsideAddForm();
     fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
     const wages = await screen.findByLabelText("Annual W-2 wages (optional)");
+    fireEvent.change(wages, { target: { value: "46000" } });
     fireEvent.keyDown(wages, { key: "Enter" });
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));

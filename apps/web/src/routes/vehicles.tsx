@@ -24,6 +24,7 @@ import { InfoTooltip } from "../components/info-tooltip";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { VEHICLE_METHOD_LABELS, labelFor } from "@fiscode/core";
 import { SectionTitle } from "../components/section-title";
+import { recordLabel } from "../lib/record-label";
 
 const vehicleSchema = z.object({
   make: z.string().min(1, "Make is required"),
@@ -244,7 +245,11 @@ function VehiclesPage() {
                 <DataTable.HeaderCell>
                   <span className="inline-flex items-center gap-1.5">
                     Method
-                    <InfoTooltip text={GLOSSARY.vehicleMethod} />
+                    {/* On a phone the header row is visually hidden; the hint
+                        moves to each row's Method cell, so no invisible tab stop. */}
+                    <span className="inline-flex @max-2xl:hidden">
+                      <InfoTooltip text={GLOSSARY.vehicleMethod} />
+                    </span>
                   </span>
                 </DataTable.HeaderCell>
                 <DataTable.HeaderCell />
@@ -261,7 +266,15 @@ function VehiclesPage() {
                   <DataTable.Cell label="Year">{v.year ?? "—"}</DataTable.Cell>
                   <DataTable.Cell label="MPG">{v.mpg ?? "—"}</DataTable.Cell>
                   <DataTable.Cell label="Method">
-                    {labelFor(VEHICLE_METHOD_LABELS, v.method)}
+                    <span className="inline-flex items-center gap-1.5">
+                      {labelFor(VEHICLE_METHOD_LABELS, v.method)}
+                      <span className="hidden @max-2xl:inline-flex">
+                        <InfoTooltip
+                          text={GLOSSARY.vehicleMethod}
+                          ariaLabel="More info about Method"
+                        />
+                      </span>
+                    </span>
                   </DataTable.Cell>
                   <DataTable.Cell align="right">
                     {v.deletedAt ? (
@@ -273,6 +286,7 @@ function VehiclesPage() {
                         <EditVehicleDialog vehicle={v} onSaved={() => router.invalidate()} />
                         <ArchiveDialog
                           itemName={nameOf(v)}
+                          recordName={recordLabel.vehicle(v)}
                           references={[
                             {
                               count: mileage.filter((m) => m.vehicleId === v.id).length,

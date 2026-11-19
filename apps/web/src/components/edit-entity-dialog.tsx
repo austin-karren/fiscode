@@ -28,7 +28,7 @@ import {
   type EntityPeriodFieldError,
 } from "../lib/entity-period-error";
 import { useToday } from "../lib/use-today";
-import { useEditDialog } from "../hooks/use-edit-dialog";
+import { noChangesToSave, useEditDialog } from "../hooks/use-edit-dialog";
 import { recordLabel } from "../lib/record-label";
 
 const ENTITY_OPTIONS = labelOptions(ENTITY_TYPE_LABELS).filter((o) => o.value !== "s_corp");
@@ -51,7 +51,8 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
       endDate: entity.endDate ? isoToDate(entity.endDate) : (undefined as Date | undefined),
     },
     validators: { onSubmit: editSchema as never },
-    onSubmit: async ({ value }) => {
+    onSubmit: async ({ value, formApi }) => {
+      if (noChangesToSave(formApi)) return setOpen(false);
       setPeriodError(null);
       try {
         await entityRepo.update(entity.id, {

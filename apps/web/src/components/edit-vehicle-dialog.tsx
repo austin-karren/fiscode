@@ -20,7 +20,7 @@ import { z } from "zod";
 import { optionalMpg, optionalVehicleYear } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
-import { useEditDialog } from "../hooks/use-edit-dialog";
+import { noChangesToSave, useEditDialog } from "../hooks/use-edit-dialog";
 import { recordLabel } from "../lib/record-label";
 
 const editSchema = z.object({
@@ -45,7 +45,8 @@ export function EditVehicleDialog({
       mpg: vehicle.mpg === null ? "" : String(vehicle.mpg),
     },
     validators: { onSubmit: editSchema },
-    onSubmit: async ({ value }) => {
+    onSubmit: async ({ value, formApi }) => {
+      if (noChangesToSave(formApi)) return setOpen(false);
       const parsed = editSchema.parse(value);
       await vehicleRepo.update(vehicle.id, {
         make: parsed.make.trim(),

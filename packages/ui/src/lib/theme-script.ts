@@ -31,7 +31,7 @@ export const isThemeMode = (value: unknown): value is ThemeMode =>
  *
  * It is serialized with `toString()`, so `themeFn` must be self-contained:
  * it cannot use anything from this module's scope. The storage key and the
- * two colours are repeated inside it; theme-script.test.ts checks they match
+ * two colours are repeated inside it; apps/web/src/lib/theme.test.tsx checks they match
  * the constants above.
  */
 export const themeDetectorScript = (function () {

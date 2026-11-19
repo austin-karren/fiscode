@@ -27,7 +27,7 @@ import { HomeOfficeFields } from "./home-office-fields";
 import { dateToIso, isoToDate } from "./forms/date-picker";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { useToday } from "../lib/use-today";
-import { useEditDialog } from "../hooks/use-edit-dialog";
+import { noChangesToSave, useEditDialog } from "../hooks/use-edit-dialog";
 import { recordLabel } from "../lib/record-label";
 
 const editSchema = withAreaCheck(z.object(homeOfficeFieldSchemas));
@@ -57,7 +57,8 @@ export function EditHomeOfficeDialog({
       insurance: centsField(row.monthlyInsuranceCents),
     },
     validators: { onSubmit: editSchema as never },
-    onSubmit: async ({ value }) => {
+    onSubmit: async ({ value, formApi }) => {
+      if (noChangesToSave(formApi)) return setOpen(false);
       const parsed = editSchema.parse(value);
       const startDate = dateToIso(value.startDate!);
       const endDate = value.endDate ? dateToIso(value.endDate) : null;

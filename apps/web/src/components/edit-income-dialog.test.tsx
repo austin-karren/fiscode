@@ -4,6 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // SQLite over OPFS does not exist in jsdom; the repo is replaced at the
 // package boundary.
 vi.mock("@fiscode/db", () => ({ incomeRepo: { update: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
+
+import { incomeRepo } from "@fiscode/db";
+import { toast } from "sonner";
 
 import { EditIncomeDialog } from "./edit-income-dialog";
 
@@ -62,5 +66,29 @@ describe("edit income dialog", () => {
     );
     await openDialog();
     expect(screen.getByLabelText("Amount")).toHaveValue("1750.00");
+  });
+
+  it("says there is nothing to save when no field changed, and writes nothing", async () => {
+    vi.mocked(incomeRepo.update).mockClear();
+    vi.mocked(toast.success).mockClear();
+    const onSaved = vi.fn();
+    render(<EditIncomeDialog income={income as never} clients={[]} onSaved={onSaved} />);
+    await openDialog();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(toast).toHaveBeenCalledWith("No changes to save.");
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(incomeRepo.update).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it("still saves and says so when a field changed", async () => {
+    vi.mocked(incomeRepo.update).mockClear();
+    render(<EditIncomeDialog income={income as never} clients={[]} onSaved={vi.fn()} />);
+    await openDialog();
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "1600" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(incomeRepo.update).toHaveBeenCalled());
+    expect(toast.success).toHaveBeenCalledWith("Income updated.");
   });
 });
