@@ -1,4 +1,4 @@
-import { FormField } from "@fiscode/ui/components/form";
+import { FormField, type FieldRequirement } from "@fiscode/ui/components/form";
 import type { AnyFieldApi } from "@tanstack/react-form";
 import type { ReactNode } from "react";
 import type { ZodTypeAny } from "zod";
@@ -26,12 +26,15 @@ export function TSFormField({
   name,
   validators,
   error,
+  requirement,
   children,
 }: {
   form: any;
   name: string;
   validators?: { onBlur?: ZodTypeAny };
   error?: string;
+  /** "required" or "optional"; leave out for a checkbox. See FormField. */
+  requirement?: FieldRequirement;
   children: (field: AnyFieldApi) => ReactNode;
 }) {
   const FieldComp = form.Field as React.ComponentType<{
@@ -44,6 +47,7 @@ export function TSFormField({
       {(field: AnyFieldApi) => (
         <FormField
           name={field.name}
+          requirement={requirement}
           errors={[
             ...(error ? [{ message: error }] : []),
             ...(field.state.meta.errors as Array<{ message?: string } | string>),
