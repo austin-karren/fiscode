@@ -72,7 +72,15 @@ export function ImportCard({
 }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
-  const [refused, setRefused] = useState<{ fileName: string; file: RefusedFile } | null>(null);
+  // `seq` changes with every refusal, so each one is a new alert that is
+  // scrolled to and focused, even when the same file is refused twice.
+  const [refused, setRefused] = useState<{
+    fileName: string;
+    file: RefusedFile;
+    seq: number;
+  } | null>(null);
+  // State alone cannot stop a second confirm fired before the first render.
+  const committing = useRef(false);
   const [pending, setPending] = useState<{
     fileName: string;
     file: ReadableFile;
@@ -86,7 +94,7 @@ export function ImportCard({
     if (!picked) return;
     const file = readImportFile(await picked.text());
     if (!file.ok) {
-      setRefused({ fileName: picked.name, file });
+      setRefused((prev) => ({ fileName: picked.name, file, seq: (prev?.seq ?? 0) + 1 }));
       return;
     }
     setRefused(null);
@@ -120,7 +128,8 @@ export function ImportCard({
   };
 
   const confirm = async () => {
-    if (!pending || !plan || plan.refusal) return;
+    if (!pending || !plan || plan.refusal || committing.current) return;
+    committing.current = true;
     setBusy(true);
     setFailure(null);
     try {
@@ -139,9 +148,12 @@ export function ImportCard({
       await router.invalidate();
       onImported?.();
     } catch (err) {
+      // Repeated ids and bad cells are refused when the file is read, so this
+      // is an error nobody predicted. Show what the database said.
       console.error(err);
       setFailure(err instanceof Error ? err.message : String(err));
     } finally {
+      committing.current = false;
       setBusy(false);
     }
   };
@@ -166,9 +178,9 @@ export function ImportCard({
             ref={input}
             type="file"
             accept=".csv,text/csv"
-            aria-label={setup ? "Backup file" : "CSV file"}
-            className="sr-only"
-            tabIndex={-1}
+            // The button below is the control. `hidden` keeps this one out of
+            // the tab order and away from screen readers.
+            hidden
             onChange={(e) => {
               void onFile(e.target.files?.[0]);
               // Clear it so picking the same file again (after fixing it) fires.
@@ -179,7 +191,9 @@ export function ImportCard({
             <Upload />
             {setup ? "Choose a backup file" : "Choose a CSV file"}
           </Button>
-          {refused ? <Refusal fileName={refused.fileName} file={refused.file} /> : null}
+          {refused ? (
+            <Refusal key={refused.seq} fileName={refused.fileName} file={refused.file} />
+          ) : null}
         </CardContent>
       </Card>
 
@@ -276,10 +290,21 @@ export function ImportCard({
   );
 }
 
+/**
+ * Bring a new refusal to the user: on a short window it renders below the
+ * fold, and picking a bad file would otherwise change nothing they can see.
+ * Module-level so React calls it once per mounted alert, not on every render.
+ */
+const reveal = (alert: HTMLDivElement | null) => {
+  if (!alert) return;
+  alert.scrollIntoView?.({ block: "nearest" });
+  alert.focus({ preventScroll: true });
+};
+
 /** A refused file, shown in the card until another file is picked. */
 function Refusal({ fileName, file }: { fileName: string; file: RefusedFile }) {
   return (
-    <Alert variant="destructive" className="w-full">
+    <Alert ref={reveal} tabIndex={-1} variant="destructive" className="w-full outline-none">
       <CircleAlert />
       <AlertTitle>{file.headline}</AlertTitle>
       <AlertDescription>
@@ -320,7 +345,7 @@ const describePlan = (plan: ImportPlan, fileHasNoProfile: boolean): string[] => 
     );
     if (written.deleted > 0) {
       lines.push(
-        `${n(written.deleted, "deleted row")} will be added as deleted. They stay hidden.`,
+        `${n(written.deleted, "deleted row")} will be added as deleted. ${written.deleted === 1 ? "It stays" : "They stay"} hidden.`,
       );
     }
     if (skipped > 0) {
@@ -340,7 +365,7 @@ const describePlan = (plan: ImportPlan, fileHasNoProfile: boolean): string[] => 
   lines.push(`${n(written.live, "row")} will show in the app.`);
   if (written.deleted > 0) {
     lines.push(
-      `${n(written.deleted, "deleted row")} will be restored as deleted. They stay hidden and are not part of your books.`,
+      `${n(written.deleted, "deleted row")} will be restored as deleted. ${written.deleted === 1 ? "It stays hidden and is" : "They stay hidden and are"} not part of your books.`,
     );
   }
   if (emptyApp) {

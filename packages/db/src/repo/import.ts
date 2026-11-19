@@ -37,6 +37,11 @@ export type ImportReason = "import-restore" | "import-append";
 export const importBundle = async (bundle: Bundle, reason: ImportReason): Promise<void> => {
   const db = getDb();
   // The snapshot holds everything a restore removes, deleted rows too.
+  //
+  // Limit: these two reads happen before the batch, not inside it, because a
+  // batch cannot read and then decide. fiscode is one user in one tab; a
+  // write from a second tab between the reads and the batch would be missing
+  // from the snapshot (the import itself would still be all or nothing).
   const before = await buildBundle({ includeDeleted: true });
   const hadHistory = (await db.select({ id: historyTable.id }).from(historyTable).limit(1)).length;
 

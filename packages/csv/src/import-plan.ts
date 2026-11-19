@@ -177,7 +177,7 @@ export const planImport = (
   // client or vehicle. On an empty database there is nothing to lose.
   const refusal =
     file.scope === "yearly" && current.live + current.deleted > 0
-      ? `This is a yearly file${file.year === undefined ? "" : ` for ${file.year}`}, not a backup. It holds one year and leaves out deleted rows and archived clients and vehicles. Restoring from it would remove ${lost} ${lost === 1 ? "row that is" : "rows that are"} here and not in the file. Restore from a full backup instead.`
+      ? `This is a yearly file${file.year === undefined ? "" : ` for ${file.year}`}, not a backup. It holds one year and leaves out deleted rows and archived clients and vehicles.${lost === 0 ? "" : ` Restoring from it would remove ${lost} ${lost === 1 ? "row that is" : "rows that are"} here and not in the file.`} Restore from a full backup instead.`
       : undefined;
   return {
     mode,

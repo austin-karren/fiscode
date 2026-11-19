@@ -97,6 +97,35 @@ describe("readImportFile", () => {
     expect(file.errors.map((e) => e.line)).toEqual([2, 3]);
   });
 
+  it("refuses an id used twice in one table, naming both rows", () => {
+    const csv = [
+      "record_type,date,amount,id",
+      "income,2026-01-15,10.00,in_1",
+      "income,2026-01-16,20.00,in_2",
+      "income,2026-01-17,30.00,in_1",
+    ].join("\r\n");
+    const file = readImportFile(csv);
+    expect(file.ok).toBe(false);
+    if (file.ok) return;
+    expect(file.headline).toBe("Nothing was imported. 1 row needs fixing.");
+    expect(file.errors).toHaveLength(1);
+    expect(file.errors[0]).toMatchObject({ line: 4, recordType: "income" });
+    expect(file.errors[0]!.message).toBe(
+      'id: "in_1" is also used on row 2. Each income row needs its own id',
+    );
+  });
+
+  it("allows one id in two different tables", () => {
+    const csv = [
+      "record_type,date,amount,id",
+      "income,2026-01-15,10.00,shared_1",
+      "",
+      "record_type,date,category,amount,id",
+      "expense,2026-01-16,supplies,20.00,shared_1",
+    ].join("\r\n");
+    expect(readImportFile(csv)).toMatchObject({ ok: true, counts: { live: 2 } });
+  });
+
   it("passes the newer-schema message through as the reason", () => {
     const file = readImportFile("# fiscode export (schema: v9; scope: full)\r\nrecord_type,id\r\n");
     expect(file.ok).toBe(false);
@@ -159,6 +188,16 @@ describe("planImport", () => {
     expect(plan.removed).toEqual({ live: 1, deleted: 1 });
     expect(plan.refusal).toContain("yearly file for 2026");
     expect(plan.refusal).toContain("remove 2 rows");
+  });
+
+  it("refuses a yearly file over data without inventing a loss when no row would go", () => {
+    const yearly = readImportFile(exportBundle(state(), { scope: "yearly", year: 2026 }));
+    if (!yearly.ok) throw new Error("yearly file should parse");
+    // The app holds exactly the rows of the file.
+    const plan = planImport(yearly.bundle, yearly.bundle, "restore", yearly);
+    expect(plan.removed).toEqual({ live: 0, deleted: 0 });
+    expect(plan.refusal).toContain("yearly file for 2026");
+    expect(plan.refusal).not.toContain("remove");
   });
 
   it("allows a yearly file into an empty database, and in append mode", () => {

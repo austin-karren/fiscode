@@ -78,8 +78,9 @@ const appState = (): Bundle => ({
   income: [income("in_2026", "2026-03-01"), income("in_only_here", "2026-05-01")],
 });
 
-const choose = (text: string, name = "picked.csv", label = "CSV file") => {
-  fireEvent.change(screen.getByLabelText(label), {
+// The file input is hidden (the button opens it), so it has no accessible name.
+const choose = (text: string, name = "picked.csv") => {
+  fireEvent.change(document.querySelector('input[type="file"]')!, {
     target: { files: [new File([text], name, { type: "text/csv" })] },
   });
 };
@@ -125,6 +126,41 @@ describe("import card: files that are refused", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("moves focus to the refusal, so it is not missed below the fold", async () => {
+    render(<ImportCard />);
+    choose("hello world");
+    const first = await screen.findByRole("alert");
+    expect(first).toHaveFocus();
+
+    // The same file again is a new refusal and is brought into view again.
+    (document.activeElement as HTMLElement).blur();
+    choose("hello world");
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
+  });
+
+  it("keeps the file input away from assistive tech; the button is the control", () => {
+    render(<ImportCard />);
+    expect(document.querySelector('input[type="file"]')).not.toBeVisible();
+    expect(screen.getByRole("button", { name: "Choose a CSV file" })).toBeInTheDocument();
+  });
+
+  it("refuses a file that uses one id twice, naming both rows", async () => {
+    render(<ImportCard />);
+    choose(
+      [
+        "record_type,date,category,amount,id",
+        "expense,2026-01-15,supplies,120.00,ex_new",
+        "expense,2026-01-16,supplies,999.00,ex_new",
+      ].join("\r\n"),
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Nothing was imported. 1 row needs fixing.");
+    expect(alert).toHaveTextContent('Row 3 (expense): id: "ex_new" is also used on row 2.');
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(importBundle).not.toHaveBeenCalled();
+  });
+
   it("clears the refusal when a good file is picked next", async () => {
     buildBundle.mockResolvedValue(emptyBundle());
     render(<ImportCard />);
@@ -143,7 +179,7 @@ describe("import card: an empty app", () => {
     importBundle.mockResolvedValue(undefined);
     const onImported = vi.fn();
     render(<ImportCard variant="setup" onImported={onImported} />);
-    choose(exportBundle(backup(), { scope: "full" }), "backup.csv", "Backup file");
+    choose(exportBundle(backup(), { scope: "full" }), "backup.csv");
 
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("Restore this backup?");
@@ -228,6 +264,39 @@ describe("import card: an app that holds data", () => {
     commit();
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs one import when confirm fires several times before the first render", async () => {
+    buildBundle.mockResolvedValue(appState());
+    let commit!: () => void;
+    importBundle.mockReturnValue(new Promise<void>((resolve) => (commit = resolve)));
+    render(<ImportCard />);
+    choose(exportBundle(backup(), { scope: "full" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Restore/ }));
+    const button = within(dialog).getByRole("button", { name: "Restore" });
+
+    // Three native clicks in one task: React has not re-rendered in between.
+    button.click();
+    button.click();
+    button.click();
+
+    await within(dialog).findByRole("button", { name: "Restoring…" });
+    expect(importBundle).toHaveBeenCalledTimes(1);
+    commit();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("offers nothing to do when every row of the file is already here", async () => {
+    buildBundle.mockResolvedValue(backup());
+    render(<ImportCard />);
+    choose(exportBundle(backup(), { scope: "yearly", year: 2026 }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(
+      "Nothing would be added: every row in the file is already here.",
+    );
+    expect(within(dialog).getByRole("button", { name: "Add rows" })).toBeDisabled();
   });
 
   it("says nothing changed when the import fails, and keeps the dialog open", async () => {

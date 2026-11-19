@@ -176,7 +176,7 @@ describe("CSV ↔ DB sync (full chain)", () => {
     const { bundle: parsed, validationErrors } = parseCsv(csv);
     expect(validationErrors).toEqual([]);
 
-    // 4. Merge against an empty bundle (overwrite semantics).
+    // 4. Merge against an empty bundle (restore semantics).
     const applied = applyImport(emptyCsvBundle(), parsed, "restore");
 
     // 5. Wipe the DB and re-import via the merged bundle.

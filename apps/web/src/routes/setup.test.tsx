@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // The database is SQLite over OPFS and the router needs a browser history;
 // neither exists in jsdom. Both are replaced at the package boundary.
-const { upsert, create, navigate, buildBundle, importBundle } = vi.hoisted(() => ({
+const { upsert, create, list, navigate, buildBundle, importBundle } = vi.hoisted(() => ({
+  list: vi.fn(async (): Promise<unknown[]> => []),
   upsert: vi.fn(async () => {}),
   create: vi.fn(async () => {}),
   navigate: vi.fn(),
@@ -13,7 +14,7 @@ const { upsert, create, navigate, buildBundle, importBundle } = vi.hoisted(() =>
 
 vi.mock("@fiscode/db", () => ({
   profileRepo: { exists: async () => false, upsert },
-  entityRepo: { create },
+  entityRepo: { create, list },
   buildBundle,
   importBundle,
 }));
@@ -119,7 +120,7 @@ describe("setup: restore from a backup", () => {
     expect(screen.getByText("Restore from a backup")).toBeInTheDocument();
 
     const csv = exportBundle(exampleBundle(), { scope: "full" });
-    fireEvent.change(screen.getByLabelText("Backup file"), {
+    fireEvent.change(document.querySelector('input[type="file"]')!, {
       target: { files: [new File([csv], "fiscode-full-backup.csv", { type: "text/csv" })] },
     });
 
@@ -136,6 +137,19 @@ describe("setup: restore from a backup", () => {
     );
     // No profile was invented on the way.
     expect(upsert).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("setup after a restore that brought no profile", () => {
+  it("does not create a second business entity when one is already there", async () => {
+    list.mockResolvedValueOnce([{ id: "ent_restored", type: "sole_prop" }]);
+    render(<SetupPage />);
+    await fillEveryField();
+    fireEvent.click(submitButton());
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: "/" }));
+    expect(upsert).toHaveBeenCalledTimes(1);
     expect(create).not.toHaveBeenCalled();
   });
 });

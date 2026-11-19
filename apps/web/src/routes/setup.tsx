@@ -82,13 +82,18 @@ function SetupPage() {
           quarterlyMethod: "annualized",
           prepLeadDays: 14,
         });
-        await entityRepo.create({
-          type: value.entityType,
-          startDate: seStartIso,
-          endDate: null,
-          notes: null,
-          deletedAt: null,
-        });
+        // A backup restored on this screen without a profile row may already
+        // have brought the business entity. A second open-ended one would
+        // overlap it.
+        if ((await entityRepo.list()).length === 0) {
+          await entityRepo.create({
+            type: value.entityType,
+            startDate: seStartIso,
+            endDate: null,
+            notes: null,
+            deletedAt: null,
+          });
+        }
         toast.success("Profile saved.");
         navigate({ to: "/" });
       } catch (err) {

@@ -72,7 +72,7 @@ describe("importBundle — restore", () => {
   });
 
   it("snapshot row captures the prior state in history", async () => {
-    // Seed the DB with one row, then overwrite.
+    // Seed the DB with one row, then restore over it.
     await clientRepo.create({
       name: "Prior",
       type: null,
@@ -104,7 +104,7 @@ describe("importBundle — restore", () => {
     expect(round.clients.map((c) => c.name).sort()).toEqual(["Acme", "Zeta"]);
   });
 
-  it("history rows are PRESERVED across overwrite (only data tables are truncated)", async () => {
+  it("history rows are PRESERVED across a restore (only data tables are truncated)", async () => {
     const c = await clientRepo.create({
       name: "Earlier",
       type: null,

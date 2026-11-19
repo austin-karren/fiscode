@@ -73,7 +73,7 @@ describe("published example.csv — full import chain", () => {
     );
   });
 
-  it("Import → overwrite path lands every row in the DB and buildBundle reads them back", async () => {
+  it("Import → restore path lands every row in the DB and buildBundle reads them back", async () => {
     const onDisk = readFileSync(EXAMPLE_CSV_PATH, "utf8");
     const { bundle: parsed, validationErrors } = parseCsv(onDisk);
     expect(validationErrors).toEqual([]);
@@ -106,7 +106,7 @@ describe("published example.csv — full import chain", () => {
     expect(normalize(round.homeOffice)).toEqual(normalize(reference.homeOffice));
   });
 
-  it("Import → append path on a fresh DB produces the same end state as overwrite", async () => {
+  it("Import → append path on a fresh DB produces the same end state as restore", async () => {
     const onDisk = readFileSync(EXAMPLE_CSV_PATH, "utf8");
     const { bundle: parsed } = parseCsv(onDisk);
     const applied = applyImport(emptyBundle(), parsed, "append");
