@@ -12,7 +12,9 @@ import { z } from "zod";
 /**
  * Field schemas shared by the add forms and their edit dialogs, so both
  * reject the same input with the same message. Each takes the input's string
- * and returns the typed value. Messages say what is allowed.
+ * and returns the typed value. Messages say what is allowed, one short line
+ * per kind of failure: each must fit the one message line reserved under a
+ * field, in the narrowest add-form column (about 140 px at 1440).
  *
  * The syntax and range rules live in @fiscode/core (`parseMoney`,
  * `parseWholeNumber`, `checkAmountRange`, `WHOLE_RANGES`); this file words
@@ -29,19 +31,16 @@ const fail = (ctx: z.RefinementCtx, message: string) => {
 // ─── Money ──────────────────────────────────────────────────────────────────
 
 const parseAmount = (raw: string, ctx: z.RefinementCtx, allowZero: boolean) => {
-  const hint = allowZero
-    ? "Enter an amount of 0 or more, like 12.50"
-    : "Enter an amount greater than 0, like 12.50";
-  const ceiling = "Enter an amount below $100,000,000";
+  const floor = allowZero ? "Must be $0 or more" : "Must be more than $0";
   const parsed = parseMoney(raw);
   if (!parsed.ok) {
-    if (parsed.reason === "decimals") return fail(ctx, "Use at most 2 decimal places, like 12.50");
-    if (parsed.reason === "too_large") return fail(ctx, ceiling);
-    return fail(ctx, hint);
+    if (parsed.reason === "decimals") return fail(ctx, "Use 2 decimals at most");
+    if (parsed.reason === "too_large") return fail(ctx, "Too large");
+    return fail(ctx, "Enter an amount, like 12.50");
   }
   const range = checkAmountRange(parsed.cents, allowZero ? "nonNegative" : "positive");
-  if (range === "too_large") return fail(ctx, ceiling);
-  if (range === "below_floor") return fail(ctx, hint);
+  if (range === "too_large") return fail(ctx, "Too large");
+  if (range === "below_floor") return fail(ctx, floor);
   return parsed.cents;
 };
 
@@ -63,13 +62,11 @@ export const optionalMoneyAmountOrZero = z
 /** Hours on one time entry: above 0, at most 24, in quarter-hour steps. */
 export const hoursWorked = z.string().transform((s, ctx): number => {
   const trimmed = s.trim();
-  if (!PLAIN_DECIMAL.test(trimmed)) return fail(ctx, "Enter hours greater than 0, like 1.5");
+  if (!PLAIN_DECIMAL.test(trimmed)) return fail(ctx, "Enter hours, like 1.5");
   const hours = Number(trimmed);
-  if (hours === 0) return fail(ctx, "Enter hours greater than 0, like 1.5");
-  if (hours > 24) return fail(ctx, "Enter 24 hours or fewer for one day");
-  if (!Number.isInteger(hours * 4)) {
-    return fail(ctx, "Enter hours in quarter-hour steps, like 1.25");
-  }
+  if (hours === 0) return fail(ctx, "Must be more than 0");
+  if (hours > 24) return fail(ctx, "24 hours at most");
+  if (!Number.isInteger(hours * 4)) return fail(ctx, "Use quarter hours, like 1.25");
   return hours;
 });
 
@@ -83,22 +80,30 @@ export const hoursField = (minutes: number): string =>
 
 // ─── Whole numbers ──────────────────────────────────────────────────────────
 
-const inRange = (raw: string, ctx: z.RefinementCtx, range: WholeRange, message: string) => {
+// Not a whole number at all, or one outside the range: a message for each.
+// Bounds read with thousands separators ("9,999"); a year passes String.
+const inRange = (
+  raw: string,
+  ctx: z.RefinementCtx,
+  range: WholeRange,
+  notANumber: string,
+  n: (v: number) => string = (v) => v.toLocaleString("en-US"),
+) => {
   const parsed = parseWholeNumber(raw);
-  if (!parsed.ok || !inWholeRange(parsed.value, range)) return fail(ctx, message);
+  if (!parsed.ok) return fail(ctx, notANumber);
+  if (!inWholeRange(parsed.value, range)) {
+    return fail(ctx, `Must be ${n(range.min)} to ${n(range.max)}`);
+  }
   return parsed.value;
 };
 
-const rangeMessage = ({ min, max }: WholeRange) =>
-  `Enter a whole number from ${min.toLocaleString("en-US")} to ${max.toLocaleString("en-US")}`;
+const WHOLE = "Enter a whole number";
 
 const wholeNumber = (range: WholeRange) =>
-  z.string().transform((s, ctx) => inRange(s, ctx, range, rangeMessage(range)));
+  z.string().transform((s, ctx) => inRange(s, ctx, range, WHOLE));
 
 const optionalWholeNumber = (range: WholeRange) =>
-  z
-    .string()
-    .transform((s, ctx) => (s.trim() === "" ? null : inRange(s, ctx, range, rangeMessage(range))));
+  z.string().transform((s, ctx) => (s.trim() === "" ? null : inRange(s, ctx, range, WHOLE)));
 
 /** Business miles on one trip. */
 export const tripMiles = wholeNumber(WHOLE_RANGES.tripMiles);
@@ -115,5 +120,5 @@ export const optionalMpg = optionalWholeNumber(WHOLE_RANGES.mpg);
 export const optionalVehicleYear = z.string().transform((s, ctx) => {
   if (s.trim() === "") return null;
   const range = vehicleYearRange();
-  return inRange(s, ctx, range, `Enter a 4-digit year from ${range.min} to ${range.max}`);
+  return inRange(s, ctx, range, "Enter a 4-digit year", String);
 });

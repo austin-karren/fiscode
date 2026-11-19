@@ -145,7 +145,7 @@ function IncomePage() {
               Add entry
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1fr_1.2fr_1fr_2fr]">
+          <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1.2fr_1.2fr_1fr_1.8fr]">
             <TSFormField
               form={form}
               name="date"

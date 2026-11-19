@@ -24,9 +24,12 @@ const messageOf = (schema: Schema, input: string) => {
   return r.success ? null : r.error!.issues[0]!.message;
 };
 
-const GREATER_THAN_0 = "Enter an amount greater than 0, like 12.50";
-const TWO_DECIMALS = "Use at most 2 decimal places, like 12.50";
-const BELOW_CEILING = "Enter an amount below $100,000,000";
+// One short message per kind of failure (d-ux ruling on #52): each fits the
+// one message line under a field in the narrowest add-form column.
+const ENTER_AMOUNT = "Enter an amount, like 12.50";
+const MORE_THAN_0 = "Must be more than $0";
+const TWO_DECIMALS = "Use 2 decimals at most";
+const TOO_LARGE = "Too large";
 
 describe("moneyAmount", () => {
   it.each([
@@ -44,23 +47,23 @@ describe("moneyAmount", () => {
   });
 
   it.each([
-    ["", GREATER_THAN_0],
-    ["   ", GREATER_THAN_0],
-    ["abc", GREATER_THAN_0],
-    ["-50", GREATER_THAN_0],
-    ["0", GREATER_THAN_0],
-    ["0.00", GREATER_THAN_0],
-    ["1e3", GREATER_THAN_0],
-    ["0x10", GREATER_THAN_0],
-    ["Infinity", GREATER_THAN_0],
-    ["1.2.3", GREATER_THAN_0],
-    ["12,50", GREATER_THAN_0],
-    ["1,2", GREATER_THAN_0],
-    ["1,2345", GREATER_THAN_0],
-    [",500", GREATER_THAN_0],
+    ["", ENTER_AMOUNT],
+    ["   ", ENTER_AMOUNT],
+    ["abc", ENTER_AMOUNT],
+    ["-50", ENTER_AMOUNT],
+    ["0", MORE_THAN_0],
+    ["0.00", MORE_THAN_0],
+    ["1e3", ENTER_AMOUNT],
+    ["0x10", ENTER_AMOUNT],
+    ["Infinity", ENTER_AMOUNT],
+    ["1.2.3", ENTER_AMOUNT],
+    ["12,50", ENTER_AMOUNT],
+    ["1,2", ENTER_AMOUNT],
+    ["1,2345", ENTER_AMOUNT],
+    [",500", ENTER_AMOUNT],
     ["12.345", TWO_DECIMALS],
-    ["999999999999", BELOW_CEILING],
-    ["100000000", BELOW_CEILING],
+    ["999999999999", TOO_LARGE],
+    ["100000000", TOO_LARGE],
   ])("rejects %j with a message that says what is allowed", (input, message) => {
     expect(messageOf(moneyAmount, input)).toBe(message);
   });
@@ -75,12 +78,12 @@ describe("optionalMoneyAmount", () => {
     expect(optionalMoneyAmount.safeParse("150").data).toBe(15000);
   });
   it.each([
-    ["abc", GREATER_THAN_0],
-    ["-5", GREATER_THAN_0],
-    ["0", GREATER_THAN_0],
-    ["1e3", GREATER_THAN_0],
+    ["abc", ENTER_AMOUNT],
+    ["-5", ENTER_AMOUNT],
+    ["0", MORE_THAN_0],
+    ["1e3", ENTER_AMOUNT],
     ["12.345", TWO_DECIMALS],
-    ["999999999999", BELOW_CEILING],
+    ["999999999999", TOO_LARGE],
   ])("rejects %j instead of saving it as empty", (input, message) => {
     expect(messageOf(optionalMoneyAmount, input)).toBe(message);
   });
@@ -93,11 +96,11 @@ describe("optionalMoneyAmountOrZero", () => {
     expect(optionalMoneyAmountOrZero.safeParse("$40,000").data).toBe(4_000_000);
   });
   it.each([
-    ["abc", "Enter an amount of 0 or more, like 12.50"],
-    ["-5", "Enter an amount of 0 or more, like 12.50"],
-    ["1e3", "Enter an amount of 0 or more, like 12.50"],
+    ["abc", ENTER_AMOUNT],
+    ["-5", ENTER_AMOUNT],
+    ["1e3", ENTER_AMOUNT],
     ["12.345", TWO_DECIMALS],
-    ["999999999999", BELOW_CEILING],
+    ["999999999999", TOO_LARGE],
   ])("rejects %j", (input, message) => {
     expect(messageOf(optionalMoneyAmountOrZero, input)).toBe(message);
   });
@@ -115,14 +118,14 @@ describe("hoursWorked", () => {
   });
 
   it.each([
-    ["", "Enter hours greater than 0, like 1.5"],
-    ["abc", "Enter hours greater than 0, like 1.5"],
-    ["0", "Enter hours greater than 0, like 1.5"],
-    ["-1", "Enter hours greater than 0, like 1.5"],
-    ["1e1", "Enter hours greater than 0, like 1.5"],
-    ["1.33", "Enter hours in quarter-hour steps, like 1.25"],
-    ["30", "Enter 24 hours or fewer for one day"],
-    ["24.25", "Enter 24 hours or fewer for one day"],
+    ["", "Enter hours, like 1.5"],
+    ["abc", "Enter hours, like 1.5"],
+    ["0", "Must be more than 0"],
+    ["-1", "Enter hours, like 1.5"],
+    ["1e1", "Enter hours, like 1.5"],
+    ["1.33", "Use quarter hours, like 1.25"],
+    ["30", "24 hours at most"],
+    ["24.25", "24 hours at most"],
   ])("rejects %j with an inline message", (input, message) => {
     expect(messageOf(hoursWorked, input)).toBe(message);
   });
@@ -130,7 +133,8 @@ describe("hoursWorked", () => {
 
 describe("optionalVehicleYear", () => {
   const nextYear = new Date().getFullYear() + 1;
-  const message = `Enter a 4-digit year from 1900 to ${nextYear}`;
+  const outOfRange = `Must be 1900 to ${nextYear}`;
+  const notAYear = "Enter a 4-digit year";
 
   it("accepts blank and a plausible year", () => {
     expect(optionalVehicleYear.safeParse("").data).toBeNull();
@@ -138,12 +142,13 @@ describe("optionalVehicleYear", () => {
     expect(optionalVehicleYear.safeParse(String(nextYear)).data).toBe(nextYear);
   });
 
-  it.each(["20233", "202", "1899", String(nextYear + 1), "-2023", "2023.5", "2e3", "abc"])(
-    "rejects %j",
-    (input) => {
-      expect(messageOf(optionalVehicleYear, input)).toBe(message);
-    },
-  );
+  it.each(["20233", "202", "1899", String(nextYear + 1)])("rejects %j as out of range", (input) => {
+    expect(messageOf(optionalVehicleYear, input)).toBe(outOfRange);
+  });
+
+  it.each(["-2023", "2023.5", "2e3", "abc"])("rejects %j as not a year", (input) => {
+    expect(messageOf(optionalVehicleYear, input)).toBe(notAYear);
+  });
 });
 
 describe("whole-number fields", () => {
@@ -165,9 +170,14 @@ describe("whole-number fields", () => {
     for (const input of bad) expect(schema.safeParse(input).success).toBe(false);
   });
 
-  it("says the allowed range", () => {
-    expect(messageOf(tripMiles, "0")).toBe("Enter a whole number from 1 to 9,999");
-    expect(messageOf(optionalSqft, "-1")).toBe("Enter a whole number from 0 to 99,999");
+  it("says the allowed range for a number outside it", () => {
+    expect(messageOf(tripMiles, "0")).toBe("Must be 1 to 9,999");
+    expect(messageOf(optionalSqft, "100000")).toBe("Must be 0 to 99,999");
+  });
+
+  it("asks for a whole number when the value is not one", () => {
+    expect(messageOf(tripMiles, "abc")).toBe("Enter a whole number");
+    expect(messageOf(tripMiles, "1.5")).toBe("Enter a whole number");
   });
 });
 

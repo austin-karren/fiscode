@@ -126,7 +126,7 @@ describe("vehicle year", () => {
   it.each(["20233", "abc", "1e3"])("does not save %j", async (year) => {
     const input = submit(year);
     expect(
-      await screen.findByText(/^Enter a 4-digit year from 1900 to \d{4}$/),
+      await screen.findByText(/^(Must be 1900 to \d{4}|Enter a 4-digit year)$/),
     ).toBeInTheDocument();
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(create).not.toHaveBeenCalled();

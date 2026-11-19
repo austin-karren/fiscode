@@ -38,11 +38,11 @@ describe("expense amount", () => {
   };
 
   it.each([
-    ["-50", "Enter an amount greater than 0, like 12.50"],
-    ["0", "Enter an amount greater than 0, like 12.50"],
-    ["1e3", "Enter an amount greater than 0, like 12.50"],
-    ["12.345", "Use at most 2 decimal places, like 12.50"],
-    ["999999999999", "Enter an amount below $100,000,000"],
+    ["-50", "Enter an amount, like 12.50"],
+    ["0", "Must be more than $0"],
+    ["1e3", "Enter an amount, like 12.50"],
+    ["12.345", "Use 2 decimals at most"],
+    ["999999999999", "Too large"],
   ])("does not save %j and says what is allowed", async (amount, message) => {
     const input = submit(amount);
     expect(await screen.findByText(message)).toBeInTheDocument();
@@ -55,9 +55,7 @@ describe("expense amount", () => {
     const input = screen.getByLabelText("Amount");
     fireEvent.change(input, { target: { value: "-50" } });
     fireEvent.blur(input);
-    expect(
-      await screen.findByText("Enter an amount greater than 0, like 12.50"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Enter an amount, like 12.50")).toBeInTheDocument();
   });
 
   it("saves a plain amount in cents", async () => {
