@@ -9,6 +9,8 @@ import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
 import {
   EntityPeriodError,
   cents,
+  endsBeforeStart,
+  findEntityOverlap,
   ENTITY_TYPE_LABELS,
   FILING_STATUS_LABELS,
   QUARTERLY_METHOD_LABELS,
@@ -161,7 +163,7 @@ function ProfileFormPanel({
         prepLeadDays: parsed.prepLeadDays,
       });
       const newStart = dateToIso(value.seStartDate!);
-      if (moveEntityStart && entityStartToMove(newStart)) {
+      if (moveEntityStart && entityStartToMove(newStart) && !entityMoveBlocked(newStart)) {
         const moved = await entityRepo.moveFirstStart(newStart);
         if (moved.moved) {
           toast.success(
@@ -189,6 +191,29 @@ function ProfileFormPanel({
     firstEntity !== undefined &&
     firstEntity.startDate !== newStart;
   const [moveEntityStart, setMoveEntityStart] = useState(true);
+  // Why the repo would refuse the move, checked before it is offered (the
+  // repo's own check stays the backstop). An overlap that was already there
+  // does not count: the repo allows a period that only shrinks.
+  const entityMoveBlocked = (newStart: string): string | null => {
+    if (!firstEntity) return null;
+    const moved = { ...firstEntity, startDate: newStart };
+    if (endsBeforeStart(moved)) {
+      return `Your first entity period ends ${formatDate(firstEntity.endDate!)}, before ${formatDate(newStart)}, so it stays as it is. Edit it under Entity periods if you need to.`;
+    }
+    const conflict = findEntityOverlap(entities, moved);
+    if (conflict && conflict !== findEntityOverlap(entities, firstEntity)) {
+      return `Moving your first entity period to ${formatDate(newStart)} would overlap your ${labelFor(ENTITY_TYPE_LABELS, conflict.type)} period, so it stays as it is. Edit it under Entity periods if you need to.`;
+    }
+    return null;
+  };
+
+  // The new SE start when the dialog has something to say about the first
+  // entity period (a checkbox, or why it stays).
+  const offeredMove = (): string | undefined => {
+    const v = profileForm.state.values.seStartDate;
+    const newStart = v ? dateToIso(v) : undefined;
+    return newStart && entityStartToMove(newStart) ? newStart : undefined;
+  };
 
   // Set when the repo blocks an entity period: an overlap, or an end before the start.
   // Set when the repo blocks the dates; shown on the field it is about.
@@ -253,6 +278,8 @@ function ProfileFormPanel({
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (changedScopeFields().length > 0) {
+      // Ticked by default every time the dialog opens.
+      setMoveEntityStart(true);
       setScopeConfirmOpen(true);
       return;
     }
@@ -294,15 +321,18 @@ function ProfileFormPanel({
         open={scopeConfirmOpen}
         onOpenChange={setScopeConfirmOpen}
         title="Save changes to scope-shifting fields?"
-        description={`Changing your ${changedScopeFields().join(" and ")} retroactively recomputes the year. Rows dated outside the new window stop being counted; brackets and rates change with the new filing-status / state. The underlying data is unchanged.`}
+        description={`Changing your ${changedScopeFields().join(" and ")} retroactively recomputes the year. Rows dated outside the new window stop being counted; brackets and rates change with the new filing-status / state. ${
+          offeredMove() ? "Your rows are unchanged." : "The underlying data is unchanged."
+        }`}
         confirmLabel="Save"
         confirmVariant="destructive"
         onConfirm={() => void profileForm.handleSubmit()}
       >
         {(() => {
-          const v = profileForm.state.values.seStartDate;
-          const newStart = v ? dateToIso(v) : undefined;
-          if (!newStart || !firstEntity || !entityStartToMove(newStart)) return null;
+          const newStart = offeredMove();
+          if (!newStart || !firstEntity) return null;
+          const blocked = entityMoveBlocked(newStart);
+          if (blocked) return <p className="text-sm">{blocked}</p>;
           return (
             <label className="flex items-start gap-2 text-sm">
               <FieldCheckbox checked={moveEntityStart} onCheckedChange={setMoveEntityStart} />

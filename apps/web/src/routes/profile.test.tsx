@@ -201,6 +201,50 @@ describe("changing the SE start offers to move the first entity period", () => {
     expect(moveBox()).not.toBeInTheDocument();
   });
 
+  it("says the period stays, without a box, when the move would end before it starts", async () => {
+    // Review r1 demo B: sole prop Jan 5 – Feb 28 (closed), LLC Mar 1 – open, new start Mar 2.
+    loaded.entities = [
+      { ...soleProp, startDate: "2026-01-05", endDate: "2026-02-28" },
+      { ...soleProp, id: "ent_2", type: "single_member_llc", startDate: "2026-03-01" },
+    ];
+    render(<ProfilePage />);
+    await changeStartTo("03/03/2026");
+
+    expect(moveBox()).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Your first entity period ends Feb 28, 2026, before Mar 3, 2026, so it stays as it is. Edit it under Entity periods if you need to.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(upsert).toHaveBeenCalledTimes(1));
+    expect(moveFirstStart).not.toHaveBeenCalled();
+  });
+
+  it("does not claim nothing changes while the box is shown", async () => {
+    loaded.entities = [soleProp];
+    render(<ProfilePage />);
+    await changeStartTo("01/15/2026");
+    expect(screen.queryByText(/The underlying data is unchanged/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Your rows are unchanged\./)).toBeInTheDocument();
+  });
+
+  it("ticks the box again each time the dialog opens", async () => {
+    loaded.entities = [soleProp];
+    render(<ProfilePage />);
+    await changeStartTo("01/15/2026");
+    fireEvent.click(moveBox()!);
+    expect(moveBox()).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByText("Save changes to scope-shifting fields?")).not.toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+    await screen.findByText("Save changes to scope-shifting fields?");
+    expect(moveBox()).toBeChecked();
+  });
+
   it("offers nothing when the first period already starts on the new date", async () => {
     loaded.entities = [{ ...soleProp, startDate: "2026-01-15" }];
     render(<ProfilePage />);
