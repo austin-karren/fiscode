@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +23,7 @@ import { CONFIG_YEARS_BACK, DatePicker, dateToIso, isoToDate } from "./forms/dat
 import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { useToday } from "../lib/use-today";
+import { useEditDialog } from "../hooks/use-edit-dialog";
 
 const METHOD_OPTIONS = labelOptions(HOME_OFFICE_METHOD_LABELS);
 
@@ -42,8 +42,6 @@ export function EditHomeOfficeDialog({
   row: HomeOfficeRow;
   onSaved: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-
   const today = useToday();
   const form = useForm({
     defaultValues: {
@@ -68,9 +66,10 @@ export function EditHomeOfficeDialog({
       onSaved();
     },
   });
+  const { open, setOpen, onOpenChange } = useEditDialog(form);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">

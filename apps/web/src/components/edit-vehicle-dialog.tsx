@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +19,7 @@ import { z } from "zod";
 import { optionalMpg, optionalVehicleYear } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
+import { useEditDialog } from "../hooks/use-edit-dialog";
 
 const editSchema = z.object({
   make: z.string().min(1, "Make is required"),
@@ -35,8 +35,6 @@ export function EditVehicleDialog({
   vehicle: VehicleRow;
   onSaved: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-
   const form = useForm({
     defaultValues: {
       make: vehicle.make,
@@ -58,9 +56,10 @@ export function EditVehicleDialog({
       onSaved();
     },
   });
+  const { open, setOpen, onOpenChange } = useEditDialog(form);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">
