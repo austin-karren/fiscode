@@ -68,6 +68,68 @@ Utah taxes income starting from federal AGI, not federal taxable income (TC-40 l
 income above the filing-status base, and never below zero. The 2026 exemption and base amounts
 come from Utah's draft 2026 TC-40 and may change when the final form is posted.
 
+### Home office
+
+Two methods, each prorated by the days the office is in use within the year, and never before the
+self-employment start date:
+
+- **Simplified:** $5 per square foot, at most 300 sq ft ($1,500 a year).
+- **Actual** ([Form 8829](https://www.irs.gov/pub/irs-dft/f8829--dft.pdf), 2026 draft; lines
+  match the [2025 instructions](https://www.irs.gov/instructions/i8829)): the business percentage
+  is office area ÷ home area (line 3, "Divide line 1 by line 2"). The monthly rent or mortgage
+  interest, utilities and insurance (column (b)) are multiplied by it (line 24, "Multiply line 23,
+  column (b), by line 7"). Part-year use: "you can deduct only the expenses paid or incurred for
+  the portion of the year you used your home for business" (instructions, Columns (a) and (b)). An
+  office larger than the home is rejected and deducts nothing.
+
+Both are limited by the business's gross income: the deduction is at most the tentative profit
+before it (Form 8829 line 8, Schedule C line 29; line 27 "Enter the smaller of line 15 or line
+26"; [Pub 587](https://www.irs.gov/publications/p587) "Gross income limitation", which applies to
+the simplified method too). What the limit cuts depends on the method:
+
+- **Actual:** carried to next year (Form 8829 line 43). fiscode reports it but does not carry it
+  across years.
+- **Simplified:** lost. "Amount in excess of gross income limitation may not be carried over"
+  ([IRS, simplified option](https://www.irs.gov/businesses/small-businesses-self-employed/simplified-option-for-home-office-deduction)).
+
+**Whose income counts:** every home office, one or several, is limited by the profit from the
+income, expenses and mileage dated within its own days in use. Pub 587: "If some of the income is
+from a place of business other than your home, you must first determine the part of your gross
+income from the business use of your home". For more than one home, the Line 8 instructions say:
+"include only the income earned and the deductions attributable to that income during the period
+you owned the home". So:
+
+- A home used from July 1 is limited by the profit dated from July 1. Income earned before it
+  counts toward no home office.
+- Each date belongs to one home, for both its deduction and its profit: when a move is entered as
+  "ends Jul 1" and "starts Jul 1", the new home has Jul 1. Any overlap is treated as a move to the
+  later home, which owns the shared days.
+- A config that deducts nothing (no costs, or an office larger than the home) has no days.
+- The total never exceeds the business's whole tentative profit. Any excess is cut from the latest
+  home back, and is lost or carried over by that home's method.
+
+**Mortgage interest and real estate taxes:** fiscode assumes the standard deduction, so their
+business share goes on lines 16 and 17 and is limited with the other operating expenses ("If you
+claim the standard deduction, you will not include any mortgage interest or real estate taxes on
+lines 10 and 11; instead, you will claim the entire business use of the home portion of those
+expenses using lines 16 and 17", instructions, Lines 9, 10 and 11). An itemizer would put them on
+lines 10 and 11, outside the limit; itemizing is not modelled. For an owner, enter the mortgage
+interest only, not the principal.
+
+Not modelled yet:
+
+- **Simplified part-year use by months.** fiscode prorates the simplified method by days. Pub 587
+  ("Part-year use or area changes") averages the allowable square footage over the 12 months and
+  counts a month only with 15 or more days of business use. Pub 587's Example 1 (business use
+  from July 20, 300 allowable sq ft) comes to $625. fiscode's day count gives $678.08.
+- **One simplified home a year.** "If you had more than one home during the year that you used
+  for business, you can use the simplified method for only one home" (instructions). fiscode
+  accepts two simplified configs in a year and caps them together at $1,500.
+- **Real estate taxes:** no field.
+- **Depreciation** for owners (lines 36–42): there is no purchase price or basis to compute it from.
+- **Direct expenses** (column (a), such as painting the office): no field yet.
+- **The actual-method carryover** across years (line 43 → next year's line 25).
+
 ### Quarterly estimates
 
 The plan follows Form 2210. The lines used read the same in the

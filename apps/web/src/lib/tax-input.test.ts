@@ -98,9 +98,9 @@ const homeOffice = (
   method,
   officeSqft: sqft,
   homeSqft: 2000,
-  monthlyRentMortgageCents: null,
-  monthlyUtilitiesCents: null,
-  monthlyInsuranceCents: null,
+  monthlyRentMortgageCents: null as number | null,
+  monthlyUtilitiesCents: null as number | null,
+  monthlyInsuranceCents: null as number | null,
   regularExclusiveAck: true,
   notes: null,
   createdAt: FIXED,
@@ -236,6 +236,7 @@ describe("deriveYear — mileage deduction", () => {
 describe("deriveYear — home-office simplified", () => {
   it("annual: 150 sqft × $5/sqft for a full year = $750", () => {
     const b = makeBundle({
+      income: [income("i0", "2026-01-02", 10_000_00)],
       homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
     });
     const d = deriveYear(b, 2026);
@@ -245,6 +246,7 @@ describe("deriveYear — home-office simplified", () => {
 
   it("clamps sqft at the simplified-method cap of 300", () => {
     const b = makeBundle({
+      income: [income("i0", "2026-01-02", 10_000_00)],
       homeOffice: [homeOffice("ho", "2026-01-01", null, 500)],
     });
     // 300 × $5 = $1500 (also equals the simplified cap)
@@ -254,6 +256,8 @@ describe("deriveYear — home-office simplified", () => {
   it("prorates day-by-day across a partial year", () => {
     // April 1 → Sep 30 inclusive = 183 days (30+31+30+31+31+30) in 2026 (non-leap).
     const b = makeBundle({
+      // Income within the office's days (r3: the limit counts only those).
+      income: [income("i0", "2026-05-02", 10_000_00)],
       homeOffice: [homeOffice("ho", "2026-04-01", "2026-09-30", 100)],
     });
     // Annual = 100 × $5 = $500.
@@ -266,6 +270,7 @@ describe("deriveYear — home-office simplified", () => {
   it("clamps to seStartDate for mid-year SE start", () => {
     const b = makeBundle({
       profile: { ...makeBundle().profile!, seStartDate: "2026-07-01" },
+      income: [income("i0", "2026-07-02", 10_000_00)],
       homeOffice: [homeOffice("ho", "2026-01-01", null, 100)],
     });
     // Active days = Jul 1 → Dec 31 = 184 days; 184/365 × 12 = 6.0493...
@@ -274,8 +279,9 @@ describe("deriveYear — home-office simplified", () => {
     expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(expected);
   });
 
-  it("returns 0 for actual method (not yet implemented in calc)", () => {
+  it("actual method with no monthly costs stored deducts $0", () => {
     const b = makeBundle({
+      income: [income("i1", "2026-03-15", 50_000_00)],
       homeOffice: [homeOffice("ho", "2026-01-01", null, 200, "actual")],
     });
     expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(0);
@@ -293,6 +299,7 @@ describe("deriveYear — home-office simplified", () => {
     const b = makeBundle({
       profile: { ...makeBundle().profile!, seStartDate: "2024-01-01" },
       entities: [entity("e1", "2024-01-01", null, "sole_prop")],
+      income: [income("i0", "2024-01-02", 10_000_00)],
       homeOffice: [homeOffice("ho", "2024-01-01", null, 100)],
     });
     // Full year, leap. Active days = 366; months = (366/366)×12 = 12.
@@ -305,6 +312,229 @@ describe("deriveYear — home-office simplified", () => {
       homeOffice: [homeOffice("ho", "2027-01-01", null, 100)],
     });
     expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(0);
+  });
+});
+
+// Demo renter: 200 of 2,000 sq ft, $1,500 rent + $200 utilities + $30 insurance a month.
+const actualOffice = (
+  startDate: string,
+  officeSqft = 200,
+  homeSqft = 2000,
+): ReturnType<typeof homeOffice> => ({
+  ...homeOffice("ho", startDate, null, officeSqft, "actual"),
+  homeSqft,
+  monthlyRentMortgageCents: 150_000,
+  monthlyUtilitiesCents: 20_000,
+  monthlyInsuranceCents: 3_000,
+});
+
+describe("deriveYear — home-office actual (Form 8829)", () => {
+  it("renter, full year: $1,730 × 12 × 10% = $2,076.00", () => {
+    const b = makeBundle({
+      income: [income("i1", "2026-03-15", 50_000_00)],
+      homeOffice: [actualOffice("2026-01-01")],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBe(207_600);
+    expect(d.homeOfficeCarryover).toBe(0);
+    expect(d.homeOfficeLost).toBe(0);
+    expect(d.homeOfficeAreaRejected).toBe(0);
+  });
+
+  it("partial year, office from Jul 1: 184/365 of $2,076 = $1,046.53", () => {
+    const b = makeBundle({
+      income: [income("i1", "2026-08-15", 50_000_00)],
+      homeOffice: [actualOffice("2026-07-01")],
+    });
+    // 207,600 × 184 / 365 = 104,653.15 → 104,653¢
+    expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(104_653);
+  });
+
+  it("one part-year home is limited by the profit dated within its own days (r3, Pub 587)", () => {
+    // Office from Jul 1; all income on Mar 15, before it: $0 allowed, $1,046.53 carried.
+    const b = makeBundle({
+      income: [income("i1", "2026-03-15", 50_000_00)],
+      homeOffice: [actualOffice("2026-07-01")],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBe(0);
+    expect(d.homeOfficeCarryover).toBe(104_653);
+  });
+
+  it("a shared changeover day belongs to the later home, and the total never exceeds the profit", () => {
+    // Simplified entered Jan 1 – Jul 1, actual from Jul 1 ($1,046.53). Jul 1 is the new home's,
+    // for profit and amount: the old home owns 181 days ($750 × 181/365 = $371.92).
+    // $1,000 earned Jul 1: the old home's profit is $0.
+    const b = makeBundle({
+      income: [income("i1", "2026-07-01", 1_000_00)],
+      homeOffice: [
+        homeOffice("h1", "2026-01-01", "2026-07-01", 150),
+        { ...actualOffice("2026-07-01"), id: "h2" },
+      ],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBeLessThanOrEqual(1_000_00);
+    // old home: $371.92 lost; new home: $1,000 allowed, $46.53 carried
+    expect(d.homeOfficeDeduction).toBe(1_000_00);
+    expect(d.homeOfficeLost).toBe(37_192);
+    expect(d.homeOfficeCarryover).toBe(4_653);
+  });
+
+  it("the same move typed two ways gives the same figures (r4: amount over owned days)", () => {
+    // "ends Jun 30 / starts Jul 1" and "ends Jul 1 / starts Jul 1": the old home owns Jan 1 – Jun 30
+    // either way (181 days, $371.92); $3,000 earned Feb 10 → old home in full, new home carried.
+    const entered = (oldEnd: string) =>
+      deriveYear(
+        makeBundle({
+          income: [income("i1", "2026-02-10", 3_000_00)],
+          homeOffice: [
+            homeOffice("h1", "2026-01-01", oldEnd, 150),
+            { ...actualOffice("2026-07-01"), id: "h2" },
+          ],
+        }),
+        2026,
+      );
+    const a = entered("2026-06-30");
+    const b = entered("2026-07-01");
+    expect(a.homeOfficeDeduction).toBe(37_192);
+    expect(a.homeOfficeCarryover).toBe(104_653);
+    expect(b.homeOfficeDeduction).toBe(a.homeOfficeDeduction);
+    expect(b.homeOfficeLost).toBe(a.homeOfficeLost);
+    expect(b.homeOfficeCarryover).toBe(a.homeOfficeCarryover);
+  });
+
+  it("the total is capped at the whole profit when expenses fall outside every office's days", () => {
+    // Office Jul 1 on; $5,000 income Aug; $4,500 expense in Feb (no office then).
+    // The office's own days show $5,000 of profit, but the business made $500: $500 allowed.
+    const b = makeBundle({
+      income: [income("i1", "2026-08-10", 5_000_00)],
+      expenses: [expense("e1", "2026-02-10", 4_500_00)],
+      homeOffice: [actualOffice("2026-07-01")],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBe(500_00);
+    expect(d.homeOfficeCarryover).toBe(104_653 - 500_00);
+  });
+
+  it("a config that deducts nothing owns no days (r3 case 6)", () => {
+    // Actual from Jul 1, plus a config from Sep 1 rejected (5,000 sq ft office in a 100 sq ft home).
+    // Income Oct 10 stays with the real office: $1,046.53 allowed in full.
+    const b = makeBundle({
+      income: [income("i1", "2026-10-10", 3_000_00)],
+      homeOffice: [
+        actualOffice("2026-07-01"),
+        { ...actualOffice("2026-09-01", 5000, 100), id: "h2" },
+      ],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBe(104_653);
+    expect(d.homeOfficeAreaRejected).toBe(1);
+  });
+
+  it("SE start mid-year clamps the office period the same way", () => {
+    const b = makeBundle({
+      profile: { ...makeBundle().profile!, seStartDate: "2026-07-01" },
+      income: [income("i1", "2026-08-15", 50_000_00)],
+      homeOffice: [actualOffice("2026-01-01")],
+    });
+    expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(104_653);
+  });
+
+  it("office larger than the home is rejected: $0 and counted", () => {
+    const b = makeBundle({
+      income: [income("i1", "2026-03-15", 50_000_00)],
+      homeOffice: [actualOffice("2026-01-01", 5000, 100)],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBe(0);
+    expect(d.homeOfficeAreaRejected).toBe(1);
+  });
+
+  it("limited by tentative profit (line 8): $1,000 income − $300 expenses = $700", () => {
+    const b = makeBundle({
+      income: [income("i1", "2026-03-15", 1_000_00)],
+      expenses: [expense("e1", "2026-04-01", 300_00)],
+      homeOffice: [actualOffice("2026-01-01")],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBe(700_00);
+    // $2,076 − $700 = $1,376 carried to next year (line 43; reported, not tracked)
+    expect(d.homeOfficeCarryover).toBe(1_376_00);
+    expect(d.homeOfficeLost).toBe(0);
+  });
+
+  it("the simplified method is unchanged under the limit", () => {
+    const b = makeBundle({
+      income: [income("i0", "2026-01-02", 10_000_00)],
+      homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
+    });
+    expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(75_000);
+  });
+
+  it("the simplified method is limited too: $0 income deducts $0 (Pub 587)", () => {
+    // Review of #49's walk: $123.29 of home office was deducted with no counted income.
+    const b = makeBundle({
+      homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBe(0);
+    // Simplified: the excess cannot be carried over, so it is lost
+    expect(d.homeOfficeLost).toBe(75_000);
+    expect(d.homeOfficeCarryover).toBe(0);
+  });
+
+  it("the simplified method is capped at tentative profit: $500 income − $300 expenses", () => {
+    const b = makeBundle({
+      income: [income("i0", "2026-01-02", 500_00)],
+      expenses: [expense("e1", "2026-01-03", 300_00)],
+      homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
+    });
+    const d = deriveYear(b, 2026);
+    // $750 simplified, limited to $200; $550 lost
+    expect(d.homeOfficeDeduction).toBe(200_00);
+    expect(d.homeOfficeLost).toBe(550_00);
+  });
+
+  // A move: simplified 150 sq ft Jan 1 – Jun 30 (181 days), then actual from Jul 1 (184 days).
+  //   simplified: $750 × 181/365 = $371.92 (37,191.78 → 37,192¢)
+  //   actual:     $2,076 × 184/365 = $1,046.53 (104,653¢)
+  // Two homes: each is limited by the profit of its own period (i8829 Line 8, Pub 587).
+  const move = [
+    homeOffice("h1", "2026-01-01", "2026-06-30", 150),
+    { ...actualOffice("2026-07-01"), id: "h2" },
+  ];
+
+  it("a move, income earned in the new home (Nov 10): old home $0 limit, new home in full", () => {
+    const b = makeBundle({ income: [income("i1", "2026-11-10", 3_000_00)], homeOffice: move });
+    const d = deriveYear(b, 2026);
+    // old home: profit $0 → $371.92 lost (simplified); new home: profit $3,000 ≥ $1,046.53
+    expect(d.homeOfficeDeduction).toBe(104_653);
+    expect(d.homeOfficeLost).toBe(37_192);
+    expect(d.homeOfficeCarryover).toBe(0);
+  });
+
+  it("a move, income earned in the old home (Feb 10): old home in full, new home carried", () => {
+    const b = makeBundle({ income: [income("i1", "2026-02-10", 3_000_00)], homeOffice: move });
+    const d = deriveYear(b, 2026);
+    // old home: profit $3,000 ≥ $371.92; new home: profit $0 → $1,046.53 carried (actual)
+    expect(d.homeOfficeDeduction).toBe(37_192);
+    expect(d.homeOfficeLost).toBe(0);
+    expect(d.homeOfficeCarryover).toBe(104_653);
+  });
+
+  it("a move: each home's profit counts its own expenses and mileage", () => {
+    // Old home: $500 income − $300 expense (Mar) = $200 → $200 allowed, $171.92 lost.
+    // New home: $5,000 income (Sep) − 100 mi × $0.76 (Aug) = $4,924 ≥ $1,046.53.
+    const b = makeBundle({
+      income: [income("i1", "2026-02-10", 500_00), income("i2", "2026-09-10", 5_000_00)],
+      expenses: [expense("e1", "2026-03-01", 300_00)],
+      mileage: [mileage("m1", "2026-08-01", 100)],
+      homeOffice: move,
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBe(200_00 + 104_653);
+    expect(d.homeOfficeLost).toBe(17_192);
+    expect(d.homeOfficeCarryover).toBe(0);
   });
 });
 
@@ -429,8 +659,22 @@ describe("buildAnnualizedInput — cumulative periods", () => {
     expect(ann.periods[1].cumulativeGross1099).toBe(20_000_00);
   });
 
+  it("each period's home office is limited by that period's own income", () => {
+    const b = makeBundle({
+      income: [income("nov", "2026-11-02", 10_000_00)],
+      homeOffice: [actualOffice("2026-01-01")],
+    });
+    const ann = buildAnnualizedInput(b, 2026);
+    // Q1–Q3: no income yet, so no home office
+    expect(ann.periods[0].cumulativeDeductibleExpenses).toBe(0);
+    expect(ann.periods[2].cumulativeDeductibleExpenses).toBe(0);
+    // Q4 equals the year: $2,076.00, under the $10,000 tentative profit
+    expect(ann.periods[3].cumulativeDeductibleExpenses).toBe(207_600);
+  });
+
   it("each period carries mileage (dated rates) and home office through its end, like the year", () => {
     const b = makeBundle({
+      income: [income("i0", "2026-01-02", 10_000_00)],
       mileage: [mileage("feb", "2026-02-10", 100), mileage("jul", "2026-07-10", 100)],
       homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
     });
