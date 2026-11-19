@@ -21,6 +21,7 @@ import { ExportCard } from "../components/export-card";
 import { ImportCard } from "../components/import-card";
 import { BackupNudge } from "../components/backup-nudge";
 import { InfoTooltip } from "../components/info-tooltip";
+import { UtahPrepaymentLine } from "../components/utah-prepayment-line";
 import { formatDate } from "../lib/format-date";
 import { US_STATE_BY_CODE } from "../lib/us-states";
 
@@ -123,7 +124,7 @@ function Dashboard() {
       <Card>
         <CardHeader>
           <CardTitle className="inline-flex items-center gap-1.5 text-sm font-medium uppercase text-muted-foreground">
-            Quarterly payments
+            IRS quarterly payments (federal)
             <InfoTooltip text={GLOSSARY.unevenQuarters} />
           </CardTitle>
         </CardHeader>
@@ -153,6 +154,15 @@ function Dashboard() {
               );
             })}
           </div>
+          {result.quarterly.noInstallmentsRequired ? (
+            <p className="mt-3 text-sm text-muted-foreground">
+              No IRS estimated payments are needed: you owe the IRS less than $1,000 after federal
+              withholding, so there is no federal underpayment penalty.
+            </p>
+          ) : null}
+          {result.statePrepayment ? (
+            <UtahPrepaymentLine prepayment={result.statePrepayment} />
+          ) : null}
           {upcoming && recommendedPrep ? (
             <p className="mt-3 text-sm text-muted-foreground">
               Next due {formatDate(upcoming.dueDate)}. Start preparing around{" "}

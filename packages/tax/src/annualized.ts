@@ -1,12 +1,5 @@
-import {
-  type Cents,
-  type IsoDate,
-  cents,
-  clampMinZero,
-  mulRate,
-  shiftToBusinessDay,
-  subCents,
-} from "@fiscode/core";
+import { type Cents, type IsoDate, mulRate, shiftToBusinessDay } from "@fiscode/core";
+import { type Four, paymentsAfterWithholding, scheduleAiInstallments } from "./installments.ts";
 import type {
   AnnualizedInput,
   IncomePeriod,
@@ -18,10 +11,9 @@ import type {
 import type { TaxStrategy } from "./strategy/types.ts";
 
 // IRS-style annualization fractions for sole props. Periods are cumulative:
-// Q1: 3 mo, Q2: 5 mo, Q3: 8 mo, Q4: 12 mo. Annualize by 12/months. Required
-// quarterly installments cumulate 22.5% / 45% / 67.5% / 90% of annual tax.
+// Q1: 3 mo, Q2: 5 mo, Q3: 8 mo, Q4: 12 mo. Annualize by 12/months (Schedule AI
+// line 2: 4, 2.4, 1.5, 1).
 const ANNUALIZATION_FACTORS: [number, number, number, number] = [4, 2.4, 1.5, 1];
-const CUMULATIVE_FRACTIONS: [number, number, number, number] = [0.225, 0.45, 0.675, 0.9];
 
 const dueDates = (cfg: YearConfig): [IsoDate, IsoDate, IsoDate, IsoDate] => [
   shiftToBusinessDay(cfg.quarterlyDueDates[0]),
@@ -38,10 +30,13 @@ const periodsForYear = (year: number): Array<{ start: IsoDate; end: IsoDate }> =
 ];
 
 /**
- * Annualized income installment method. For each period, estimate the full-year
- * tax as-if income through that period continued at the same rate, then take
- * the cumulative-required fraction (22.5% / 45% / 67.5% / 90%) minus what was
- * already required in prior periods.
+ * Annualized income installment method (Form 2210 Schedule AI). For each
+ * period, the year's tax is figured as if the income through that period
+ * continued at the same rate (line 19, before withholding). Each required
+ * installment is the smaller of the annualized amount, with any earlier
+ * reduction recaptured, and the regular 25% installment plus what earlier
+ * regular installments left unused (lines 21-27; see installments.ts). Then
+ * withholding counts as paid one quarter per due date.
  *
  * `strategy.compute` is reused on a scaled TaxInput so the math is consistent
  * with the year-end calculation.
@@ -50,40 +45,36 @@ export const annualizedQuarterly = (
   input: AnnualizedInput,
   cfg: YearConfig,
   strategy: TaxStrategy,
+  requiredAnnualPayment: Cents,
 ): QuarterlyPlan => {
   const dues = dueDates(cfg);
   const periods = periodsForYear(input.year);
-  const requiredCumulative = input.periods.map((p: IncomePeriod, i: number): Cents => {
+  const annualizedTax = input.periods.map((p: IncomePeriod, i: number): Cents => {
     const factor = ANNUALIZATION_FACTORS[i]!;
-    const annualizedGross = mulRate(p.cumulativeGross1099, factor);
-    const annualizedExpenses = mulRate(p.cumulativeDeductibleExpenses, factor);
-    const annualizedEstimate: TaxEstimate = strategy.compute(
+    const estimate: TaxEstimate = strategy.compute(
       {
         ...input,
-        gross1099: annualizedGross,
-        deductibleExpenses: annualizedExpenses,
+        gross1099: mulRate(p.cumulativeGross1099, factor),
+        deductibleExpenses: mulRate(p.cumulativeDeductibleExpenses, factor),
       },
       cfg,
     );
-    const requiredAnnual = annualizedEstimate.remainingOwed;
-    return mulRate(requiredAnnual, CUMULATIVE_FRACTIONS[i]!);
-  });
-  let prior = cents(0);
-  const payments: QuarterPayment[] = [];
-  for (let i = 0; i < 4; i++) {
-    const required = requiredCumulative[i]!;
-    const installment = clampMinZero(subCents(required, prior));
-    payments.push({
-      quarter: (i + 1) as 1 | 2 | 3 | 4,
-      periodStart: periods[i]!.start,
-      periodEnd: periods[i]!.end,
-      dueDate: dues[i]!,
-      amount: installment,
-    });
-    prior = required;
-  }
+    // Schedule AI line 19 is federal: income tax + SE tax, no state tax.
+    return estimate.federalLiability;
+  }) as Four<Cents>;
+  const required = scheduleAiInstallments(annualizedTax, requiredAnnualPayment);
+  const toPay = paymentsAfterWithholding(required, input.spouseFederalWithholding);
+  const payments = periods.map((period, i): QuarterPayment => ({
+    quarter: (i + 1) as 1 | 2 | 3 | 4,
+    periodStart: period.start,
+    periodEnd: period.end,
+    dueDate: dues[i]!,
+    requiredInstallment: required[i]!,
+    amount: toPay[i]!,
+  }));
   return {
     method: "annualized",
+    noInstallmentsRequired: false,
     payments: payments as QuarterlyPlan["payments"],
   };
 };

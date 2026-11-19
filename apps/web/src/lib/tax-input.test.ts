@@ -428,4 +428,22 @@ describe("buildAnnualizedInput — cumulative periods", () => {
     // Q2 ends 2026-05-31 → post-SE row counts.
     expect(ann.periods[1].cumulativeGross1099).toBe(20_000_00);
   });
+
+  it("each period carries mileage (dated rates) and home office through its end, like the year", () => {
+    const b = makeBundle({
+      mileage: [mileage("feb", "2026-02-10", 100), mileage("jul", "2026-07-10", 100)],
+      homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
+    });
+    const ann = buildAnnualizedInput(b, 2026);
+    // Q1 (to Mar 31): mileage 100 × $0.725 = $72.50
+    //   home office 150 sqft × $5 = $750/yr × 90 of 365 days = $184.93
+    //   → $257.43 (no direct expenses)
+    expect(ann.periods[0].cumulativeDeductibleExpenses).toBe(257_43);
+    // Q3 (to Aug 31) includes the July trip at $0.76
+    // Q4 (to Dec 31) equals the year: mileage $148.50 + home office $750.00
+    expect(ann.periods[3].cumulativeDeductibleExpenses).toBe(898_50);
+    expect(ann.periods[3].cumulativeDeductibleExpenses).toBe(
+      deriveYear(b, 2026).totalDeductibleExpenses,
+    );
+  });
 });

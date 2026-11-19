@@ -21,6 +21,9 @@ const fakeEstimate = (totalLiability: number): TaxEstimate =>
     federal: { taxableIncome: cents(0), qbiDeduction: cents(0), federalIncomeTax: cents(0) },
     state: { taxableIncome: cents(0), rate: 0, stateIncomeTax: cents(0) },
     spouseWithholding: cents(0),
+    federalLiability: dollars(totalLiability),
+    federalWithholding: cents(0),
+    stateWithholding: cents(0),
     totalLiability: dollars(totalLiability),
     remainingOwed: dollars(totalLiability),
   }) as TaxEstimate;

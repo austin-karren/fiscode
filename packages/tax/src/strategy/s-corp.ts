@@ -5,7 +5,7 @@ import type {
   TaxInput,
   YearConfig,
 } from "../types.ts";
-import type { QuarterlyMethod } from "@fiscode/core";
+import type { Cents, QuarterlyMethod } from "@fiscode/core";
 import { NotImplementedError, type TaxStrategy } from "./types.ts";
 
 // Seam placeholder. S-corp adds a reasonable-salary input, payroll taxes via
@@ -22,6 +22,7 @@ export const sCorpStrategy: TaxStrategy = {
     _input: TaxInput | AnnualizedInput,
     _cfg: YearConfig,
     _method: QuarterlyMethod,
+    _requiredAnnualPayment: Cents,
   ): QuarterlyPlan {
     throw new NotImplementedError("SCorpStrategy.quarterly");
   },

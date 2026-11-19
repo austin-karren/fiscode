@@ -79,7 +79,10 @@ export type TaxInput = {
   spouseFederalWithholding: Cents;
   /** Spouse W-2 state withholding. */
   spouseStateWithholding: Cents;
-  /** Prior year total tax liability, for safe-harbor calc. Undefined = first year. */
+  /**
+   * Prior year's federal tax (Form 2210 line 8 uses the prior-year federal
+   * return), for the safe harbor. Undefined = first year.
+   */
   priorYearTotalTax: Cents | undefined;
   /** Prior year AGI, for determining 100% vs 110% safe-harbor multiplier. */
   priorYearAgi: Cents | undefined;
@@ -118,6 +121,12 @@ export type TaxEstimate = {
   federal: FederalBreakdown;
   state: StateBreakdown;
   spouseWithholding: Cents;
+  /** Federal income tax + self-employment tax: Form 2210 lines 1-4. */
+  federalLiability: Cents;
+  /** Federal withholding only: Form 2210 line 6. */
+  federalWithholding: Cents;
+  /** State withholding only. */
+  stateWithholding: Cents;
   totalLiability: Cents;
   remainingOwed: Cents; // totalLiability minus spouseWithholding
 };
@@ -127,16 +136,37 @@ export type QuarterPayment = {
   periodStart: IsoDate;
   periodEnd: IsoDate;
   dueDate: IsoDate;
+  /** The required installment for this due date (Form 2210 line 10). */
+  requiredInstallment: Cents;
+  /** What is left to pay by this due date after withholding (1/4 per quarter). */
   amount: Cents;
 };
 
 export type QuarterlyPlan = {
   method: QuarterlyMethod;
+  /**
+   * True when the tax left after withholding is under $1,000, so Form 2210
+   * requires no installments (lines 4 and 7) and every amount is $0.
+   */
+  noInstallmentsRequired: boolean;
   payments: [QuarterPayment, QuarterPayment, QuarterPayment, QuarterPayment];
 };
 
+/**
+ * Utah's prepayment minimum (TC-546): due by the return's due date, with no
+ * quarterly schedule.
+ */
+export type StatePrepayment = {
+  state: "UT";
+  dueDate: IsoDate;
+  /** TC-546 line 8: what to pay by `dueDate` after Utah withholding; $0 if none. */
+  minimum: Cents;
+  /** Which TC-546 line 5 amount was used. Prior-year Utah tax is not an input. */
+  basis: "currentYear90";
+};
+
 export type SafeHarborResult = {
-  currentYearTarget: Cents; // 90% of current liability
+  currentYearTarget: Cents; // 90% of current federal tax
   priorYearTarget: Cents | undefined; // 100% or 110% of prior tax
   /** The lower of the two targets; meeting this avoids underpayment penalty. */
   floor: Cents;

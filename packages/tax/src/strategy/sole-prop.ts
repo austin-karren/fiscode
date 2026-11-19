@@ -102,6 +102,9 @@ export const soleProprietorStrategy: TaxStrategy = {
         stateIncomeTax,
       },
       spouseWithholding: totalWithholding,
+      federalLiability: addCents(federalIncomeTax, se.totalSeTax),
+      federalWithholding: input.spouseFederalWithholding,
+      stateWithholding: input.spouseStateWithholding,
       totalLiability,
       remainingOwed: clampMinZero(subCents(totalLiability, totalWithholding)),
     };
@@ -110,13 +113,14 @@ export const soleProprietorStrategy: TaxStrategy = {
     input: TaxInput | AnnualizedInput,
     cfg: YearConfig,
     method: QuarterlyMethod,
+    requiredAnnualPayment: Cents,
   ): QuarterlyPlan {
     if (method === "annualized") {
       if (!("periods" in input)) {
         throw new Error("annualized method requires AnnualizedInput.periods");
       }
-      return annualizedQuarterly(input, cfg, soleProprietorStrategy);
+      return annualizedQuarterly(input, cfg, soleProprietorStrategy, requiredAnnualPayment);
     }
-    return evenQuarterly(this.compute(input, cfg), cfg);
+    return evenQuarterly(this.compute(input, cfg), cfg, requiredAnnualPayment);
   },
 };
