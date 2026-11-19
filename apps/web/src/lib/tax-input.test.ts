@@ -335,7 +335,8 @@ describe("deriveYear — home-office actual (Form 8829)", () => {
     });
     const d = deriveYear(b, 2026);
     expect(d.homeOfficeDeduction).toBe(207_600);
-    expect(d.homeOfficeDisallowed).toBe(0);
+    expect(d.homeOfficeCarryover).toBe(0);
+    expect(d.homeOfficeLost).toBe(0);
     expect(d.homeOfficeAreaRejected).toBe(0);
   });
 
@@ -375,8 +376,9 @@ describe("deriveYear — home-office actual (Form 8829)", () => {
     });
     const d = deriveYear(b, 2026);
     expect(d.homeOfficeDeduction).toBe(700_00);
-    // $2,076 − $700 = $1,376 not allowed this year (line 43, not tracked)
-    expect(d.homeOfficeDisallowed).toBe(1_376_00);
+    // $2,076 − $700 = $1,376 carried to next year (line 43; reported, not tracked)
+    expect(d.homeOfficeCarryover).toBe(1_376_00);
+    expect(d.homeOfficeLost).toBe(0);
   });
 
   it("the simplified method is unchanged under the limit", () => {
@@ -394,7 +396,9 @@ describe("deriveYear — home-office actual (Form 8829)", () => {
     });
     const d = deriveYear(b, 2026);
     expect(d.homeOfficeDeduction).toBe(0);
-    expect(d.homeOfficeDisallowed).toBe(75_000);
+    // Simplified: the excess cannot be carried over, so it is lost
+    expect(d.homeOfficeLost).toBe(75_000);
+    expect(d.homeOfficeCarryover).toBe(0);
   });
 
   it("the simplified method is capped at tentative profit: $500 income − $300 expenses", () => {
@@ -404,9 +408,45 @@ describe("deriveYear — home-office actual (Form 8829)", () => {
       homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
     });
     const d = deriveYear(b, 2026);
-    // $750 simplified, limited to $200; $550 not allowed
+    // $750 simplified, limited to $200; $550 lost
     expect(d.homeOfficeDeduction).toBe(200_00);
-    expect(d.homeOfficeDisallowed).toBe(550_00);
+    expect(d.homeOfficeLost).toBe(550_00);
+  });
+
+  it("both methods in one year: the simplified amount takes the limit first", () => {
+    // A move: simplified 150 sq ft Jan 1 – Jun 30 (181 days), then actual from Jul 1 (184 days).
+    //   simplified: $750 × 181/365 = $371.92 (37,191.78 → 37,192¢)
+    //   actual:     $2,076 × 184/365 = $1,046.53 (104,653¢)
+    // Tentative profit $1,000 − $300 = $700.
+    //   simplified allowed $371.92 (nothing lost)
+    //   actual allowed $700 − $371.92 = $328.08; carryover $1,046.53 − $328.08 = $718.45
+    const b = makeBundle({
+      income: [income("i1", "2026-03-15", 1_000_00)],
+      expenses: [expense("e1", "2026-04-01", 300_00)],
+      homeOffice: [
+        homeOffice("h1", "2026-01-01", "2026-06-30", 150),
+        { ...actualOffice("2026-07-01"), id: "h2" },
+      ],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBe(700_00);
+    expect(d.homeOfficeLost).toBe(0);
+    expect(d.homeOfficeCarryover).toBe(71_845);
+  });
+
+  it("both methods, income below the simplified amount: simplified excess lost, all actual carried", () => {
+    // Tentative profit $200: simplified $371.92 → $200 allowed, $171.92 lost; actual $1,046.53 carried.
+    const b = makeBundle({
+      income: [income("i1", "2026-03-15", 200_00)],
+      homeOffice: [
+        homeOffice("h1", "2026-01-01", "2026-06-30", 150),
+        { ...actualOffice("2026-07-01"), id: "h2" },
+      ],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBe(200_00);
+    expect(d.homeOfficeLost).toBe(17_192);
+    expect(d.homeOfficeCarryover).toBe(104_653);
   });
 });
 

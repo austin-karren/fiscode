@@ -90,7 +90,7 @@ const sumHomeOfficeWithinYear = (
   year: number,
   seStartDate: string,
   through = `${year}-12-31`,
-): { amount: Cents; areaRejected: number } => {
+): { simplified: Cents; actual: Cents; areaRejected: number } => {
   const cfg = getYearConfig(year);
   const activeForYear = bundle.homeOffice.filter(
     (h) => h.deletedAt === null && h.startDate.slice(0, 4) <= String(year),
@@ -115,18 +115,35 @@ const sumHomeOfficeWithinYear = (
       if (r.areaRejected) areaRejected += 1;
     }
   }
-  return { amount: cents(simplified + actual), areaRejected };
+  return { simplified: cents(simplified), actual: cents(actual), areaRejected };
 };
 
 // Gross income limit (Form 8829 lines 8, 15, 27; Pub 587 "Gross income
 // limitation", which applies to the simplified method too): the home office
 // is allowed up to the tentative profit before it.
+//
+// What the limit cuts is treated differently by method. Actual: Form 8829
+// line 43 carries it to next year. Simplified: "Amount in excess of gross
+// income limitation may not be carried over"
+// (https://www.irs.gov/businesses/small-businesses-self-employed/simplified-option-for-home-office-deduction),
+// so it is lost. With both in one year, the simplified amount takes the limit
+// first: its excess would be lost, the actual excess is not.
 const limitHomeOffice = (
-  homeOffice: Cents,
+  homeOffice: { simplified: Cents; actual: Cents },
   gross: Cents,
   otherExpenses: Cents,
-): { allowed: Cents; disallowed: Cents } =>
-  limitToTentativeProfit(homeOffice, gross - otherExpenses);
+): { allowed: Cents; lost: Cents; carryover: Cents } => {
+  const simplified = limitToTentativeProfit(homeOffice.simplified, gross - otherExpenses);
+  const actual = limitToTentativeProfit(
+    homeOffice.actual,
+    gross - otherExpenses - simplified.allowed,
+  );
+  return {
+    allowed: addCents(simplified.allowed, actual.allowed),
+    lost: simplified.disallowed,
+    carryover: actual.disallowed,
+  };
+};
 
 // Returns a fractional month count (active-day-count / year-days * 12)
 // for the home-office simplified deduction. Day-count proration matches
@@ -233,8 +250,13 @@ export type DerivedYear = {
   directExpenses: Cents;
   mileageDeduction: Cents;
   homeOfficeDeduction: Cents;
-  /** Home office over the gross income limit: Form 8829 line 43's carryover, not tracked. */
-  homeOfficeDisallowed: Cents;
+  /** Simplified-method home office over the gross income limit. It cannot be carried over: lost. */
+  homeOfficeLost: Cents;
+  /**
+   * Actual-method home office over the gross income limit: Form 8829 line 43, which carries to next
+   * year. fiscode reports it but does not carry it across years.
+   */
+  homeOfficeCarryover: Cents;
   /** Actual-method configs skipped because the office is larger than the home. */
   homeOfficeAreaRejected: number;
   totalDeductibleExpenses: Cents;
@@ -257,7 +279,7 @@ export const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
   const mileageDeduction = sumMileageDeductionWithinYear(bundle, year, seStartDate);
   const homeOffice = sumHomeOfficeWithinYear(bundle, year, seStartDate);
   const limited = limitHomeOffice(
-    homeOffice.amount,
+    homeOffice,
     gross1099,
     addCents(directExpenses, mileageDeduction),
   );
@@ -268,7 +290,8 @@ export const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
     directExpenses,
     mileageDeduction,
     homeOfficeDeduction,
-    homeOfficeDisallowed: limited.disallowed,
+    homeOfficeLost: limited.lost,
+    homeOfficeCarryover: limited.carryover,
     homeOfficeAreaRejected: homeOffice.areaRejected,
     totalDeductibleExpenses: total,
     activeEntityType: activeEntityFor(bundle, year)?.type ?? "sole_prop",
@@ -331,7 +354,7 @@ export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedIn
     );
     // The period's home office, limited by the period's own tentative profit.
     const homeOffice = limitHomeOffice(
-      sumHomeOfficeWithinYear(bundle, year, seStartDate, cutoff).amount,
+      sumHomeOfficeWithinYear(bundle, year, seStartDate, cutoff),
       cumGross,
       otherExp,
     );
