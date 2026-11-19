@@ -17,8 +17,8 @@ function Home() {
       <div className="flex flex-col flex-1 justify-center px-4 py-8 text-center gap-4">
         <h1 className="font-semibold text-3xl">fiscode docs</h1>
         <p className="text-fd-muted-foreground max-w-xl mx-auto">
-          A local-only tax estimator + time tracker for 1099 / self-employed work. All data
-          stays on-device; CSV is the lossless source of truth.
+          A local-only tax estimator + time tracker for 1099 / self-employed work. All data stays
+          on-device; CSV is the lossless source of truth.
         </p>
         <Link
           to="/docs/$"
