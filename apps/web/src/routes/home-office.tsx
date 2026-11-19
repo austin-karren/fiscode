@@ -1,15 +1,8 @@
 import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
-import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FieldCheckbox } from "../components/forms/field-checkbox";
-import {
-  FormControl,
-  FormItem,
-  FormLabel,
-  FormMessage,
-  FormDescription,
-} from "@fiscode/ui/components/form";
+import { FormControl, FormItem, FormMessage, FormDescription } from "@fiscode/ui/components/form";
 import {
   Field,
   FieldContent,
@@ -17,20 +10,34 @@ import {
   FieldLabel,
   FieldTitle,
 } from "@fiscode/ui/components/field";
-import { HOME_OFFICE_METHOD_LABELS, labelFor, labelOptions } from "@fiscode/core";
-import { homeOfficeRepo } from "@fiscode/db";
+import {
+  cents,
+  formatUSD,
+  HOME_OFFICE_METHOD_LABELS,
+  labelFor,
+  todayIso,
+  yearOf,
+} from "@fiscode/core";
+import { buildBundle, homeOfficeRepo } from "@fiscode/db";
+import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
 import { useForm } from "@tanstack/react-form";
-import { Home } from "lucide-react";
+import { useState } from "react";
+import { CircleAlert, Home } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { optionalSqft } from "../lib/field-schemas";
+import {
+  homeOfficeFieldSchemas,
+  overlapsSimplified,
+  SECOND_SIMPLIFIED_MESSAGE,
+  withAreaCheck,
+} from "../lib/home-office-form";
+import { deriveYear } from "../lib/tax-input";
+import { HomeOfficeFields } from "../components/home-office-fields";
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
-import { CONFIG_YEARS_BACK, DatePicker, dateToIso } from "../components/forms/date-picker";
-import { SelectWithLabels } from "../components/forms/select-with-labels";
-import { LabelWithTooltip } from "../components/forms/labeled";
+import { dateToIso } from "../components/forms/date-picker";
 import { InfoTooltip } from "../components/info-tooltip";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
@@ -40,51 +47,66 @@ import { useToday } from "../lib/use-today";
 import { formatDate } from "../lib/format-date";
 import { SectionTitle } from "../components/section-title";
 
-const METHOD_OPTIONS = labelOptions(HOME_OFFICE_METHOD_LABELS);
-
 // Per-field schemas (onBlur). Form-level adds the cross-field "ack required"
 // refine and runs on submit. sqft inputs are optional non-negative integers —
 // blank stays blank (no deduction unless user fills it in), non-numeric is
 // rejected up front (previously silently coerced to NaN → null).
 const fs = {
-  startDate: z.date({ message: "Pick a start date" }),
-  method: z.enum(["simplified", "actual"], { message: "Pick a method" }),
-  officeSqft: optionalSqft,
-  homeSqft: optionalSqft,
+  ...homeOfficeFieldSchemas,
   regularExclusiveAck: z.boolean().refine((v) => v === true, "Acknowledge regular & exclusive use"),
 };
-const homeOfficeSchema = z.object(fs);
+const homeOfficeSchema = withAreaCheck(z.object(fs));
 
 export const Route = createFileRoute("/home-office")({
-  loader: async () => ({ rows: await homeOfficeRepo.list() }),
+  loader: async () => {
+    const bundle = await buildBundle();
+    const year = yearOf(todayIso());
+    // This year's limits, for the notices: area refused, carried, or lost.
+    return { rows: await homeOfficeRepo.list(), year, derived: deriveYear(bundle, year) };
+  },
   component: HomeOfficePage,
 });
 
 function HomeOfficePage() {
-  const { rows } = useLoaderData({ from: "/home-office" });
+  const { rows, year, derived } = useLoaderData({ from: "/home-office" });
   const router = useRouter();
+  // Set when a save is refused for a second simplified home in a year.
+  const [methodError, setMethodError] = useState<string | undefined>();
 
   const today = useToday();
   const form = useForm({
     defaultValues: {
       startDate: today as Date | undefined,
+      endDate: undefined as Date | undefined,
       method: "simplified",
       officeSqft: "",
       homeSqft: "",
+      rentMortgage: "",
+      utilities: "",
+      insurance: "",
       regularExclusiveAck: false,
     },
-    validators: { onSubmit: homeOfficeSchema },
+    validators: { onSubmit: homeOfficeSchema as never },
     onSubmit: async ({ value, formApi }) => {
       const parsed = homeOfficeSchema.parse(value);
+      const startDate = dateToIso(value.startDate!);
+      const endDate = value.endDate ? dateToIso(value.endDate) : null;
+      setMethodError(undefined);
+      if (overlapsSimplified(rows, { method: parsed.method, startDate, endDate })) {
+        setMethodError(SECOND_SIMPLIFIED_MESSAGE);
+        return;
+      }
+      // The engine reads the monthly costs for Actual only.
+      const actual = parsed.method === "actual";
       await homeOfficeRepo.create({
-        startDate: dateToIso(value.startDate!),
-        endDate: null,
+        startDate,
+        endDate,
         method: parsed.method,
         officeSqft: parsed.officeSqft,
         homeSqft: parsed.homeSqft,
-        monthlyRentMortgageCents: null,
-        monthlyUtilitiesCents: null,
-        monthlyInsuranceCents: null,
+        monthlyRentMortgageCents: actual ? parsed.rentMortgage : null,
+        monthlyUtilitiesCents: actual ? parsed.utilities : null,
+        monthlyInsuranceCents: actual ? parsed.insurance : null,
         regularExclusiveAck: parsed.regularExclusiveAck,
         notes: null,
         deletedAt: null,
@@ -112,95 +134,15 @@ function HomeOfficePage() {
               <SectionTitle>Add config</SectionTitle>
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1fr_1fr_1fr]">
-            <TSFormField
-              form={form}
-              name="startDate"
-              requirement="required"
-              validators={{ onBlur: fs.startDate }}
-            >
-              {(field) => (
-                <FormItem>
-                  <FormLabel>Start date</FormLabel>
-                  <FormControl>
-                    <DatePicker
-                      yearsBack={CONFIG_YEARS_BACK}
-                      value={field.state.value as Date | undefined}
-                      onBlur={field.handleBlur}
-                      onValueChange={(d) => field.handleChange(d)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField form={form} name="method" requirement="required">
-              {(field) => (
-                <FormItem>
-                  <LabelWithTooltip tooltip={GLOSSARY.homeOfficeMethod}>Method</LabelWithTooltip>
-                  <FormControl>
-                    <SelectWithLabels
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onValueChange={(v) => field.handleChange(v)}
-                      items={METHOD_OPTIONS}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField
-              form={form}
-              name="officeSqft"
-              requirement="optional"
-              validators={{ onBlur: fs.officeSqft }}
-            >
-              {(field) => (
-                <FormItem>
-                  <FormLabel>Office sqft</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField
-              form={form}
-              name="homeSqft"
-              requirement="optional"
-              validators={{ onBlur: fs.homeSqft }}
-            >
-              {(field) => (
-                <FormItem>
-                  <FormLabel>Home sqft</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
+          <CardContent className="grid items-start gap-3 pb-2">
+            <HomeOfficeFields form={form} methodError={methodError} />
             <TSFormField
               form={form}
               name="regularExclusiveAck"
               validators={{ onBlur: fs.regularExclusiveAck }}
             >
               {(field) => (
-                <FormItem className="relative @sm:col-span-2 @4xl:col-span-4">
+                <FormItem className="relative">
                   {/* The card is one <label>, so its text names the checkbox.
                       The info button stays outside it to keep that name clean. */}
                   <InfoTooltip
@@ -250,6 +192,8 @@ function HomeOfficePage() {
         </Card>
       </EnterToSubmitForm>
 
+      <HomeOfficeNotices year={year} derived={derived} />
+
       {rows.length === 0 ? (
         <NoDataEmpty
           icon={Home}
@@ -265,6 +209,7 @@ function HomeOfficePage() {
               <DataTable.HeaderCell>Method</DataTable.HeaderCell>
               <DataTable.HeaderCell align="right">Office sqft</DataTable.HeaderCell>
               <DataTable.HeaderCell align="right">Home sqft</DataTable.HeaderCell>
+              <DataTable.HeaderCell align="right">Monthly costs</DataTable.HeaderCell>
               <DataTable.HeaderCell />
             </DataTable.Row>
           </DataTable.Head>
@@ -282,8 +227,9 @@ function HomeOfficePage() {
                 <DataTable.Cell>{labelFor(HOME_OFFICE_METHOD_LABELS, r.method)}</DataTable.Cell>
                 <DataTable.Cell align="right">{r.officeSqft ?? "—"}</DataTable.Cell>
                 <DataTable.Cell align="right">{r.homeSqft ?? "—"}</DataTable.Cell>
+                <DataTable.Cell align="right">{monthlyCosts(r)}</DataTable.Cell>
                 <DataTable.Cell align="right">
-                  <EditHomeOfficeDialog row={r} onSaved={() => router.invalidate()} />
+                  <EditHomeOfficeDialog row={r} rows={rows} onSaved={() => router.invalidate()} />
                 </DataTable.Cell>
               </DataTable.Row>
             ))}
@@ -291,5 +237,73 @@ function HomeOfficePage() {
         </DataTable>
       )}
     </Page>
+  );
+}
+
+// An Actual config's monthly costs, summed; "—" for Simplified or none.
+const monthlyCosts = (r: {
+  method: string;
+  monthlyRentMortgageCents: number | null;
+  monthlyUtilitiesCents: number | null;
+  monthlyInsuranceCents: number | null;
+}) => {
+  if (r.method !== "actual") return "—";
+  const total =
+    (r.monthlyRentMortgageCents ?? 0) +
+    (r.monthlyUtilitiesCents ?? 0) +
+    (r.monthlyInsuranceCents ?? 0);
+  return total > 0 ? formatUSD(cents(total)) : "—";
+};
+
+/**
+ * What this year's limits did to the home office deduction (d-data #53):
+ * a config whose office is larger than its home deducts nothing; what the
+ * income limit cuts carries to next year's return under Actual (Form 8829
+ * line 43) and is lost under Simplified.
+ */
+function HomeOfficeNotices({
+  year,
+  derived,
+}: {
+  year: number;
+  derived: { homeOfficeAreaRejected: number; homeOfficeCarryover: number; homeOfficeLost: number };
+}) {
+  const rejected = derived.homeOfficeAreaRejected;
+  return (
+    <>
+      {rejected > 0 ? (
+        <Alert variant="warning">
+          <CircleAlert />
+          <AlertTitle>
+            {rejected === 1 ? "A config has" : `${rejected} configs have`} an office larger than the
+            home
+          </AlertTitle>
+          <AlertDescription>
+            {rejected === 1 ? "It deducts" : "They deduct"} $0 in {year}. Edit the square feet
+            below.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {derived.homeOfficeCarryover > 0 ? (
+        <Alert>
+          <AlertTitle>
+            Carries to your {year + 1} return: {formatUSD(cents(derived.homeOfficeCarryover))}
+          </AlertTitle>
+          <AlertDescription>
+            Actual method: the part of the deduction over this year&apos;s business income limit
+            carries over on Form 8829 (line 43). fiscode doesn&apos;t track it.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {derived.homeOfficeLost > 0 ? (
+        <Alert>
+          <AlertTitle>Not deductible: {formatUSD(cents(derived.homeOfficeLost))}</AlertTitle>
+          <AlertDescription>
+            Simplified method: the part over this year&apos;s business income limit can&apos;t be
+            carried over.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+    </>
   );
 }
