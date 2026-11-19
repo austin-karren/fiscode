@@ -115,3 +115,35 @@ describe("required custom controls", () => {
     expect(button).toHaveAccessibleDescription(/Required/);
   });
 });
+
+describe("aria-describedby", () => {
+  // Every id a control names in aria-describedby is an element on the page.
+  const describedIdsResolve = (root: ParentNode = document) => {
+    const controls = [...root.querySelectorAll("[aria-describedby]")];
+    for (const el of controls) {
+      for (const id of el.getAttribute("aria-describedby")!.split(/\s+/).filter(Boolean)) {
+        expect(
+          document.getElementById(id),
+          `#${id} named by ${el.outerHTML.slice(0, 60)}`,
+        ).not.toBeNull();
+      }
+    }
+    return controls.length;
+  };
+
+  it("names nothing on a field with no hint and no error", () => {
+    render(<Field requirement="required" />);
+    expect(screen.getByRole("textbox")).not.toHaveAttribute("aria-describedby");
+  });
+
+  it("names only elements that exist, with a hint, an error, or both", () => {
+    render(
+      <>
+        <Field hint="Demo hint text." />
+        <Field errors={["Enter a demo value"]} />
+        <Field hint="Demo hint text." errors={["Enter a demo value"]} />
+      </>,
+    );
+    expect(describedIdsResolve()).toBe(3);
+  });
+});

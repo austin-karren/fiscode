@@ -175,3 +175,20 @@ describe("adding a run of entries", () => {
     await waitFor(() => expect(card.getByLabelText("Amount")).toHaveFocus());
   });
 });
+
+describe("income form accessibility", () => {
+  it("names only elements that exist in every aria-describedby, after a failed submit too", async () => {
+    renderPage();
+    const ids = () =>
+      [...document.querySelectorAll("[aria-describedby]")].flatMap((el) =>
+        el.getAttribute("aria-describedby")!.split(/\s+/).filter(Boolean),
+      );
+    for (const id of ids()) expect(document.getElementById(id), `#${id}`).not.toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "abc" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await screen.findByText("Enter an amount, like 12.50");
+    expect(ids().length).toBeGreaterThan(0);
+    for (const id of ids()) expect(document.getElementById(id), `#${id}`).not.toBeNull();
+  });
+});

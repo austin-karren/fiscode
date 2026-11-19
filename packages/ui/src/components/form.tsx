@@ -40,7 +40,12 @@ type FormFieldContextValue = {
 
 const FormFieldContext = React.createContext<FormFieldContextValue | undefined>(undefined);
 
-type FormItemContextValue = { id: string };
+type FormItemContextValue = {
+  id: string;
+  /** Whether a FormDescription is rendered in this item. */
+  described: boolean;
+  setDescribed: (described: boolean) => void;
+};
 const FormItemContext = React.createContext<FormItemContextValue | undefined>(undefined);
 
 export const useFormField = () => {
@@ -65,6 +70,8 @@ export const useFormField = () => {
     formItemId: `${item.id}-form-item`,
     formDescriptionId: `${item.id}-form-item-description`,
     formMessageId: `${item.id}-form-item-message`,
+    described: item.described,
+    setDescribed: item.setDescribed,
     error,
     requirement: field.requirement,
   };
@@ -87,7 +94,8 @@ export function FormField({ name, errors, requirement, children }: FormFieldProp
 
 export function FormItem({ className, ...props }: React.ComponentProps<"div">) {
   const id = React.useId();
-  const value = React.useMemo(() => ({ id }), [id]);
+  const [described, setDescribed] = React.useState(false);
+  const value = React.useMemo(() => ({ id, described, setDescribed }), [id, described]);
   return (
     <FormItemContext.Provider value={value}>
       <div data-slot="form-item" className={cn("grid gap-1.5", className)} {...props} />
@@ -118,12 +126,18 @@ export function FormLabel({ className, children, ...props }: React.ComponentProp
 }
 
 export function FormControl({ ...props }: React.ComponentProps<typeof Slot.Root>) {
-  const { error, formItemId, formDescriptionId, formMessageId, requirement } = useFormField();
+  const { error, formItemId, formDescriptionId, formMessageId, requirement, described } =
+    useFormField();
+  // Only ids that are on the page: the description when the item has one,
+  // the message when it holds an error.
+  const describedBy = [described ? formDescriptionId : null, error ? formMessageId : null]
+    .filter(Boolean)
+    .join(" ");
   return (
     <Slot.Root
       data-slot="form-control"
       id={formItemId}
-      aria-describedby={!error ? formDescriptionId : `${formDescriptionId} ${formMessageId}`}
+      aria-describedby={describedBy || undefined}
       aria-invalid={!!error}
       aria-required={requirement === "required" ? true : undefined}
       {...props}
@@ -132,7 +146,13 @@ export function FormControl({ ...props }: React.ComponentProps<typeof Slot.Root>
 }
 
 export function FormDescription({ className, ...props }: React.ComponentProps<"p">) {
-  const { formDescriptionId } = useFormField();
+  const { formDescriptionId, setDescribed } = useFormField();
+  // Tells the item's control it may name this description. This registers a
+  // rendered element with its item; it does not derive state from props.
+  React.useLayoutEffect(() => {
+    setDescribed(true);
+    return () => setDescribed(false);
+  }, [setDescribed]);
   return (
     <p
       data-slot="form-description"
