@@ -1,5 +1,6 @@
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -27,6 +28,7 @@ import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { useToday } from "../lib/use-today";
 import { useEditDialog } from "../hooks/use-edit-dialog";
+import { recordLabel } from "../lib/record-label";
 
 const editSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -79,7 +81,7 @@ export function EditExpenseDialog({
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">
-            Edit
+            Edit <span className="sr-only">{recordLabel.expense(expense)}</span>
           </Button>
         }
       />
@@ -201,7 +203,8 @@ export function EditExpenseDialog({
               )}
             </TSFormField>
           </div>
-          <DialogFooter className="mt-4" showCloseButton>
+          <DialogFooter className="mt-4">
+            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
             <form.Subscribe
               selector={(s) => ({ canSubmit: s.canSubmit, isSubmitting: s.isSubmitting })}
             >

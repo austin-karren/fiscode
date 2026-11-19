@@ -1,5 +1,6 @@
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -21,6 +22,7 @@ import { optionalMoneyAmount } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { useEditDialog } from "../hooks/use-edit-dialog";
+import { recordLabel } from "../lib/record-label";
 
 const editSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -57,7 +59,7 @@ export function EditClientDialog({ client, onSaved }: { client: ClientRow; onSav
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">
-            Edit
+            Edit <span className="sr-only">{recordLabel.client(client)}</span>
           </Button>
         }
       />
@@ -126,7 +128,8 @@ export function EditClientDialog({ client, onSaved }: { client: ClientRow; onSav
               )}
             </TSFormField>
           </div>
-          <DialogFooter className="mt-4" showCloseButton>
+          <DialogFooter className="mt-4">
+            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
             <form.Subscribe
               selector={(s) => ({ canSubmit: s.canSubmit, isSubmitting: s.isSubmitting })}
             >

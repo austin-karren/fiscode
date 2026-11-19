@@ -52,7 +52,7 @@ describe("edit entity dialog", () => {
     update.mockRejectedValueOnce(new EntityOverlapError(soleProp));
     const onSaved = vi.fn();
     render(<EditEntityDialog entity={llc} onSaved={onSaved} />);
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Save" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(MESSAGE);
@@ -65,7 +65,7 @@ describe("edit entity dialog", () => {
     update.mockResolvedValueOnce(llc);
     const onSaved = vi.fn();
     render(<EditEntityDialog entity={llc} onSaved={onSaved} />);
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Save" }));
     await screen.findByRole("alert");
 
@@ -80,7 +80,7 @@ describe("edit entity dialog", () => {
       new EntityDatesError({ startDate: "2026-11-02", endDate: "2023-01-01" }),
     );
     render(<EditEntityDialog entity={llc} onSaved={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Save" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -91,7 +91,7 @@ describe("edit entity dialog", () => {
   it("puts an overlap on the Start field", async () => {
     update.mockRejectedValueOnce(new EntityOverlapError(soleProp));
     render(<EditEntityDialog entity={llc} onSaved={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Save" }));
 
     const message = await screen.findByText(MESSAGE);
@@ -104,7 +104,7 @@ describe("edit entity dialog", () => {
       new EntityDatesError({ startDate: "2026-11-02", endDate: "2023-01-01" }),
     );
     render(<EditEntityDialog entity={llc} onSaved={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Save" }));
 
     const message = await screen.findByText(/is before the start date/);
@@ -116,7 +116,7 @@ describe("edit entity dialog", () => {
       new EntityDatesError({ startDate: "2026-11-02", endDate: "2023-01-01" }),
     );
     render(<EditEntityDialog entity={llc} onSaved={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
     await screen.findByRole("dialog");
 
     // Type an End before the Start; the save is refused.
@@ -130,7 +130,7 @@ describe("edit entity dialog", () => {
 
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
     await screen.findByRole("dialog");
 
     expect(controlLabelled("End (optional)")).not.toHaveTextContent("2023");
@@ -149,7 +149,7 @@ describe("edit entity dialog", () => {
         <EditEntityDialog entity={llc} onSaved={onSaved} />
       </form>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));

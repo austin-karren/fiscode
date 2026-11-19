@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -28,6 +29,7 @@ import {
 } from "../lib/entity-period-error";
 import { useToday } from "../lib/use-today";
 import { useEditDialog } from "../hooks/use-edit-dialog";
+import { recordLabel } from "../lib/record-label";
 
 const ENTITY_OPTIONS = labelOptions(ENTITY_TYPE_LABELS).filter((o) => o.value !== "s_corp");
 
@@ -74,7 +76,7 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">
-            Edit
+            Edit <span className="sr-only">{recordLabel.entity(entity)}</span>
           </Button>
         }
       />
@@ -152,7 +154,8 @@ export function EditEntityDialog({ entity, onSaved }: { entity: EntityRow; onSav
               )}
             </TSFormField>
           </div>
-          <DialogFooter className="mt-4" showCloseButton>
+          <DialogFooter className="mt-4">
+            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
             <form.Subscribe
               selector={(s) => ({ canSubmit: s.canSubmit, isSubmitting: s.isSubmitting })}
             >

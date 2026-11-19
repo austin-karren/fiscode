@@ -1,5 +1,6 @@
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -24,6 +25,7 @@ import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { useToday } from "../lib/use-today";
 import { useEditDialog } from "../hooks/use-edit-dialog";
+import { recordLabel } from "../lib/record-label";
 
 const METHOD_OPTIONS = labelOptions(HOME_OFFICE_METHOD_LABELS);
 
@@ -73,7 +75,7 @@ export function EditHomeOfficeDialog({
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">
-            Edit
+            Edit <span className="sr-only">{recordLabel.homeOffice(row)}</span>
           </Button>
         }
       />
@@ -183,7 +185,8 @@ export function EditHomeOfficeDialog({
               )}
             </TSFormField>
           </div>
-          <DialogFooter className="mt-4" showCloseButton>
+          <DialogFooter className="mt-4">
+            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
             <form.Subscribe
               selector={(s) => ({ canSubmit: s.canSubmit, isSubmitting: s.isSubmitting })}
             >

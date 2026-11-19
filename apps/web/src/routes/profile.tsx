@@ -49,6 +49,8 @@ import { EditSpouseDialog } from "../components/edit-spouse-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { SectionTitle } from "../components/section-title";
+import { focusAfterRemoval } from "../lib/focus-after-removal";
+import { recordLabel } from "../lib/record-label";
 
 const FILING_OPTIONS = labelOptions(FILING_STATUS_LABELS);
 
@@ -659,7 +661,7 @@ function ProfileFormPanel({
               })}
             >
               {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+                <Button type="submit" variant="outline" disabled={!canSubmit || isSubmitting}>
                   {isSubmitting ? "Adding..." : "Add entity period"}
                 </Button>
               )}
@@ -683,6 +685,44 @@ function ProfileFormPanel({
               </SectionTitle>
             </CardTitle>
           </CardHeader>
+          {/* Rows first, then the form, as in the entity card. */}
+          <CardContent>
+            <ul className="space-y-1 text-sm">
+              {spouses.map((s) => (
+                <li key={s.id} className="flex items-center gap-3">
+                  <span>
+                    {formatDate(s.startDate)} – {s.endDate ? formatDate(s.endDate) : "open"} · $
+                    {(s.annualW2WagesCents / 100).toLocaleString()}
+                  </span>
+                  <div className="ms-auto inline-flex gap-1">
+                    <EditSpouseDialog spouse={s} onSaved={() => router.invalidate()} />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={async (e) => {
+                        const refocus = focusAfterRemoval(e.currentTarget);
+                        await softDeleteWithUndo({
+                          repo: spouseRepo,
+                          row: s,
+                          message: "Spouse block deleted.",
+                          onChange: () => router.invalidate(),
+                        });
+                        await router.invalidate();
+                        refocus();
+                      }}
+                    >
+                      Delete <span className="sr-only">{recordLabel.spouse(s)}</span>
+                    </Button>
+                  </div>
+                </li>
+              ))}
+              {spouses.length === 0 ? (
+                <li className="text-muted-foreground">No spouse blocks.</li>
+              ) : null}
+            </ul>
+          </CardContent>
           {filesJointly ? (
             <CardContent
               // Two groups: the dates (half the row each), then the three
@@ -799,39 +839,6 @@ function ProfileFormPanel({
               </p>
             </CardContent>
           )}
-          <CardContent>
-            <ul className="space-y-1 text-sm">
-              {spouses.map((s) => (
-                <li key={s.id} className="flex items-center gap-3">
-                  <span>
-                    {formatDate(s.startDate)} – {s.endDate ? formatDate(s.endDate) : "open"} · $
-                    {(s.annualW2WagesCents / 100).toLocaleString()}
-                  </span>
-                  <div className="ms-auto inline-flex gap-1">
-                    <EditSpouseDialog spouse={s} onSaved={() => router.invalidate()} />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        void softDeleteWithUndo({
-                          repo: spouseRepo,
-                          row: s,
-                          message: "Spouse block deleted.",
-                          onChange: () => router.invalidate(),
-                        })
-                      }
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </li>
-              ))}
-              {spouses.length === 0 ? (
-                <li className="text-muted-foreground">No spouse blocks.</li>
-              ) : null}
-            </ul>
-          </CardContent>
           {filesJointly ? (
             <CardFooter className="justify-end">
               <spouseForm.Subscribe
@@ -841,7 +848,7 @@ function ProfileFormPanel({
                 })}
               >
                 {({ canSubmit, isSubmitting }) => (
-                  <Button type="submit" disabled={!canSubmit || isSubmitting}>
+                  <Button type="submit" variant="outline" disabled={!canSubmit || isSubmitting}>
                     {isSubmitting ? "Adding..." : "Add"}
                   </Button>
                 )}

@@ -89,7 +89,7 @@ describe("income list with an archived client", () => {
 
   it("keeps the client link when such a row is edited and saved", async () => {
     renderPage();
-    fireEvent.click(within(rowFor("Demo Archived Co")).getByRole("button", { name: "Edit" }));
+    fireEvent.click(within(rowFor("Demo Archived Co")).getByRole("button", { name: /^Edit\b/ }));
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByLabelText("Client (optional)")).toHaveTextContent(
@@ -119,7 +119,7 @@ describe("income list with an archived client", () => {
 describe("income row delete", () => {
   it("deletes at once with no dialog, and Undo restores the exact row", async () => {
     renderPage();
-    fireEvent.click(within(rowFor("Demo Live Co")).getByRole("button", { name: "Delete" }));
+    fireEvent.click(within(rowFor("Demo Live Co")).getByRole("button", { name: /^Delete\b/ }));
 
     await waitFor(() => expect(softDelete).toHaveBeenCalledWith("inc_2"));
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
@@ -127,6 +127,45 @@ describe("income row delete", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(revertTo).toHaveBeenCalledWith("inc_2", rowForLive));
+  });
+});
+
+describe("row actions and the Edit dialog", () => {
+  it("names the record on each row's Edit and Delete", () => {
+    renderPage();
+    const row = within(rowFor("Demo Live Co"));
+    expect(
+      row.getByRole("button", { name: "Edit income Mar 1, 2026, $1,200.00" }),
+    ).toBeInTheDocument();
+    expect(
+      row.getByRole("button", { name: "Delete income Mar 1, 2026, $1,200.00" }),
+    ).toBeInTheDocument();
+  });
+
+  it("moves focus to the next row after a Delete, not to the page body", async () => {
+    renderPage();
+    fireEvent.click(within(rowFor("Demo Live Co")).getByRole("button", { name: /^Delete\b/ }));
+    await waitFor(() => expect(softDelete).toHaveBeenCalledWith("inc_2"));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(rowFor("Demo Archived Co")).getAllByRole("button")[0],
+      ),
+    );
+  });
+
+  it("gives the Edit dialog a Cancel before Save, and only the header's Close", async () => {
+    renderPage();
+    fireEvent.click(within(rowFor("Demo Live Co")).getByRole("button", { name: /^Edit\b/ }));
+    const dialog = within(await screen.findByRole("dialog"));
+    const footer = dialog.getByRole("button", { name: "Save" }).parentElement!;
+    const buttons = within(footer)
+      .getAllByRole("button")
+      .map((b) => b.textContent);
+    expect(buttons).toEqual(["Cancel", "Save"]);
+    expect(dialog.getAllByRole("button", { name: "Close" })).toHaveLength(1);
+
+    fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 });
 

@@ -327,8 +327,8 @@ describe("spouse income blocks", () => {
     loaded.spouses = [block];
     render(<ProfilePage />);
     expect(card()).toHaveTextContent("Jan 1, 2026 – open");
-    expect(within(card()).getByRole("button", { name: "Edit" })).toBeInTheDocument();
-    expect(within(card()).getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(within(card()).getByRole("button", { name: /^Edit\b/ })).toBeInTheDocument();
+    expect(within(card()).getByRole("button", { name: /^Delete\b/ })).toBeInTheDocument();
   });
 
   it("deletes a block at once, and Undo brings back the exact block", async () => {
@@ -339,7 +339,7 @@ describe("spouse income blocks", () => {
         <Toaster />
       </>,
     );
-    fireEvent.click(within(card()).getByRole("button", { name: "Delete" }));
+    fireEvent.click(within(card()).getByRole("button", { name: /^Delete\b/ }));
     await waitFor(() => expect(spouseSoftDelete).toHaveBeenCalledWith("sp_demo"));
     expect(invalidate).toHaveBeenCalled();
     fireEvent.click(await screen.findByRole("button", { name: "Undo" }));

@@ -25,6 +25,8 @@ import { softDeleteWithUndo } from "../lib/soft-delete";
 import { useToday } from "../lib/use-today";
 import { formatDate } from "../lib/format-date";
 import { SectionTitle } from "../components/section-title";
+import { focusAfterRemoval } from "../lib/focus-after-removal";
+import { recordLabel } from "../lib/record-label";
 
 const timeSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -108,14 +110,19 @@ function TimePage() {
     addCard.current?.querySelector<HTMLElement>('[id$="-form-item"]')?.focus();
   };
 
-  const remove = (row: (typeof entries)[number]) =>
-    softDeleteWithUndo({
+  // Focus moves to the next row (or the table) once this one is gone.
+  const remove = async (row: (typeof entries)[number], from: HTMLElement) => {
+    const refocus = focusAfterRemoval(from);
+    await softDeleteWithUndo({
       repo: timeRepo,
       row,
       message: "Time entry deleted.",
       undoneMessage: "Time entry restored.",
       onChange: () => router.invalidate(),
     });
+    await router.invalidate();
+    refocus();
+  };
 
   return (
     <Page
@@ -277,8 +284,13 @@ function TimePage() {
                       <Button variant="ghost" size="sm" onClick={() => duplicate(t)}>
                         Duplicate
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => remove(t)}>
-                        Delete
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={(e) => void remove(t, e.currentTarget)}
+                      >
+                        Delete <span className="sr-only">{recordLabel.time(t)}</span>
                       </Button>
                     </div>
                   </DataTable.Cell>

@@ -1,5 +1,6 @@
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -25,6 +26,7 @@ import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { archivedSuffix, pickableParents } from "./parent-name";
 import { useToday } from "../lib/use-today";
 import { useEditDialog } from "../hooks/use-edit-dialog";
+import { recordLabel } from "../lib/record-label";
 
 const KIND_OPTIONS = [
   { value: "recurring", label: "Recurring" },
@@ -80,7 +82,7 @@ export function EditIncomeDialog({
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">
-            Edit
+            Edit <span className="sr-only">{recordLabel.income(income)}</span>
           </Button>
         }
       />
@@ -188,7 +190,8 @@ export function EditIncomeDialog({
               )}
             </TSFormField>
           </div>
-          <DialogFooter className="mt-4" showCloseButton>
+          <DialogFooter className="mt-4">
+            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
             <form.Subscribe
               selector={(s) => ({ canSubmit: s.canSubmit, isSubmitting: s.isSubmitting })}
             >

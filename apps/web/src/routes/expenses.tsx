@@ -44,6 +44,8 @@ import { GLOSSARY } from "../lib/tax-glossary";
 import { useToday } from "../lib/use-today";
 import { formatDate } from "../lib/format-date";
 import { SectionTitle } from "../components/section-title";
+import { focusAfterRemoval } from "../lib/focus-after-removal";
+import { recordLabel } from "../lib/record-label";
 
 const CATEGORIES = Object.entries(EXPENSE_CATEGORY_LABELS);
 
@@ -132,14 +134,19 @@ function ExpensesPage() {
     addCard.current?.querySelector<HTMLElement>('[id$="-form-item"]')?.focus();
   };
 
-  const remove = (row: (typeof expenses)[number]) =>
-    softDeleteWithUndo({
+  // Focus moves to the next row (or the table) once this one is gone.
+  const remove = async (row: (typeof expenses)[number], from: HTMLElement) => {
+    const refocus = focusAfterRemoval(from);
+    await softDeleteWithUndo({
       repo: expenseRepo,
       row,
       message: "Expense deleted.",
       undoneMessage: "Expense restored.",
       onChange: () => router.invalidate(),
     });
+    await router.invalidate();
+    refocus();
+  };
 
   return (
     <Page
@@ -377,8 +384,13 @@ function ExpensesPage() {
                       <Button variant="ghost" size="sm" onClick={() => duplicate(x)}>
                         Duplicate
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => remove(x)}>
-                        Delete
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={(e) => void remove(x, e.currentTarget)}
+                      >
+                        Delete <span className="sr-only">{recordLabel.expense(x)}</span>
                       </Button>
                     </div>
                   </DataTable.Cell>

@@ -26,7 +26,7 @@ const income = {
 afterEach(cleanup);
 
 const openDialog = async () => {
-  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
   return screen.findByRole("dialog");
 };
 
