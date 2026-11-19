@@ -8,6 +8,9 @@ const { upsert, invalidate, originalTz } = vi.hoisted(() => {
   process.env.TZ = "America/Denver";
   return { upsert: vi.fn(async () => {}), invalidate: vi.fn(), originalTz };
 });
+const { moveFirstStart } = vi.hoisted(() => ({
+  moveFirstStart: vi.fn(async () => ({ moved: true, id: "ent_1", from: "2026-11-02" })),
+}));
 
 // What the loader returns; a test may give it entity periods or spouse blocks.
 const loaded: { profile: typeof profile; entities: unknown[]; spouses: unknown[] } = {
@@ -34,7 +37,7 @@ const profile = {
 // neither exists in jsdom. Both are replaced at the package boundary.
 vi.mock("@fiscode/db", () => ({
   profileRepo: { get: async () => profile, upsert },
-  entityRepo: { list: async () => [], create: vi.fn(), update: vi.fn() },
+  entityRepo: { list: async () => [], create: vi.fn(), update: vi.fn(), moveFirstStart },
   spouseRepo: { list: async () => [], create: vi.fn(), update: vi.fn() },
 }));
 
@@ -122,5 +125,72 @@ describe("profile period lists", () => {
     expect(text).toContain("Single-member LLC");
     expect(text).toContain("Jan 1, 2026 – Jun 30, 2026");
     for (const list of lists) expectNoRawValues(list);
+  });
+});
+
+describe("changing the SE start offers to move the first entity period", () => {
+  // Demo: the entity period was restored with a later start than the new SE start.
+  const soleProp = {
+    id: "ent_1",
+    type: "sole_prop",
+    startDate: "2026-11-02",
+    endDate: null,
+    notes: null,
+    deletedAt: null,
+    createdAt: "2026-06-04T12:00:00.000Z",
+    updatedAt: "2026-06-04T12:00:00.000Z",
+  };
+  afterEach(() => {
+    loaded.entities = [];
+  });
+
+  const changeStartTo = async (typedDate: string) => {
+    fireEvent.click(screen.getByRole("button", { name: /Self-employment start date/ }));
+    const typed = await screen.findByLabelText("Type a date");
+    fireEvent.change(typed, { target: { value: typedDate } });
+    fireEvent.keyDown(typed, { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+    await screen.findByText("Save changes to scope-shifting fields?");
+  };
+  const moveBox = () =>
+    screen.queryByRole("checkbox", { name: /Also move your first entity period/ });
+
+  it("ticks the move by default and moves the period after saving the profile", async () => {
+    loaded.entities = [soleProp];
+    render(<ProfilePage />);
+    await changeStartTo("01/15/2026");
+
+    expect(moveBox()).toBeChecked();
+    expect(moveBox()).toHaveAccessibleName(
+      "Also move your first entity period (Sole proprietor) to start Jan 15, 2026, from Nov 2, 2026.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(moveFirstStart).toHaveBeenCalledWith("2026-01-15"));
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ seStartDate: "2026-01-15" }));
+  });
+
+  it("saves the profile only when the box is cleared", async () => {
+    loaded.entities = [soleProp];
+    render(<ProfilePage />);
+    await changeStartTo("01/15/2026");
+    fireEvent.click(moveBox()!);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(upsert).toHaveBeenCalledTimes(1));
+    expect(moveFirstStart).not.toHaveBeenCalled();
+  });
+
+  it("offers nothing when there is no entity period", async () => {
+    render(<ProfilePage />);
+    await changeStartTo("01/15/2026");
+    expect(moveBox()).not.toBeInTheDocument();
+  });
+
+  it("offers nothing when the first period already starts on the new date", async () => {
+    loaded.entities = [{ ...soleProp, startDate: "2026-01-15" }];
+    render(<ProfilePage />);
+    await changeStartTo("01/15/2026");
+    expect(moveBox()).not.toBeInTheDocument();
   });
 });

@@ -10,26 +10,30 @@ import { formatDate } from "../lib/format-date";
 export function PreSeStartBadge({
   rowDate,
   seStartDate,
+  startupHint = false,
 }: {
   rowDate: string;
   seStartDate: string | null | undefined;
+  // Expenses only: a cost before the start can still count as a startup cost.
+  startupHint?: boolean;
 }) {
   if (!seStartDate || rowDate >= seStartDate) return null;
+  const why = `Not counted in the tax estimate: dated before your start date, ${formatDate(seStartDate)}.${
+    startupHint ? " Tick Startup expense if it was a startup cost." : ""
+  }`;
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <span
-            aria-label="Excluded from tax estimate — dated before your SE start"
+            aria-label={why}
             className="inline-flex items-center text-amber-600 dark:text-amber-400"
           >
             <AlertTriangle className="size-3.5" />
           </span>
         }
       />
-      <TooltipContent>
-        Excluded from the tax estimate — dated before your SE start ({formatDate(seStartDate)}).
-      </TooltipContent>
+      <TooltipContent>{why}</TooltipContent>
     </Tooltip>
   );
 }

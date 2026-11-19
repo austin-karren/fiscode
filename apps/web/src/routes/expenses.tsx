@@ -290,7 +290,11 @@ function ExpensesPage() {
                       {x.startupExpense ? (
                         <Badge variant="secondary">Startup §195</Badge>
                       ) : (
-                        <PreSeStartBadge rowDate={x.date} seStartDate={profile?.seStartDate} />
+                        <PreSeStartBadge
+                          rowDate={x.date}
+                          seStartDate={profile?.seStartDate}
+                          startupHint
+                        />
                       )}
                     </span>
                   </DataTable.Cell>

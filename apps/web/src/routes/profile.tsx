@@ -156,10 +156,35 @@ function ProfileFormPanel({
         quarterlyMethod: parsed.quarterlyMethod,
         prepLeadDays: parsed.prepLeadDays,
       });
-      toast.success("Profile updated.");
+      const newStart = dateToIso(value.seStartDate!);
+      if (moveEntityStart && entityStartToMove(newStart)) {
+        const moved = await entityRepo.moveFirstStart(newStart);
+        if (moved.moved) {
+          toast.success(
+            `Profile updated. Your first entity period now starts ${formatDate(newStart)}.`,
+          );
+        } else if (moved.reason === "rejected") {
+          toast.error(`Profile updated. The entity period was not moved: ${moved.error.message}`);
+        } else {
+          toast.success("Profile updated.");
+        }
+      } else {
+        toast.success("Profile updated.");
+      }
       router.invalidate();
     },
   });
+
+  // The first entity period, when a new SE start would move its start: the
+  // confirm dialog offers that move (on by default).
+  const firstEntity = entities
+    .filter((e) => e.deletedAt === null)
+    .toSorted((a, b) => (a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : 0))[0];
+  const entityStartToMove = (newStart: string) =>
+    newStart !== profile.seStartDate &&
+    firstEntity !== undefined &&
+    firstEntity.startDate !== newStart;
+  const [moveEntityStart, setMoveEntityStart] = useState(true);
 
   // Set when the repo blocks an entity period: an overlap, or an end before the start.
   // Set when the repo blocks the dates; shown on the field it is about.
@@ -269,7 +294,22 @@ function ProfileFormPanel({
         confirmLabel="Save"
         confirmVariant="destructive"
         onConfirm={() => void profileForm.handleSubmit()}
-      />
+      >
+        {(() => {
+          const v = profileForm.state.values.seStartDate;
+          const newStart = v ? dateToIso(v) : undefined;
+          if (!newStart || !firstEntity || !entityStartToMove(newStart)) return null;
+          return (
+            <label className="flex items-start gap-2 text-sm">
+              <FieldCheckbox checked={moveEntityStart} onCheckedChange={setMoveEntityStart} />
+              <span>
+                Also move your first entity period ({labelFor(ENTITY_TYPE_LABELS, firstEntity.type)}
+                ) to start {formatDate(newStart)}, from {formatDate(firstEntity.startDate)}.
+              </span>
+            </label>
+          );
+        })()}
+      </ConfirmDialog>
 
       <EnterToSubmitForm onSubmit={handleProfileSubmit}>
         <Card>

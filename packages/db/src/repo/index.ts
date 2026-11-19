@@ -39,6 +39,7 @@ import { and, asc, eq } from "drizzle-orm";
 import {
   EntityDatesError,
   EntityOverlapError,
+  EntityPeriodError,
   endsBeforeStart,
   findEntityOverlap,
 } from "@fiscode/core";
@@ -146,7 +147,31 @@ export const entityRepo = {
     if (!snapshot.deletedAt) await assertPeriodAllowed({ ...snapshot, id });
     return entityCrud.revertTo(id, snapshot);
   },
+  /**
+   * Move the earliest live period's start to `startDate`, the Profile's new
+   * SE start. Goes through `update`, so the period rules apply; a rejection
+   * is returned, not thrown, and writes nothing.
+   */
+  async moveFirstStart(startDate: string): Promise<MoveFirstStartResult> {
+    const first = (await entityCrud.list())
+      .filter((r) => !r.deletedAt)
+      .sort((a, b) => (a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : 0))[0];
+    if (!first) return { moved: false, reason: "none" };
+    if (first.startDate === startDate) return { moved: false, reason: "same" };
+    try {
+      await entityRepo.update(first.id, { startDate });
+    } catch (error) {
+      if (error instanceof EntityPeriodError) return { moved: false, reason: "rejected", error };
+      throw error;
+    }
+    return { moved: true, id: first.id, from: first.startDate };
+  },
 };
+
+export type MoveFirstStartResult =
+  | { moved: true; id: string; from: string }
+  | { moved: false; reason: "none" | "same" }
+  | { moved: false; reason: "rejected"; error: EntityPeriodError };
 export const spouseRepo = makeCrudRepo<SpouseInsert, SpouseRow>(spouse, "spouse", {
   orderBy: "startDate",
 });
