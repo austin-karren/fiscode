@@ -1,3 +1,4 @@
+/// <reference types="vite-plugin-pwa/client" />
 import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -5,6 +6,9 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import { boot } from "@fiscode/db";
 
+import { registerSW } from "virtual:pwa-register";
+
+import { registerServiceWorker } from "./lib/pwa-update";
 import { router } from "./router";
 import {
   hydrateOverlayFromCache,
@@ -25,6 +29,9 @@ boot().then(async () => {
       <RouterProvider router={router} />
     </StrictMode>,
   );
+
+  // After the first render, so the update toast has a Toaster to show in.
+  registerServiceWorker(registerSW);
 
   // Fire-and-forget background sync — failures are logged at debug level
   // only. Errors surface visibly only on the /tax-data settings page.

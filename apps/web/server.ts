@@ -42,6 +42,17 @@ app.use("/index.html", async (c, next) => {
   c.header("Cache-Control", "no-store");
 });
 
+// The service worker and the manifest are not hashed either. The browser must
+// revalidate them on every check, or a deploy is not noticed.
+app.use("/sw.js", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "no-cache");
+});
+app.use("/manifest.webmanifest", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "no-cache");
+});
+
 // Health probe for orchestrators (Dokploy, Railway, etc.).
 app.get("/healthz", (c) => c.text("ok"));
 

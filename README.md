@@ -44,7 +44,7 @@ sync, docs site, native desktop).
 - **shadcn/ui** + **Tailwind v4**
 - **Drizzle** + **SQLocal** (sqlite-wasm over OPFS)
 - **Papaparse** for CSV
-- **vite-plugin-pwa**
+- **vite-plugin-pwa**: web manifest plus a service worker that precaches the app, so it installs and reloads offline. A new deploy waits behind an "Update available" toast until you press Reload. The build fails if the manifest or worker is missing (`apps/web/scripts/check-pwa-build.ts`).
 - **vitest**, **oxlint + oxfmt**
 
 ## Docs
