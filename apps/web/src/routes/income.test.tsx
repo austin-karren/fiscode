@@ -153,7 +153,7 @@ describe("adding a run of entries", () => {
     );
   });
 
-  it("after Add, keeps the date and client, clears the rest, and focuses Amount", async () => {
+  it("after Add, keeps the date, client and kind, clears the rest, and focuses Amount", async () => {
     renderPage();
     fireEvent.click(within(rowFor("Mar 1, 2026")).getByRole("button", { name: "Duplicate" }));
     fireEvent.click(within(addCard()).getByRole("button", { name: "Add" }));
@@ -167,6 +167,7 @@ describe("adding a run of entries", () => {
     expect(card.getByLabelText("Description")).toHaveValue("");
     expect(card.getByLabelText("Date")).toHaveTextContent("Mar 1, 2026");
     expect(card.getByRole("combobox", { name: "Client" })).toHaveTextContent("Demo Live Co");
+    expect(card.getByRole("combobox", { name: "Kind" })).toHaveTextContent("Consulting");
     await waitFor(() => expect(card.getByLabelText("Amount")).toHaveFocus());
   });
 });

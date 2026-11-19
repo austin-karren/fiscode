@@ -10,7 +10,7 @@ import { Clock } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { hoursWorked } from "../lib/field-schemas";
+import { hoursField, hoursWorked } from "../lib/field-schemas";
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
@@ -95,7 +95,7 @@ function TimePage() {
     form.reset(
       {
         date: isoToDate(row.date) ?? today,
-        hours: String(row.minutes / 60),
+        hours: hoursField(row.minutes),
         // An archived client cannot be picked for a new entry.
         clientId: clients.some((c) => c.id === row.clientId) ? (row.clientId ?? "") : "",
         description: row.description ?? "",

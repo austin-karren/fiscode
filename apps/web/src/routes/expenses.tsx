@@ -95,8 +95,12 @@ function ExpensesPage() {
         deletedAt: null,
       });
       toast.success("Expense added.");
-      // A run of entries shares the date: keep it, clear the rest, go on with the amount.
-      formApi.reset({ ...empty, date: value.date }, { keepDefaultValues: true });
+      // A run of entries shares the date and the category: keep those, clear the
+      // rest, go on with the amount.
+      formApi.reset(
+        { ...empty, date: value.date, category: value.category },
+        { keepDefaultValues: true },
+      );
       router.invalidate();
       firstValue.current?.focus();
     },

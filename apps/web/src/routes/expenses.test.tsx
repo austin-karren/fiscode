@@ -103,9 +103,9 @@ describe("adding a run of expenses", () => {
     id: "ex_demo",
     date: "2026-03-05",
     amountCents: 12000,
-    category: "software_subs",
+    category: "travel",
     clientId: null,
-    description: "Demo software subscription",
+    description: "Demo conference travel",
     reason: null,
     flagForSection179: false,
     startupExpense: false,
@@ -118,13 +118,13 @@ describe("adding a run of expenses", () => {
     loaded.expenses = [];
   });
 
-  it("Duplicate fills the form; after Add the date stays, the rest clears, Amount has focus", async () => {
+  it("Duplicate fills the form; after Add the date and category stay, the rest clears, Amount has focus", async () => {
     loaded.expenses = [row];
     render(<ExpensesPage />);
     fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
     const card = within(addCard());
     expect(card.getByLabelText("Amount")).toHaveValue("120.00");
-    expect(card.getByLabelText("Description")).toHaveValue("Demo software subscription");
+    expect(card.getByLabelText("Description")).toHaveValue("Demo conference travel");
     await waitFor(() => expect(card.getByLabelText("Date")).toHaveFocus());
 
     fireEvent.click(card.getByRole("button", { name: "Add" }));
@@ -136,6 +136,7 @@ describe("adding a run of expenses", () => {
     await waitFor(() => expect(card.getByLabelText("Amount")).toHaveValue(""));
     expect(card.getByLabelText("Description")).toHaveValue("");
     expect(card.getByLabelText("Date")).toHaveTextContent("Mar 5, 2026");
+    expect(card.getByRole("combobox", { name: "Category" })).toHaveTextContent("Travel");
     await waitFor(() => expect(card.getByLabelText("Amount")).toHaveFocus());
   });
 });

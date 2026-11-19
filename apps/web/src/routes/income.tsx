@@ -89,10 +89,10 @@ function IncomePage() {
         deletedAt: null,
       });
       toast.success("Income entry added.");
-      // A run of entries (a year of monthly income) shares the date and the
-      // client: keep those, clear the rest, and go on with the amount.
+      // A run of entries (a year of monthly income) shares the date, the client
+      // and the kind: keep those, clear the rest, and go on with the amount.
       formApi.reset(
-        { ...empty, date: value.date, clientId: value.clientId },
+        { ...empty, date: value.date, clientId: value.clientId, kind: value.kind },
         { keepDefaultValues: true },
       );
       router.invalidate();

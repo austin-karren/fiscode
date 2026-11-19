@@ -13,11 +13,18 @@ vi.mock("@fiscode/db", () => ({
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
-  useLoaderData: () => ({ entries: [], clients: [], profile: null }),
+  useLoaderData: () => loaded,
   useRouter: () => ({ invalidate: vi.fn() }),
 }));
 
 import { Route } from "./time";
+
+// What the loader returns; a test may give it rows.
+const loaded: { entries: unknown[]; clients: unknown[]; profile: null } = {
+  entries: [],
+  clients: [],
+  profile: null,
+};
 
 const TimePage = Route.options.component!;
 
@@ -80,5 +87,28 @@ describe("time entry hours", () => {
     await waitFor(() =>
       expect(create).toHaveBeenCalledWith(expect.objectContaining({ minutes: 75 })),
     );
+  });
+});
+
+describe("duplicating a time entry", () => {
+  afterEach(() => {
+    loaded.entries = [];
+  });
+
+  it("fills hours rounded to the quarter hour the form takes, for odd imported minutes", () => {
+    loaded.entries = [
+      {
+        id: "te_demo",
+        date: "2026-03-02",
+        clientId: null,
+        minutes: 83,
+        description: "Demo imported entry",
+        notes: null,
+        deletedAt: null,
+      },
+    ];
+    render(<TimePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    expect(screen.getAllByLabelText("Hours")[0]).toHaveValue("1.5");
   });
 });
