@@ -27,6 +27,7 @@ export function StateCombobox({
   onBlur,
   "aria-invalid": ariaInvalid,
   "aria-describedby": ariaDescribedBy,
+  "aria-required": ariaRequired,
 }: {
   value: string;
   onValueChange: (code: string) => void;
@@ -47,6 +48,7 @@ export function StateCombobox({
         id={id}
         aria-invalid={ariaInvalid}
         aria-describedby={ariaDescribedBy}
+        aria-required={ariaRequired}
         onBlur={() => onBlur?.()}
         placeholder={placeholder}
         showClear={value !== ""}

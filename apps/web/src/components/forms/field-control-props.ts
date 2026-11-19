@@ -7,7 +7,10 @@ import type { AriaAttributes } from "react";
 //
 // `onBlur` means "the user is done with this control": focus left it, or a
 // picker committed a value. Opening a picker's own popup is not a blur.
-export type FieldControlProps = Pick<AriaAttributes, "aria-invalid" | "aria-describedby"> & {
+export type FieldControlProps = Pick<
+  AriaAttributes,
+  "aria-invalid" | "aria-describedby" | "aria-required"
+> & {
   id?: string;
   onBlur?: () => void;
 };

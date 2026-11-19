@@ -20,11 +20,13 @@ import { getYearConfig, hasExactConfig } from "./index.ts";
 describe("config 2025 — pinned values", () => {
   const c = config2025;
 
-  it("standard deduction", () => {
-    expect(c.standardDeduction.single).toBe(dollars(15_000));
-    expect(c.standardDeduction.mfj).toBe(dollars(30_000));
-    expect(c.standardDeduction.mfs).toBe(dollars(15_000));
-    expect(c.standardDeduction.hoh).toBe(dollars(22_500));
+  it("standard deduction as amended by OBBBA (Rev. Proc. 2025-32 §3.01)", () => {
+    expect(c.standardDeduction).toEqual({
+      single: dollars(15_750),
+      mfj: dollars(31_500),
+      mfs: dollars(15_750),
+      hoh: dollars(23_625),
+    });
   });
 
   it("SS wage base — $176,100 per SSA 2024-10-10 announcement", () => {
@@ -78,12 +80,37 @@ describe("config 2025 — pinned values", () => {
     expect(c.stateRates.UT).toBe(0.045);
   });
 
+  it("Utah taxpayer tax credit (2025 TC-40)", () => {
+    expect(c.utahTaxpayerCredit).toEqual({
+      creditRate: 0.06,
+      personalExemptionPerDependent: dollars(2_111),
+      phaseOutRate: 0.013,
+      phaseOutBase: {
+        single: dollars(18_213),
+        mfs: dollars(18_213),
+        hoh: dollars(27_320),
+        mfj: dollars(36_426),
+      },
+      draft: false,
+    });
+  });
+
   it("quarterly due dates land in the right months and Jun 15 shifts to Jun 16 (Sunday)", () => {
     expect(c.quarterlyDueDates).toEqual(["2025-04-15", "2025-06-16", "2025-09-15", "2026-01-15"]);
   });
 
   it("meals deductible fraction is 50%", () => {
     expect(c.meals.deductibleFraction).toBe(0.5);
+  });
+
+  it("QBI phase-in band $50,000 / $100,000 MFJ (Rev. Proc. 2024-40 §.27); no minimum", () => {
+    expect(c.qbi.phaseInRange).toEqual({
+      single: dollars(50_000),
+      mfj: dollars(100_000),
+      mfs: dollars(50_000),
+      hoh: dollars(50_000),
+    });
+    expect(c.qbi.minimum).toBeNull();
   });
 });
 
@@ -137,6 +164,16 @@ describe("config 2026 — pinned values (Rev. Proc. 2025-32, Notice 2026-10, Ann
     });
   });
 
+  it("QBI phase-in band and the $400 minimum (Rev. Proc. 2025-32 §4.26, §2.12)", () => {
+    expect(c.qbi.phaseInRange).toEqual({
+      single: dollars(75_000),
+      mfj: dollars(150_000),
+      mfs: dollars(75_000),
+      hoh: dollars(75_000),
+    });
+    expect(c.qbi.minimum).toEqual({ deduction: dollars(400), qbiFloor: dollars(1_000) });
+  });
+
   it("SS wage base $184,500", () => {
     expect(c.ssWageBase).toBe(dollars(184_500));
   });
@@ -150,6 +187,26 @@ describe("config 2026 — pinned values (Rev. Proc. 2025-32, Notice 2026-10, Ann
 
   it("UT state rate 4.45%", () => {
     expect(c.stateRates.UT).toBe(0.0445);
+  });
+
+  it("Utah taxpayer tax credit (2026 TC-40 DRAFT dated 10/20/26)", () => {
+    expect(c.utahTaxpayerCredit).toEqual({
+      creditRate: 0.06,
+      personalExemptionPerDependent: dollars(2_167),
+      phaseOutRate: 0.013,
+      phaseOutBase: {
+        single: dollars(18_696),
+        mfs: dollars(18_696),
+        hoh: dollars(28_045),
+        mfj: dollars(37_392),
+      },
+      draft: true,
+    });
+  });
+
+  it("safe harbor: $150,000 prior-year AGI threshold, $75,000 if MFS", () => {
+    expect(c.safeHarbor.priorYearAgiThreshold).toBe(dollars(150_000));
+    expect(c.safeHarbor.priorYearAgiThresholdMfs).toBe(dollars(75_000));
   });
 
   it("quarterly due dates", () => {

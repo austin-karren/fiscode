@@ -29,6 +29,9 @@ const estimate = (year: number, owed: number): TaxEstimate =>
     federal: { taxableIncome: cents(0), qbiDeduction: cents(0), federalIncomeTax: cents(0) },
     state: { taxableIncome: cents(0), rate: 0, stateIncomeTax: cents(0) },
     spouseWithholding: cents(0),
+    federalLiability: dollars(owed),
+    federalWithholding: cents(0),
+    stateWithholding: cents(0),
     totalLiability: dollars(owed),
     remainingOwed: dollars(owed),
   }) as TaxEstimate;
@@ -46,16 +49,29 @@ describe("quarterPeriods", () => {
 });
 
 describe("evenQuarterly", () => {
-  it("splits remainingOwed into four equal installments", () => {
-    const plan = evenQuarterly(estimate(2026, 12_000), config2026);
+  it("each installment is 25% of the required annual payment (Form 2210 line 10)", () => {
+    const plan = evenQuarterly(estimate(2026, 12_000), config2026, dollars(10_800));
     for (const p of plan.payments) {
-      expect(p.amount).toBe(dollars(3_000));
+      expect(p.requiredInstallment).toBe(dollars(2_700));
+      expect(p.amount).toBe(dollars(2_700));
     }
     expect(plan.method).toBe("even");
   });
 
+  it("federal withholding counts as paid one quarter per due date", () => {
+    // Required 10,800 → 2,700 each; withholding 4,000 → 1,000 each → pay 1,700
+    const e = { ...estimate(2026, 12_000), federalWithholding: dollars(4_000) } as TaxEstimate;
+    const plan = evenQuarterly(e, config2026, dollars(10_800));
+    expect(plan.payments.map((p) => p.amount)).toEqual([
+      dollars(1_700),
+      dollars(1_700),
+      dollars(1_700),
+      dollars(1_700),
+    ]);
+  });
+
   it("attaches the shifted business-day due date for each quarter", () => {
-    const plan = evenQuarterly(estimate(2026, 4_000), config2026);
+    const plan = evenQuarterly(estimate(2026, 4_000), config2026, dollars(3_600));
     expect(plan.payments[0]!.dueDate).toBe("2026-04-15");
     expect(plan.payments[1]!.dueDate).toBe("2026-06-15");
     expect(plan.payments[2]!.dueDate).toBe("2026-09-15");
@@ -63,14 +79,14 @@ describe("evenQuarterly", () => {
   });
 
   it("2025 Q2 due date is configured as Jun 16 (Sun → Mon shift)", () => {
-    const plan = evenQuarterly(estimate(2025, 4_000), config2025);
+    const plan = evenQuarterly(estimate(2025, 4_000), config2025, dollars(3_600));
     expect(plan.payments[1]!.dueDate).toBe("2025-06-16");
   });
 });
 
 describe("nextDueQuarter", () => {
   it("returns the first payment whose dueDate is on or after today", () => {
-    const plan = evenQuarterly(estimate(2026, 4_000), config2026);
+    const plan = evenQuarterly(estimate(2026, 4_000), config2026, dollars(3_600));
     expect(nextDueQuarter(plan, isoDate("2026-01-01"))?.quarter).toBe(1);
     expect(nextDueQuarter(plan, isoDate("2026-04-15"))?.quarter).toBe(1);
     expect(nextDueQuarter(plan, isoDate("2026-04-16"))?.quarter).toBe(2);
@@ -78,7 +94,7 @@ describe("nextDueQuarter", () => {
   });
 
   it("returns undefined when all are past", () => {
-    const plan = evenQuarterly(estimate(2026, 4_000), config2026);
+    const plan = evenQuarterly(estimate(2026, 4_000), config2026, dollars(3_600));
     expect(nextDueQuarter(plan, isoDate("2027-02-01"))).toBeUndefined();
   });
 });
@@ -91,7 +107,7 @@ describe("recommendedPrepDate", () => {
 
 describe("yearFromPlan + zeroPayment", () => {
   it("yearFromPlan reads the year of the first period", () => {
-    const plan = evenQuarterly(estimate(2026, 4_000), config2026);
+    const plan = evenQuarterly(estimate(2026, 4_000), config2026, dollars(3_600));
     expect(yearFromPlan(plan)).toBe(2026);
   });
 

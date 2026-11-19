@@ -22,6 +22,8 @@ import { ArchivedNote } from "../components/parent-name";
 import { restoreRow, softDeleteWithUndo } from "../lib/soft-delete";
 import { InfoTooltip } from "../components/info-tooltip";
 import { GLOSSARY } from "../lib/tax-glossary";
+import { VEHICLE_METHOD_LABELS, labelFor } from "@fiscode/core";
+import { SectionTitle } from "../components/section-title";
 
 const vehicleSchema = z.object({
   make: z.string().min(1, "Make is required"),
@@ -101,12 +103,17 @@ function VehiclesPage() {
       >
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-              Add vehicle
+            <CardTitle>
+              <SectionTitle>Add vehicle</SectionTitle>
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.5fr_1.5fr_1fr_1fr]">
-            <TSFormField form={form} name="make" validators={{ onBlur: fs.make }}>
+            <TSFormField
+              form={form}
+              name="make"
+              requirement="required"
+              validators={{ onBlur: fs.make }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Make</FormLabel>
@@ -121,7 +128,12 @@ function VehiclesPage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="model" validators={{ onBlur: fs.model }}>
+            <TSFormField
+              form={form}
+              name="model"
+              requirement="required"
+              validators={{ onBlur: fs.model }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Model</FormLabel>
@@ -136,7 +148,12 @@ function VehiclesPage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="year" validators={{ onBlur: fs.year }}>
+            <TSFormField
+              form={form}
+              name="year"
+              requirement="optional"
+              validators={{ onBlur: fs.year }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Year</FormLabel>
@@ -153,7 +170,12 @@ function VehiclesPage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="mpg" validators={{ onBlur: fs.mpg }}>
+            <TSFormField
+              form={form}
+              name="mpg"
+              requirement="optional"
+              validators={{ onBlur: fs.mpg }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>MPG</FormLabel>
@@ -238,7 +260,7 @@ function VehiclesPage() {
                   </DataTable.Cell>
                   <DataTable.Cell>{v.year ?? "—"}</DataTable.Cell>
                   <DataTable.Cell>{v.mpg ?? "—"}</DataTable.Cell>
-                  <DataTable.Cell>{v.method}</DataTable.Cell>
+                  <DataTable.Cell>{labelFor(VEHICLE_METHOD_LABELS, v.method)}</DataTable.Cell>
                   <DataTable.Cell align="right">
                     {v.deletedAt ? (
                       <Button variant="ghost" size="sm" onClick={() => unarchive(v)}>

@@ -1,7 +1,12 @@
 import { addCents, cents, expensesCountedForYear, type Cents, yearOf } from "@fiscode/core";
 import type { Bundle } from "@fiscode/csv";
 import type { AnnualizedInput, TaxInput } from "@fiscode/tax";
-import { getYearConfig, mileageDeduction } from "@fiscode/tax";
+import {
+  actualHomeOfficeExpenses,
+  getYearConfig,
+  limitToTentativeProfit,
+  mileageDeduction,
+} from "@fiscode/tax";
 
 type ActiveSpouse = {
   annualW2WagesCents: number;
@@ -21,14 +26,26 @@ const inSeRange = (date: string, seStartDate: string, year: number): boolean => 
   return yearOf(date as never) === year && date >= floor;
 };
 
+/**
+ * The rows that count toward `year`: live, dated in the year, and on or after
+ * the SE start. The income and mileage totals are sums over these, and the
+ * year-end packet lists the same rows.
+ */
+export const countedInYear = <T extends { date: string; deletedAt: string | null }>(
+  rows: readonly T[],
+  year: number,
+  seStartDate: string,
+): T[] => rows.filter((r) => r.deletedAt === null && inSeRange(r.date, seStartDate, year));
+
 const sumWithinYear = (
   rows: Array<{ date: string; amountCents: number; deletedAt: string | null }>,
   year: number,
   seStartDate: string,
 ): Cents =>
-  rows
-    .filter((r) => r.deletedAt === null && inSeRange(r.date, seStartDate, year))
-    .reduce((sum, r) => addCents(sum, cents(r.amountCents)), cents(0));
+  countedInYear(rows, year, seStartDate).reduce(
+    (sum, r) => addCents(sum, cents(r.amountCents)),
+    cents(0),
+  );
 
 // Which expenses count (startup expenses before the SE start included) is
 // `expensesCountedForYear` in @fiscode/core, shared with the year-end packet.
@@ -47,62 +64,193 @@ const sumExpensesWithinYear = (
     cents(0),
   );
 
+// `through` (inclusive) limits the sums to an annualization period's end;
+// left out, they cover the whole year.
 const sumMileageDeductionWithinYear = (
   bundle: Bundle,
   year: number,
   seStartDate: string,
+  through = `${year}-12-31`,
 ): Cents => {
   const cfg = getYearConfig(year);
   // Each trip at the rate in force on its date (2026 changed on July 1).
   return mileageDeduction(
-    bundle.mileage.filter((m) => m.deletedAt === null && inSeRange(m.date, seStartDate, year)),
+    bundle.mileage.filter(
+      (m) => m.deletedAt === null && inSeRange(m.date, seStartDate, year) && m.date <= through,
+    ),
     cfg,
   );
 };
 
-const sumHomeOfficeWithinYear = (bundle: Bundle, year: number, seStartDate: string): Cents => {
-  const cfg = getYearConfig(year);
-  const activeForYear = bundle.homeOffice.filter(
-    (h) => h.deletedAt === null && h.startDate.slice(0, 4) <= String(year),
-  );
-  // Simplified method only for now. Pro-rate across months active in-year,
-  // clamping the effective start to seStartDate so home-office periods that
-  // pre-date the SE start don't pad the deduction.
-  const hoVal = activeForYear.reduce((acc, h) => {
-    if (h.method !== "simplified") return acc;
-    const sqft = Math.min(h.officeSqft ?? 0, cfg.homeOffice.simplifiedMaxSqft);
-    const monthsActive = monthsActiveIn(year, h.startDate, h.endDate, seStartDate);
-    if (sqft <= 0 || monthsActive <= 0) return acc;
-    const annual = sqft * cfg.homeOffice.simplifiedRatePerSqft;
-    const prorated = Math.round((annual * monthsActive) / 12);
-    return Math.min(cfg.homeOffice.simplifiedCap, acc + prorated) as Cents;
-  }, cents(0));
-  return hoVal;
+// One home-office config's amount before the gross income limit, over the
+// days it owns.
+type HomeOfficePiece = {
+  method: "simplified" | "actual";
+  amount: Cents;
+  /** The days this config owns: [from, to], inclusive ISO dates. */
+  from: string;
+  to: string;
 };
 
-// Returns a fractional month count (active-day-count / year-days * 12)
-// for the home-office simplified deduction. Day-count proration matches
-// what an accountant does for partial-year periods — the previous
-// month-number subtraction over-credited any month containing even one
-// active day. With the new SE-start clamp, mid-month boundaries are
-// common, so the bucket math became materially wrong.
-const monthsActiveIn = (
+// The configs that deduct something, each with the days it owns within the
+// year (through `through`, not before the SE start), and its amount prorated
+// over exactly those days. One source of owned days for the amount and the
+// profit window:
+// - Where two configs overlap, the later start owns the shared days (a move
+//   entered as "ends Jul 1" and "starts Jul 1" gives Jul 1 to the new home;
+//   an overlap of any kind is treated as a move to the later config).
+// - A config that deducts nothing (no area, no costs, or an office larger
+//   than the home) owns no days.
+const homeOfficePieces = (
+  bundle: Bundle,
+  year: number,
+  seStartDate: string,
+  through: string,
+): { pieces: HomeOfficePiece[]; areaRejected: number } => {
+  const cfg = getYearConfig(year);
+  const yearDays = isLeapYear(year) ? 366 : 365;
+  let areaRejected = 0;
+  const candidates: Array<{ h: Bundle["homeOffice"][number]; from: string; to: string }> = [];
+  for (const h of bundle.homeOffice) {
+    if (h.deletedAt !== null) continue;
+    const window = activeWindow(year, h.startDate, h.endDate, seStartDate, through);
+    if (!window) continue;
+    if (h.method === "simplified") {
+      if (Math.min(h.officeSqft ?? 0, cfg.homeOffice.simplifiedMaxSqft) <= 0) continue;
+    } else {
+      const fullYear = actualHomeOfficeExpenses({ ...h, monthsActive: 12 });
+      if (fullYear.areaRejected) areaRejected += 1;
+      if (fullYear.amount <= 0) continue;
+    }
+    candidates.push({ h, ...window });
+  }
+  candidates.sort((x, y) => (x.from < y.from ? -1 : x.from > y.from ? 1 : 0));
+  const pieces: HomeOfficePiece[] = [];
+  let simplifiedSoFar = 0;
+  candidates.forEach((c, i) => {
+    const next = candidates.slice(i + 1).find((n) => n.from <= c.to);
+    const to = next ? dayBefore(next.from) : c.to;
+    if (to < c.from) return;
+    const monthsActive = (daysBetweenInclusive(c.from, to) / yearDays) * 12;
+    if (c.h.method === "simplified") {
+      const sqft = Math.min(c.h.officeSqft ?? 0, cfg.homeOffice.simplifiedMaxSqft);
+      const annual = sqft * cfg.homeOffice.simplifiedRatePerSqft;
+      // The $1,500 cap holds across simplified configs.
+      const amount = Math.min(
+        cfg.homeOffice.simplifiedCap - simplifiedSoFar,
+        Math.round((annual * monthsActive) / 12),
+      );
+      simplifiedSoFar += amount;
+      pieces.push({ method: "simplified", amount: cents(amount), from: c.from, to });
+    } else {
+      const amount = actualHomeOfficeExpenses({ ...c.h, monthsActive }).amount;
+      pieces.push({ method: "actual", amount, from: c.from, to });
+    }
+  });
+  return { pieces, areaRejected };
+};
+
+// Tentative profit from the rows dated within [from, to]: counted 1099 income
+// minus counted direct expenses minus mileage.
+const tentativeProfitBetween = (
+  bundle: Bundle,
+  year: number,
+  seStartDate: string,
+  from: string,
+  to: string,
+): number => {
+  const within = (d: string) => d >= from && d <= to;
+  const income = countedInYear(
+    bundle.income.filter((i) => i.sourceType === "1099"),
+    year,
+    seStartDate,
+  )
+    .filter((r) => within(r.date))
+    .reduce((sum, r) => sum + r.amountCents, 0);
+  const expenses = expensesCountedForYear(bundle.expenses, year, seStartDate)
+    .filter((r) => within(r.date))
+    .reduce((sum, r) => sum + r.amountCents, 0);
+  const mileage = mileageDeduction(
+    countedInYear(bundle.mileage, year, seStartDate).filter((m) => within(m.date)),
+    getYearConfig(year),
+  );
+  return income - expenses - mileage;
+};
+
+// Gross income limit (Form 8829 lines 8, 15, 27; Pub 587 "Gross income
+// limitation", which applies to the simplified method too): each home's
+// deduction is at most the profit from the business use of that home.
+//
+// Every config, one home or several, is limited by the profit from the rows
+// dated within its own days in use. Pub 587: "If some of the income is from a
+// place of business other than your home, you must first determine the part
+// of your gross income from the business use of your home." i8829 Line 8, for
+// more than one home: "include only the income earned and the deductions
+// attributable to that income during the period you owned the home".
+//
+// - Each config's profit window is the days it owns (see homeOfficePieces),
+//   the same days its amount is prorated over.
+// - The total allowed never exceeds the business's whole tentative profit
+//   (line 27 is never more than line 15). Any excess over it is cut from the
+//   latest config back.
+//
+// What the limit cuts depends on the method. Actual: Form 8829 line 43
+// carries it to next year. Simplified: "Amount in excess of gross income
+// limitation may not be carried over"
+// (https://www.irs.gov/businesses/small-businesses-self-employed/simplified-option-for-home-office-deduction),
+// so it is lost.
+const limitedHomeOffice = (
+  bundle: Bundle,
+  year: number,
+  seStartDate: string,
+  through: string,
+  wholeTentativeProfit: number,
+): { allowed: Cents; lost: Cents; carryover: Cents; areaRejected: number } => {
+  const { pieces, areaRejected } = homeOfficePieces(bundle, year, seStartDate, through);
+  const cut = pieces.map((piece) => {
+    const profit = tentativeProfitBetween(bundle, year, seStartDate, piece.from, piece.to);
+    return { piece, ...limitToTentativeProfit(piece.amount, profit) };
+  });
+  // Never more than the whole tentative profit: trim from the latest config back.
+  let over = cut.reduce((sum, c) => sum + c.allowed, 0) - Math.max(0, wholeTentativeProfit);
+  for (let i = cut.length - 1; i >= 0 && over > 0; i--) {
+    const trim = Math.min(over, cut[i]!.allowed);
+    cut[i] = {
+      ...cut[i]!,
+      allowed: cents(cut[i]!.allowed - trim),
+      disallowed: cents(cut[i]!.disallowed + trim),
+    };
+    over -= trim;
+  }
+  let allowed = 0;
+  let lost = 0;
+  let carryover = 0;
+  for (const c of cut) {
+    allowed += c.allowed;
+    if (c.piece.method === "simplified") lost += c.disallowed;
+    else carryover += c.disallowed;
+  }
+  return { allowed: cents(allowed), lost: cents(lost), carryover: cents(carryover), areaRejected };
+};
+
+// The ISO date before `iso` (UTC, so no timezone moves the day).
+const dayBefore = (iso: string): string =>
+  new Date(Date.UTC(...isoParts(iso)) - 86_400_000).toISOString().slice(0, 10);
+
+// The days a config is in use within the year, through `through`, and not
+// before the SE start: [from, to] inclusive, or null when there are none.
+const activeWindow = (
   year: number,
   start: string,
   end: string | null,
   seStartDate: string,
-): number => {
+  through: string,
+): { from: string; to: string } | null => {
   const yStart = `${year}-01-01`;
-  const yEnd = `${year}-12-31`;
-  if (start > yEnd) return 0;
-  if (end !== null && end < yStart) return 0;
-  const lowerBound = (seStartDate || yStart) > yStart ? seStartDate || yStart : yStart;
-  const effStart = start > lowerBound ? start : lowerBound;
-  const effEnd = end === null || end > yEnd ? yEnd : end;
-  if (effStart > effEnd) return 0;
-  const activeDays = daysBetweenInclusive(effStart, effEnd);
-  const yearDays = isLeapYear(year) ? 366 : 365;
-  return (activeDays / yearDays) * 12;
+  const floor = (seStartDate || yStart) > yStart ? seStartDate || yStart : yStart;
+  const from = start > floor ? start : floor;
+  const to = end === null || end > through ? through : end;
+  return from <= to ? { from, to } : null;
 };
 
 const isLeapYear = (year: number): boolean =>
@@ -184,6 +332,15 @@ export type DerivedYear = {
   directExpenses: Cents;
   mileageDeduction: Cents;
   homeOfficeDeduction: Cents;
+  /** Simplified-method home office over the gross income limit. It cannot be carried over: lost. */
+  homeOfficeLost: Cents;
+  /**
+   * Actual-method home office over the gross income limit: Form 8829 line 43, which carries to next
+   * year. fiscode reports it but does not carry it across years.
+   */
+  homeOfficeCarryover: Cents;
+  /** Actual-method configs skipped because the office is larger than the home. */
+  homeOfficeAreaRejected: number;
   totalDeductibleExpenses: Cents;
   activeEntityType: string;
   seStartDate: string;
@@ -202,13 +359,23 @@ export const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
   );
   const directExpenses = sumExpensesWithinYear(bundle.expenses, year, seStartDate);
   const mileageDeduction = sumMileageDeductionWithinYear(bundle, year, seStartDate);
-  const homeOfficeDeduction = sumHomeOfficeWithinYear(bundle, year, seStartDate);
+  const limited = limitedHomeOffice(
+    bundle,
+    year,
+    seStartDate,
+    `${year}-12-31`,
+    gross1099 - directExpenses - mileageDeduction,
+  );
+  const homeOfficeDeduction = limited.allowed;
   const total = addCents(directExpenses, mileageDeduction, homeOfficeDeduction);
   return {
     gross1099,
     directExpenses,
     mileageDeduction,
     homeOfficeDeduction,
+    homeOfficeLost: limited.lost,
+    homeOfficeCarryover: limited.carryover,
+    homeOfficeAreaRejected: limited.areaRejected,
     totalDeductibleExpenses: total,
     activeEntityType: activeEntityFor(bundle, year)?.type ?? "sole_prop",
     seStartDate,
@@ -226,6 +393,7 @@ export const buildTaxInput = (bundle: Bundle, year: number): TaxInput => {
     year,
     filingStatus: profile.filingStatus as TaxInput["filingStatus"],
     state: profile.state as TaxInput["state"],
+    dependents: profile.dependents,
     gross1099: derived.gross1099,
     deductibleExpenses: derived.totalDeductibleExpenses,
     spouseW2Wages: cents(spouse?.annualW2WagesCents ?? 0),
@@ -260,7 +428,16 @@ export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedIn
       (r) => r.date <= cutoff,
     );
     const cumGross = incomeRows.reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0));
-    const cumExp = expRows.reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0));
+    // Direct expenses plus mileage and home office through the cutoff, the same
+    // pieces deriveYear adds for the whole year (Schedule AI line 1 is the
+    // period's AGI, so every deduction counts by its date).
+    const otherExp = addCents(
+      expRows.reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0)),
+      sumMileageDeductionWithinYear(bundle, year, seStartDate, cutoff),
+    );
+    // The period's home office, limited by the period's own tentative profit.
+    const homeOffice = limitedHomeOffice(bundle, year, seStartDate, cutoff, cumGross - otherExp);
+    const cumExp = addCents(otherExp, homeOffice.allowed);
     return { cumGross, cumExp };
   };
   const periods = endsDates.map((e) => {

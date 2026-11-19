@@ -153,7 +153,7 @@ describe("client default rate", () => {
   const submit = (rate: string) => {
     renderPage();
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Demo New Co" } });
-    const input = screen.getByLabelText("Default rate");
+    const input = screen.getByLabelText("Default rate (optional)");
     fireEvent.change(input, { target: { value: rate } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     return input;
@@ -161,9 +161,7 @@ describe("client default rate", () => {
 
   it("does not save a non-numeric rate as empty", async () => {
     const input = submit("abc");
-    expect(
-      await screen.findByText("Enter an amount greater than 0, like 12.50"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Enter an amount, like 12.50")).toBeInTheDocument();
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(create).not.toHaveBeenCalled();
   });

@@ -5,6 +5,7 @@ import { exportBundle, exportFileName, type ExportOptions } from "@fiscode/csv";
 import { todayIso, yearOf } from "@fiscode/core";
 import { useState } from "react";
 import { toast } from "sonner";
+import { SectionTitle } from "./section-title";
 
 const downloadCsv = (filename: string, csv: string) => {
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -50,8 +51,8 @@ export function ExportCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-          Export CSV
+        <CardTitle>
+          <SectionTitle>Export CSV</SectionTitle>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">

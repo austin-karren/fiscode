@@ -13,6 +13,8 @@ import {
   yearsToTrack,
   type TaxYearSyncStatus,
 } from "../lib/tax-sync";
+import { formatDateTime } from "../lib/format-date";
+import { SectionTitle } from "../components/section-title";
 
 /**
  * Tax-data settings page. The ONLY surface that loudly reports sync errors —
@@ -70,7 +72,7 @@ function TaxDataPage() {
   return (
     <Page
       title="Tax data"
-      description="Per-year IRS / SSA figures used by the estimate engine. Synced from a hosted mirror; falls back to bundled values when the mirror is unreachable."
+      description="Per-year IRS / SSA figures used by the estimate engine. Downloaded from a hosted mirror; until a year is downloaded, the figures built into the app are used."
     >
       <div className="flex justify-end">
         <Button
@@ -109,20 +111,25 @@ function YearCard({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between text-sm font-medium">
-          <span className="font-mono uppercase tracking-wide text-muted-foreground">
-            Tax year {status.year}
-          </span>
+          <SectionTitle>Tax year {status.year}</SectionTitle>
           <SourceBadge status={status} />
         </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-2 text-sm">
-        <Row label="Source">
-          {status.remoteSource ?? (status.source === "hardcoded" ? "bundled with app" : "—")}
+        {/* The badge says where this year's figures come from now: downloaded
+            from the mirror (and cached) or built into the app. This row names
+            the downloaded file, whose own label says who published it. */}
+        <Row label="Data file">
+          {status.source === "remote"
+            ? (status.remoteSource ?? "—")
+            : status.source === "hardcoded"
+              ? "Built into the app (not downloaded yet)"
+              : "—"}
         </Row>
         <Row label="Last fetched">
           {status.fetchedAt ? (
-            <span className="font-mono text-xs">
-              {new Date(status.fetchedAt).toLocaleString()}{" "}
+            <span>
+              {formatDateTime(status.fetchedAt)}{" "}
               {status.isStale ? (
                 <span className="ms-1 text-amber-700 dark:text-amber-400">
                   (stale, &gt; 7 days)
@@ -155,7 +162,7 @@ function SourceBadge({ status }: { status: TaxYearSyncStatus }) {
     return (
       <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
         <CloudDownload className="h-3 w-3" />
-        Remote
+        Downloaded
       </span>
     );
   }
@@ -163,7 +170,7 @@ function SourceBadge({ status }: { status: TaxYearSyncStatus }) {
     return (
       <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
         <CloudOff className="h-3 w-3" />
-        Bundled
+        Built in
       </span>
     );
   }
@@ -178,7 +185,9 @@ function SourceBadge({ status }: { status: TaxYearSyncStatus }) {
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline gap-3">
-      <span className="w-28 shrink-0 text-xs uppercase text-muted-foreground">{label}</span>
+      <span className="w-28 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
       <span className="flex-1">{children}</span>
     </div>
   );

@@ -16,7 +16,12 @@ export type YearConfig = {
   brackets: Record<FilingStatus, Bracket[]>;
   qbi: {
     rate: number; // 0.20
+    /** The §199A(e)(2) threshold amount. */
     taxableIncomeLimit: Record<FilingStatus, Cents>;
+    /** Width of the §199A(b)(3)(B) phase-in band above the threshold. */
+    phaseInRange: Record<FilingStatus, Cents>;
+    /** §199A(i) minimum deduction (2026 on); null when it does not apply. */
+    minimum: { deduction: Cents; qbiFloor: Cents } | null;
   };
   /**
    * Business standard mileage rates, in dollars per mile, oldest first. Each
@@ -34,10 +39,28 @@ export type YearConfig = {
     priorYearDefault: number; // 1.00
     priorYearHighIncome: number; // 1.10
     priorYearAgiThreshold: Cents; // 150,000
+    /** The same threshold when this year's filing status is MFS. */
+    priorYearAgiThresholdMfs: Cents; // 75,000
   };
   meals: { deductibleFraction: number }; // 0.50
   quarterlyDueDates: [IsoDate, IsoDate, IsoDate, IsoDate];
   stateRates: Partial<Record<StateCode, number>>;
+  /**
+   * Utah's nonrefundable taxpayer tax credit (Utah Code 59-10-1018; TC-40
+   * lines 9-18). With it, Utah tax is the flat rate on Utah taxable income
+   * (which starts from federal AGI) minus this credit.
+   */
+  utahTaxpayerCredit: {
+    /** 6% of (federal standard deduction + personal exemptions). */
+    creditRate: number;
+    /** Utah personal exemption per qualifying dependent. */
+    personalExemptionPerDependent: Cents;
+    /** The credit shrinks by this much per dollar of income over the base. */
+    phaseOutRate: number;
+    phaseOutBase: Record<FilingStatus, Cents>;
+    /** True when the amounts come from a draft form, not the final one. */
+    draft: boolean;
+  };
 };
 
 export type TaxInput = {
@@ -48,13 +71,18 @@ export type TaxInput = {
   gross1099: Cents;
   /** Total business expenses (excluding half-SE-tax and QBI adjustments). */
   deductibleExpenses: Cents;
+  /** Qualifying dependents (Utah personal exemption). Defaults to 0. */
+  dependents?: number;
   /** Spouse W-2 wages, if MFJ + spouse block active for the year. */
   spouseW2Wages: Cents;
   /** Spouse W-2 federal withholding, offsets required estimates. */
   spouseFederalWithholding: Cents;
   /** Spouse W-2 state withholding. */
   spouseStateWithholding: Cents;
-  /** Prior year total tax liability, for safe-harbor calc. Undefined = first year. */
+  /**
+   * Prior year's federal tax (Form 2210 line 8 uses the prior-year federal
+   * return), for the safe harbor. Undefined = first year.
+   */
   priorYearTotalTax: Cents | undefined;
   /** Prior year AGI, for determining 100% vs 110% safe-harbor multiplier. */
   priorYearAgi: Cents | undefined;
@@ -77,8 +105,11 @@ export type FederalBreakdown = {
 };
 
 export type StateBreakdown = {
-  taxableIncome: Cents; // approximation: federal taxable for now
+  /** Utah: federal AGI (Utah taxable income). Other states: federal taxable income. */
+  taxableIncome: Cents;
   rate: number;
+  /** Utah's taxpayer tax credit applied; 0 for other states. */
+  taxpayerCredit: Cents;
   stateIncomeTax: Cents;
 };
 
@@ -90,6 +121,12 @@ export type TaxEstimate = {
   federal: FederalBreakdown;
   state: StateBreakdown;
   spouseWithholding: Cents;
+  /** Federal income tax + self-employment tax: Form 2210 lines 1-4. */
+  federalLiability: Cents;
+  /** Federal withholding only: Form 2210 line 6. */
+  federalWithholding: Cents;
+  /** State withholding only. */
+  stateWithholding: Cents;
   totalLiability: Cents;
   remainingOwed: Cents; // totalLiability minus spouseWithholding
 };
@@ -99,16 +136,37 @@ export type QuarterPayment = {
   periodStart: IsoDate;
   periodEnd: IsoDate;
   dueDate: IsoDate;
+  /** The required installment for this due date (Form 2210 line 10). */
+  requiredInstallment: Cents;
+  /** What is left to pay by this due date after withholding (1/4 per quarter). */
   amount: Cents;
 };
 
 export type QuarterlyPlan = {
   method: QuarterlyMethod;
+  /**
+   * True when the tax left after withholding is under $1,000, so Form 2210
+   * requires no installments (lines 4 and 7) and every amount is $0.
+   */
+  noInstallmentsRequired: boolean;
   payments: [QuarterPayment, QuarterPayment, QuarterPayment, QuarterPayment];
 };
 
+/**
+ * Utah's prepayment minimum (TC-546): due by the return's due date, with no
+ * quarterly schedule.
+ */
+export type StatePrepayment = {
+  state: "UT";
+  dueDate: IsoDate;
+  /** TC-546 line 8: what to pay by `dueDate` after Utah withholding; $0 if none. */
+  minimum: Cents;
+  /** Which TC-546 line 5 amount was used. Prior-year Utah tax is not an input. */
+  basis: "currentYear90";
+};
+
 export type SafeHarborResult = {
-  currentYearTarget: Cents; // 90% of current liability
+  currentYearTarget: Cents; // 90% of current federal tax
   priorYearTarget: Cents | undefined; // 100% or 110% of prior tax
   /** The lower of the two targets; meeting this avoids underpayment penalty. */
   floor: Cents;

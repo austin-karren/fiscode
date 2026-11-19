@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +24,7 @@ import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { archivedSuffix, pickableParents } from "./parent-name";
 import { useToday } from "../lib/use-today";
+import { useEditDialog } from "../hooks/use-edit-dialog";
 
 const KIND_OPTIONS = [
   { value: "recurring", label: "Recurring" },
@@ -50,8 +50,6 @@ export function EditIncomeDialog({
   clients: ClientRow[];
   onSaved: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-
   const today = useToday();
   const form = useForm({
     defaultValues: {
@@ -75,9 +73,10 @@ export function EditIncomeDialog({
       onSaved();
     },
   });
+  const { open, setOpen, onOpenChange } = useEditDialog(form);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">
@@ -97,7 +96,7 @@ export function EditIncomeDialog({
           }}
         >
           <div className="grid gap-3">
-            <TSFormField form={form} name="date">
+            <TSFormField form={form} name="date" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Date</FormLabel>
@@ -112,7 +111,12 @@ export function EditIncomeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="amount" validators={{ onBlur: editSchema.shape.amount }}>
+            <TSFormField
+              form={form}
+              name="amount"
+              requirement="required"
+              validators={{ onBlur: editSchema.shape.amount }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Amount</FormLabel>
@@ -128,7 +132,7 @@ export function EditIncomeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="clientId">
+            <TSFormField form={form} name="clientId" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Client</FormLabel>
@@ -150,7 +154,7 @@ export function EditIncomeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="kind">
+            <TSFormField form={form} name="kind" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Kind</FormLabel>
@@ -168,7 +172,7 @@ export function EditIncomeDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="description">
+            <TSFormField form={form} name="description" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Description</FormLabel>

@@ -29,6 +29,7 @@ export function ConfirmDialog({
   onConfirm,
   open,
   onOpenChange,
+  children,
 }: {
   // Omit to drive the dialog purely via `open` / `onOpenChange`.
   trigger?: React.ReactNode;
@@ -40,6 +41,8 @@ export function ConfirmDialog({
   onConfirm: () => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  // Optional body between the description and the buttons, such as a checkbox.
+  children?: React.ReactNode;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -49,6 +52,7 @@ export function ConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
+        {children}
         <DialogFooter>
           <DialogClose render={<Button variant="outline">{cancelLabel}</Button>} />
           <DialogClose render={<Button variant={confirmVariant} onClick={onConfirm} />}>

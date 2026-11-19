@@ -21,6 +21,9 @@ const fakeEstimate = (totalLiability: number): TaxEstimate =>
     federal: { taxableIncome: cents(0), qbiDeduction: cents(0), federalIncomeTax: cents(0) },
     state: { taxableIncome: cents(0), rate: 0, stateIncomeTax: cents(0) },
     spouseWithholding: cents(0),
+    federalLiability: dollars(totalLiability),
+    federalWithholding: cents(0),
+    stateWithholding: cents(0),
     totalLiability: dollars(totalLiability),
     remainingOwed: dollars(totalLiability),
   }) as TaxEstimate;
@@ -66,5 +69,39 @@ describe("computeSafeHarbor", () => {
     // Current 10k × 90% = 9k. Prior 100k × 100% = 100k. Floor = 9k.
     const r = computeSafeHarbor(fakeEstimate(10_000), dollars(100_000), dollars(50_000), cfg);
     expect(r.floor).toBe(dollars(9_000));
+  });
+
+  // 2026 Form 1040-ES, "Higher income taxpayers": 110% applies if 2025 AGI was
+  // "more than $150,000 ($75,000 if your filing status for 2026 is married
+  // filing separately)".
+  it("married filing separately: 110% once prior-year AGI is over $75,000", () => {
+    const over = computeSafeHarbor(
+      fakeEstimate(30_000),
+      dollars(20_000),
+      dollars(75_000.01),
+      cfg,
+      "mfs",
+    );
+    expect(over.multiplierUsed).toBe(1.1);
+    expect(over.priorYearTarget).toBe(dollars(22_000));
+    const at = computeSafeHarbor(
+      fakeEstimate(30_000),
+      dollars(20_000),
+      dollars(75_000),
+      cfg,
+      "mfs",
+    );
+    expect(at.multiplierUsed).toBe(1.0);
+  });
+
+  it("other filing statuses keep the $150,000 threshold", () => {
+    const r = computeSafeHarbor(
+      fakeEstimate(30_000),
+      dollars(20_000),
+      dollars(100_000),
+      cfg,
+      "single",
+    );
+    expect(r.multiplierUsed).toBe(1.0);
   });
 });

@@ -9,11 +9,15 @@ import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
 import {
   EntityPeriodError,
   cents,
+  EntityOverlapError,
+  canMoveEntityStart,
   ENTITY_TYPE_LABELS,
   FILING_STATUS_LABELS,
   QUARTERLY_METHOD_LABELS,
+  labelFor,
   labelOptions,
 } from "@fiscode/core";
+import { formatDate } from "../lib/format-date";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -36,8 +40,15 @@ import { InfoTooltip } from "../components/info-tooltip";
 import { SetupRequiredEmpty } from "../components/empty-states/setup-required";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditEntityDialog } from "../components/edit-entity-dialog";
+import {
+  entityPeriodFieldError,
+  periodErrorFor,
+  type EntityPeriodFieldError,
+} from "../lib/entity-period-error";
 import { EditSpouseDialog } from "../components/edit-spouse-dialog";
 import { GLOSSARY } from "../lib/tax-glossary";
+import { softDeleteWithUndo } from "../lib/soft-delete";
+import { SectionTitle } from "../components/section-title";
 
 const FILING_OPTIONS = labelOptions(FILING_STATUS_LABELS);
 
@@ -99,7 +110,11 @@ function ProfilePage() {
   const { profile, entities, spouses } = useLoaderData({ from: "/profile" });
   if (!profile) {
     return (
-      <Page title="Profile" description="Filing status, residence, dependents, and preferences.">
+      <Page
+        width="form"
+        title="Profile"
+        description="Filing status, residence, dependents, and preferences."
+      >
         <SetupRequiredEmpty />
       </Page>
     );
@@ -117,6 +132,9 @@ function ProfileFormPanel({
   spouses: Awaited<ReturnType<typeof spouseRepo.list>>;
 }) {
   const router = useRouter();
+  // Spouse income only enters a joint return. Read from the saved profile, so
+  // the card follows what Save profile stored, not an unsaved pick.
+  const filesJointly = profile.filingStatus === "mfj";
 
   const profileForm = useForm({
     defaultValues: {
@@ -149,13 +167,58 @@ function ProfileFormPanel({
         quarterlyMethod: parsed.quarterlyMethod,
         prepLeadDays: parsed.prepLeadDays,
       });
-      toast.success("Profile updated.");
+      const newStart = dateToIso(value.seStartDate!);
+      if (moveEntityStart && entityStartToMove(newStart) && !entityMoveBlocked(newStart)) {
+        const moved = await entityRepo.moveFirstStart(newStart);
+        if (moved.moved) {
+          toast.success(
+            `Profile updated. Your first entity period now starts ${formatDate(newStart)}.`,
+          );
+        } else if (moved.reason === "rejected") {
+          toast.error(`Profile updated. The entity period was not moved: ${moved.error.message}`);
+        } else {
+          toast.success("Profile updated.");
+        }
+      } else {
+        toast.success("Profile updated.");
+      }
       router.invalidate();
     },
   });
 
+  // The first entity period, when a new SE start would move its start: the
+  // confirm dialog offers that move (on by default).
+  const firstEntity = entities
+    .filter((e) => e.deletedAt === null)
+    .toSorted((a, b) => (a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : 0))[0];
+  const entityStartToMove = (newStart: string) =>
+    newStart !== profile.seStartDate &&
+    firstEntity !== undefined &&
+    firstEntity.startDate !== newStart;
+  const [moveEntityStart, setMoveEntityStart] = useState(true);
+  // Why the repo would refuse the move, checked before it is offered with
+  // the repo's own rule (`canMoveEntityStart`); the repo stays the backstop.
+  const entityMoveBlocked = (newStart: string): string | null => {
+    if (!firstEntity) return null;
+    const problem = canMoveEntityStart(entities, firstEntity, newStart);
+    if (!problem) return null;
+    if (problem instanceof EntityOverlapError) {
+      return `Your first entity period stays as it is. ${problem.message}`;
+    }
+    return `Your first entity period ends ${formatDate(firstEntity.endDate!)}, before ${formatDate(newStart)}, so it stays as it is. Edit it under Entity periods if you need to.`;
+  };
+
+  // The new SE start when the dialog has something to say about the first
+  // entity period (a checkbox, or why it stays).
+  const offeredMove = (): string | undefined => {
+    const v = profileForm.state.values.seStartDate;
+    const newStart = v ? dateToIso(v) : undefined;
+    return newStart && entityStartToMove(newStart) ? newStart : undefined;
+  };
+
   // Set when the repo blocks an entity period: an overlap, or an end before the start.
-  const [entityError, setEntityError] = useState<string | null>(null);
+  // Set when the repo blocks the dates; shown on the field it is about.
+  const [entityError, setEntityError] = useState<EntityPeriodFieldError | null>(null);
 
   const entityForm = useForm({
     defaultValues: {
@@ -176,7 +239,8 @@ function ProfileFormPanel({
         });
       } catch (err) {
         if (!(err instanceof EntityPeriodError)) throw err;
-        setEntityError(err.message);
+        // Taken with the saved periods: it lapses once one of them changes.
+        setEntityError(entityPeriodFieldError(err, entities));
         return;
       }
       toast.success("Entity period added.");
@@ -215,6 +279,8 @@ function ProfileFormPanel({
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (changedScopeFields().length > 0) {
+      // Ticked by default every time the dialog opens.
+      setMoveEntityStart(true);
       setScopeConfirmOpen(true);
       return;
     }
@@ -251,26 +317,48 @@ function ProfileFormPanel({
   });
 
   return (
-    <Page title="Profile" description="Filing status, residence, dependents, and preferences.">
+    <Page
+      width="form"
+      title="Profile"
+      description="Filing status, residence, dependents, and preferences."
+    >
       <ConfirmDialog
         open={scopeConfirmOpen}
         onOpenChange={setScopeConfirmOpen}
         title="Save changes to scope-shifting fields?"
-        description={`Changing your ${changedScopeFields().join(" and ")} retroactively recomputes the year. Rows dated outside the new window stop being counted; brackets and rates change with the new filing-status / state. The underlying data is unchanged.`}
+        description={`Changing your ${changedScopeFields().join(" and ")} retroactively recomputes the year. Rows dated outside the new window stop being counted; brackets and rates change with the new filing-status / state. ${
+          offeredMove() ? "Your rows are unchanged." : "The underlying data is unchanged."
+        }`}
         confirmLabel="Save"
         confirmVariant="destructive"
         onConfirm={() => void profileForm.handleSubmit()}
-      />
+      >
+        {(() => {
+          const newStart = offeredMove();
+          if (!newStart || !firstEntity) return null;
+          const blocked = entityMoveBlocked(newStart);
+          if (blocked) return <p className="text-sm">{blocked}</p>;
+          return (
+            <label className="flex items-start gap-2 text-sm">
+              <FieldCheckbox checked={moveEntityStart} onCheckedChange={setMoveEntityStart} />
+              <span>
+                Also move your first entity period ({labelFor(ENTITY_TYPE_LABELS, firstEntity.type)}
+                ) to start {formatDate(newStart)}, from {formatDate(firstEntity.startDate)}.
+              </span>
+            </label>
+          );
+        })()}
+      </ConfirmDialog>
 
       <EnterToSubmitForm onSubmit={handleProfileSubmit}>
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-              Profile
+            <CardTitle>
+              <SectionTitle>Profile</SectionTitle>
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-4 pb-2 @md:grid-cols-2">
-            <TSFormField form={profileForm} name="filingStatus">
+            <TSFormField form={profileForm} name="filingStatus" requirement="required">
               {(field) => (
                 <FormItem>
                   <LabelWithTooltip tooltip={GLOSSARY.filingStatus}>Filing status</LabelWithTooltip>
@@ -286,7 +374,7 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={profileForm} name="state">
+            <TSFormField form={profileForm} name="state" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>State</FormLabel>
@@ -301,7 +389,7 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={profileForm} name="seStartDate">
+            <TSFormField form={profileForm} name="seStartDate" requirement="required">
               {(field) => (
                 <FormItem>
                   <LabelWithTooltip tooltip={GLOSSARY.seStartDate}>
@@ -322,6 +410,7 @@ function ProfileFormPanel({
             <TSFormField
               form={profileForm}
               name="dependents"
+              requirement="required"
               validators={{ onBlur: profileSchema.shape.dependents }}
             >
               {(field) => (
@@ -340,7 +429,7 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={profileForm} name="quarterlyMethod">
+            <TSFormField form={profileForm} name="quarterlyMethod" requirement="required">
               {(field) => (
                 <FormItem>
                   <LabelWithTooltip tooltip={GLOSSARY.quarterlyMethodLabel}>
@@ -361,6 +450,7 @@ function ProfileFormPanel({
             <TSFormField
               form={profileForm}
               name="prepLeadDays"
+              requirement="required"
               validators={{ onBlur: profileSchema.shape.prepLeadDays }}
             >
               {(field) => (
@@ -381,7 +471,7 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <div className="flex items-end gap-4">
+            <div className="flex flex-wrap items-end gap-x-6 gap-y-2 @md:col-span-2">
               <TSFormField form={profileForm} name="tracksRoth">
                 {(field) => (
                   <FormItem className="flex flex-row items-center gap-2">
@@ -444,19 +534,21 @@ function ProfileFormPanel({
       >
         <Card>
           <CardHeader>
-            <CardTitle className="inline-flex items-center gap-1.5 text-sm font-medium uppercase text-muted-foreground">
-              Entity periods
-              <InfoTooltip text={GLOSSARY.entityType} />
+            <CardTitle>
+              <SectionTitle>
+                Entity periods
+                <InfoTooltip text={GLOSSARY.entityType} />
+              </SectionTitle>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-1 text-sm">
               {entities.map((e) => (
                 <li key={e.id} className="flex items-center gap-3">
-                  <span className="font-mono">
-                    {e.startDate} – {e.endDate ?? "open"}
+                  <span className="whitespace-nowrap">
+                    {formatDate(e.startDate)} – {e.endDate ? formatDate(e.endDate) : "open"}
                   </span>
-                  <span>{e.type}</span>
+                  <span>{labelFor(ENTITY_TYPE_LABELS, e.type)}</span>
                   <div className="ms-auto inline-flex gap-1">
                     <EditEntityDialog entity={e} onSaved={() => router.invalidate()} />
                     {e.endDate ? null : (
@@ -467,7 +559,7 @@ function ProfileFormPanel({
                           </Button>
                         }
                         title="End this entity period today?"
-                        description={`This ${e.type} period (started ${e.startDate}) will close at today's date. You can edit the end date later from your data.`}
+                        description={`This ${labelFor(ENTITY_TYPE_LABELS, e.type)} period (started ${formatDate(e.startDate)}) will close at today's date. You can edit the end date later from your data.`}
                         confirmLabel="End it"
                         confirmVariant="destructive"
                         onConfirm={() => void endEntityNow(e.id)}
@@ -482,7 +574,12 @@ function ProfileFormPanel({
             </ul>
           </CardContent>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-3">
-            <TSFormField form={entityForm} name="type" validators={{ onBlur: efs.type }}>
+            <TSFormField
+              form={entityForm}
+              name="type"
+              requirement="required"
+              validators={{ onBlur: efs.type }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Type</FormLabel>
@@ -502,7 +599,13 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={entityForm} name="startDate" validators={{ onBlur: efs.startDate }}>
+            <TSFormField
+              form={entityForm}
+              name="startDate"
+              requirement="required"
+              validators={{ onBlur: efs.startDate }}
+              error={periodErrorFor(entityError, "startDate", entities)}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Start</FormLabel>
@@ -511,38 +614,43 @@ function ProfileFormPanel({
                       yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
-                      onValueChange={(d) => field.handleChange(d)}
+                      onValueChange={(d) => {
+                        // A new date is a new attempt; the old refusal no longer applies.
+                        setEntityError(null);
+                        field.handleChange(d);
+                      }}
                     />
                   </FormControl>
-                  <FormMessage />
+                  <FormMessage role="alert" />
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={entityForm} name="endDate">
+            <TSFormField
+              form={entityForm}
+              name="endDate"
+              requirement="optional"
+              error={periodErrorFor(entityError, "endDate", entities)}
+            >
               {(field) => (
                 <FormItem>
-                  <FormLabel>End (optional)</FormLabel>
+                  <FormLabel>End</FormLabel>
                   <FormControl>
                     <DatePicker
                       yearsBack={CONFIG_YEARS_BACK}
                       value={field.state.value as Date | undefined}
                       onBlur={field.handleBlur}
-                      onValueChange={(d) => field.handleChange(d)}
+                      onValueChange={(d) => {
+                        setEntityError(null);
+                        field.handleChange(d);
+                      }}
                       disableFuture={false}
                     />
                   </FormControl>
-                  <FormMessage />
+                  <FormMessage role="alert" />
                 </FormItem>
               )}
             </TSFormField>
           </CardContent>
-          {entityError ? (
-            <CardContent>
-              <p role="alert" className="text-sm text-destructive">
-                {entityError}
-              </p>
-            </CardContent>
-          ) : null}
           <CardFooter className="justify-end">
             <entityForm.Subscribe
               selector={(s) => ({
@@ -568,104 +676,154 @@ function ProfileFormPanel({
       >
         <Card>
           <CardHeader>
-            <CardTitle className="inline-flex items-center gap-1.5 text-sm font-medium uppercase text-muted-foreground">
-              Spouse income blocks
-              <InfoTooltip text={GLOSSARY.spouseBlock} />
+            <CardTitle>
+              <SectionTitle>
+                Spouse income blocks
+                <InfoTooltip text={GLOSSARY.spouseBlock} />
+              </SectionTitle>
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @lg:grid-cols-3 @xl:grid-cols-[1fr_1fr_1fr_1fr_1fr]">
-            <TSFormField form={spouseForm} name="startDate" validators={{ onBlur: sfs.startDate }}>
-              {(field) => (
-                <FormItem>
-                  <FormLabel>Start</FormLabel>
-                  <FormControl>
-                    <DatePicker
-                      yearsBack={CONFIG_YEARS_BACK}
-                      value={field.state.value as Date | undefined}
-                      onBlur={field.handleBlur}
-                      onValueChange={(d) => field.handleChange(d)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField form={spouseForm} name="endDate">
-              {(field) => (
-                <FormItem>
-                  <FormLabel>End</FormLabel>
-                  <FormControl>
-                    <DatePicker
-                      yearsBack={CONFIG_YEARS_BACK}
-                      value={field.state.value as Date | undefined}
-                      onBlur={field.handleBlur}
-                      onValueChange={(d) => field.handleChange(d)}
-                      disableFuture={false}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField form={spouseForm} name="wages" validators={{ onBlur: sfs.wages }}>
-              {(field) => (
-                <FormItem>
-                  <FormLabel>Annual W-2 wages</FormLabel>
-                  <FormControl>
-                    <Input
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      placeholder="$0.00"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField form={spouseForm} name="fedWH" validators={{ onBlur: sfs.fedWH }}>
-              {(field) => (
-                <FormItem>
-                  <FormLabel>Fed withholding</FormLabel>
-                  <FormControl>
-                    <Input
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      placeholder="$0.00"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField form={spouseForm} name="stateWH" validators={{ onBlur: sfs.stateWH }}>
-              {(field) => (
-                <FormItem>
-                  <FormLabel>State withholding</FormLabel>
-                  <FormControl>
-                    <Input
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      placeholder="$0.00"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-          </CardContent>
+          {filesJointly ? (
+            <CardContent
+              // Two groups: the dates (half the row each), then the three
+              // amounts (a third each).
+              className="grid items-start gap-3 pb-2 @sm:grid-cols-6 @sm:[&>*]:col-span-3 @lg:[&>*]:col-span-2 @lg:[&>*:nth-child(-n+2)]:col-span-3"
+            >
+              <TSFormField
+                form={spouseForm}
+                name="startDate"
+                requirement="required"
+                validators={{ onBlur: sfs.startDate }}
+              >
+                {(field) => (
+                  <FormItem>
+                    <FormLabel>Start</FormLabel>
+                    <FormControl>
+                      <DatePicker
+                        yearsBack={CONFIG_YEARS_BACK}
+                        value={field.state.value as Date | undefined}
+                        onBlur={field.handleBlur}
+                        onValueChange={(d) => field.handleChange(d)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              </TSFormField>
+              <TSFormField form={spouseForm} name="endDate" requirement="optional">
+                {(field) => (
+                  <FormItem>
+                    <FormLabel>End</FormLabel>
+                    <FormControl>
+                      <DatePicker
+                        yearsBack={CONFIG_YEARS_BACK}
+                        value={field.state.value as Date | undefined}
+                        onBlur={field.handleBlur}
+                        onValueChange={(d) => field.handleChange(d)}
+                        disableFuture={false}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              </TSFormField>
+              <TSFormField
+                form={spouseForm}
+                name="wages"
+                requirement="optional"
+                validators={{ onBlur: sfs.wages }}
+              >
+                {(field) => (
+                  <FormItem>
+                    <FormLabel>Annual W-2 wages</FormLabel>
+                    <FormControl>
+                      <Input
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                        placeholder="$0.00"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              </TSFormField>
+              <TSFormField
+                form={spouseForm}
+                name="fedWH"
+                requirement="optional"
+                validators={{ onBlur: sfs.fedWH }}
+              >
+                {(field) => (
+                  <FormItem>
+                    <FormLabel>Fed withholding</FormLabel>
+                    <FormControl>
+                      <Input
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                        placeholder="$0.00"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              </TSFormField>
+              <TSFormField
+                form={spouseForm}
+                name="stateWH"
+                requirement="optional"
+                validators={{ onBlur: sfs.stateWH }}
+              >
+                {(field) => (
+                  <FormItem>
+                    <FormLabel>State withholding</FormLabel>
+                    <FormControl>
+                      <Input
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                        placeholder="$0.00"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              </TSFormField>
+            </CardContent>
+          ) : (
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Spouse income counts only on a joint return. To add it, set filing status to Married
+                filing jointly above.
+              </p>
+            </CardContent>
+          )}
           <CardContent>
             <ul className="space-y-1 text-sm">
               {spouses.map((s) => (
                 <li key={s.id} className="flex items-center gap-3">
-                  <span className="font-mono">
-                    {s.startDate} – {s.endDate ?? "open"} · $
+                  <span>
+                    {formatDate(s.startDate)} – {s.endDate ? formatDate(s.endDate) : "open"} · $
                     {(s.annualW2WagesCents / 100).toLocaleString()}
                   </span>
                   <div className="ms-auto inline-flex gap-1">
                     <EditSpouseDialog spouse={s} onSaved={() => router.invalidate()} />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        void softDeleteWithUndo({
+                          repo: spouseRepo,
+                          row: s,
+                          message: "Spouse block deleted.",
+                          onChange: () => router.invalidate(),
+                        })
+                      }
+                    >
+                      Delete
+                    </Button>
                   </div>
                 </li>
               ))}
@@ -674,20 +832,22 @@ function ProfileFormPanel({
               ) : null}
             </ul>
           </CardContent>
-          <CardFooter className="justify-end">
-            <spouseForm.Subscribe
-              selector={(s) => ({
-                canSubmit: s.canSubmit,
-                isSubmitting: s.isSubmitting,
-              })}
-            >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
-                  {isSubmitting ? "Adding..." : "Add"}
-                </Button>
-              )}
-            </spouseForm.Subscribe>
-          </CardFooter>
+          {filesJointly ? (
+            <CardFooter className="justify-end">
+              <spouseForm.Subscribe
+                selector={(s) => ({
+                  canSubmit: s.canSubmit,
+                  isSubmitting: s.isSubmitting,
+                })}
+              >
+                {({ canSubmit, isSubmitting }) => (
+                  <Button type="submit" disabled={!canSubmit || isSubmitting}>
+                    {isSubmitting ? "Adding..." : "Add"}
+                  </Button>
+                )}
+              </spouseForm.Subscribe>
+            </CardFooter>
+          ) : null}
         </Card>
       </EnterToSubmitForm>
     </Page>

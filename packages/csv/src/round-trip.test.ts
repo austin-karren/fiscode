@@ -221,6 +221,26 @@ describe("CSV round-trip", () => {
     expect(csv2).toBe(csv1);
   });
 
+  it("an actual-method home office (Form 8829 inputs) round-trips byte-identical", () => {
+    const bundle = fullBundle();
+    bundle.homeOffice = [
+      {
+        ...bundle.homeOffice[0]!,
+        method: "actual",
+        officeSqft: 200,
+        homeSqft: 2000,
+        monthlyRentMortgageCents: 150_000,
+        monthlyUtilitiesCents: 20_000,
+        monthlyInsuranceCents: 3_000,
+      },
+    ];
+    const csv1 = exportBundle(bundle, { scope: "full" });
+    const { bundle: round, validationErrors } = parseCsv(csv1);
+    expect(validationErrors).toEqual([]);
+    expect(round.homeOffice).toEqual(bundle.homeOffice);
+    expect(exportBundle(round, { scope: "full" })).toBe(csv1);
+  });
+
   it("preserves all fields exactly", () => {
     const bundle = fullBundle();
     const csv = exportBundle(bundle, {

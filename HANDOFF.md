@@ -4,6 +4,8 @@
 
 Full implementation plan lives at `/Users/austinkarren/.claude/plans/eventual-giggling-star.md`. Read it first — it covers repo layout, package boundaries (`@fiscode/{core,db,tax,csv,ui}`), money/rounding rules (integer cents), DB/SQLocal init, history/versioning, tax engine seam, year config (with `// todo: verify` markers), CSV format + round-trip, PWA setup, React rules (no useEffect for derived state), the 9-step build sequence, and explicit non-goals (no IRS form generation, no filing, no backend/auth/sync in part 1).
 
+PWA: removed on purpose (#14; Austin 2026-11-19: no service worker or manifest in the web app; the desktop app is the install and offline path).
+
 Skills registry pinned at `/Users/austinkarren/workspaces/handily/handily-beta` (skills-lock.json + .claude/skills/). The plan calls out which skills to lean on for which steps (shadcn for primitives, agent-browser for viewport sweeps, vercel-react-best-practices for the no-useEffect rule, preflight-checks before commits).
 
 ## Where we are

@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
@@ -9,11 +10,11 @@ import { Clock } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { hoursWorked } from "../lib/field-schemas";
+import { hoursField, hoursWorked } from "../lib/field-schemas";
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
-import { DatePicker, dateToIso } from "../components/forms/date-picker";
+import { DatePicker, dateToIso, isoToDate } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
@@ -22,6 +23,8 @@ import { EditTimeDialog } from "../components/edit-time-dialog";
 import { ParentName } from "../components/parent-name";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { useToday } from "../lib/use-today";
+import { formatDate } from "../lib/format-date";
+import { SectionTitle } from "../components/section-title";
 
 const timeSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -54,13 +57,17 @@ function TimePage() {
   const clients = allClients.filter((c) => !c.deletedAt);
 
   const today = useToday();
+  const empty = {
+    date: today as Date | undefined,
+    hours: "",
+    clientId: "",
+    description: "",
+  };
+  // The add card, and its first value field: focus targets after Add and Duplicate.
+  const addCard = useRef<HTMLDivElement>(null);
+  const firstValue = useRef<HTMLInputElement>(null);
   const form = useForm({
-    defaultValues: {
-      date: today as Date | undefined,
-      hours: "",
-      clientId: "",
-      description: "",
-    },
+    defaultValues: empty,
     validators: { onSubmit: timeSchema },
     onSubmit: async ({ value, formApi }) => {
       const parsed = timeSchema.parse(value);
@@ -73,10 +80,33 @@ function TimePage() {
         deletedAt: null,
       });
       toast.success("Time entry added.");
-      formApi.reset();
+      // A run of entries shares the date and the client: keep those, clear the rest.
+      formApi.reset(
+        { ...empty, date: value.date, clientId: value.clientId },
+        { keepDefaultValues: true },
+      );
       router.invalidate();
+      firstValue.current?.focus();
     },
   });
+
+  // Fills the add form with a row's values, and puts focus on its date, the
+  // value a copy most often changes.
+  const duplicate = (row: (typeof entries)[number]) => {
+    form.reset(
+      {
+        date: isoToDate(row.date) ?? today,
+        hours: hoursField(row.minutes),
+        // An archived client cannot be picked for a new entry.
+        clientId: clients.some((c) => c.id === row.clientId) ? (row.clientId ?? "") : "",
+        description: row.description ?? "",
+      },
+      { keepDefaultValues: true },
+    );
+    // The first form control is the date field's trigger; FormControl gives each
+    // control an id ending in "-form-item". Focus also scrolls it into view.
+    addCard.current?.querySelector<HTMLElement>('[id$="-form-item"]')?.focus();
+  };
 
   const remove = (row: (typeof entries)[number]) =>
     softDeleteWithUndo({
@@ -98,14 +128,19 @@ function TimePage() {
           void form.handleSubmit();
         }}
       >
-        <Card>
+        <Card ref={addCard}>
           <CardHeader>
-            <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-              Log time
+            <CardTitle>
+              <SectionTitle>Log time</SectionTitle>
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[1.1fr_1fr_1.5fr_2fr]">
-            <TSFormField form={form} name="date" validators={{ onBlur: fs.date }}>
+            <TSFormField
+              form={form}
+              name="date"
+              requirement="required"
+              validators={{ onBlur: fs.date }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Date</FormLabel>
@@ -120,12 +155,18 @@ function TimePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="hours" validators={{ onBlur: fs.hours }}>
+            <TSFormField
+              form={form}
+              name="hours"
+              requirement="required"
+              validators={{ onBlur: fs.hours }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Hours</FormLabel>
                   <FormControl>
                     <Input
+                      ref={firstValue}
                       type="text"
                       inputMode="decimal"
                       value={field.state.value}
@@ -137,7 +178,7 @@ function TimePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="clientId">
+            <TSFormField form={form} name="clientId" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Client</FormLabel>
@@ -159,7 +200,7 @@ function TimePage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="description">
+            <TSFormField form={form} name="description" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Description</FormLabel>
@@ -217,7 +258,7 @@ function TimePage() {
                 <DataTable.Row key={t.id}>
                   <DataTable.Cell>
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="font-mono">{t.date}</span>
+                      <span className="whitespace-nowrap">{formatDate(t.date)}</span>
                       <PreSeStartBadge rowDate={t.date} seStartDate={profile?.seStartDate} />
                     </span>
                   </DataTable.Cell>
@@ -233,6 +274,9 @@ function TimePage() {
                         clients={allClients}
                         onSaved={() => router.invalidate()}
                       />
+                      <Button variant="ghost" size="sm" onClick={() => duplicate(t)}>
+                        Duplicate
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => remove(t)}>
                         Delete
                       </Button>

@@ -1,6 +1,6 @@
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
-import { Card, CardContent, CardFooter, CardHeader } from "@fiscode/ui/components/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo } from "@fiscode/db";
 import {
@@ -23,6 +23,7 @@ import { CONFIG_YEARS_BACK, DatePicker, dateToIso } from "../components/forms/da
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { ImportCard } from "../components/import-card";
+import { SectionTitle } from "../components/section-title";
 
 const FILING_OPTIONS = labelOptions(FILING_STATUS_LABELS);
 
@@ -56,6 +57,7 @@ export const Route = createFileRoute("/setup")({
 
 function SetupPage() {
   const navigate = useNavigate();
+  const router = useRouter();
   // Defaults are intentionally empty — the user picks every field. No
   // auto-filled assumptions about filing status, state, start date, or
   // entity type. Submit stays disabled until zod accepts all four.
@@ -95,6 +97,9 @@ function SetupPage() {
           });
         }
         toast.success("Profile saved.");
+        // The layout read "no profile yet" when this screen opened; read it
+        // again, or the next screen would still ask for setup.
+        await router.invalidate();
         navigate({ to: "/" });
       } catch (err) {
         console.error(err);
@@ -105,6 +110,7 @@ function SetupPage() {
 
   return (
     <Page
+      width="narrow"
       title="Welcome to fiscode"
       description="Just the minimum to get started. Everything else is optional."
     >
@@ -115,11 +121,16 @@ function SetupPage() {
         }}
       >
         <Card>
-          <CardHeader>SETUP</CardHeader>
-          <CardContent className="grid gap-3 pb-2 @sm:grid-cols-3">
+          <CardHeader>
+            <CardTitle>
+              <SectionTitle>Setup</SectionTitle>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 pb-2">
             <TSFormField
               form={form}
               name="filingStatus"
+              requirement="required"
               validators={{ onBlur: fieldSchemas.filingStatus }}
             >
               {(field) => (
@@ -139,7 +150,12 @@ function SetupPage() {
               )}
             </TSFormField>
 
-            <TSFormField form={form} name="state" validators={{ onBlur: fieldSchemas.state }}>
+            <TSFormField
+              form={form}
+              name="state"
+              requirement="required"
+              validators={{ onBlur: fieldSchemas.state }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>State of residence</FormLabel>
@@ -158,6 +174,7 @@ function SetupPage() {
             <TSFormField
               form={form}
               name="seStartDate"
+              requirement="required"
               validators={{ onBlur: fieldSchemas.seStartDate }}
             >
               {(field) => (
@@ -179,6 +196,7 @@ function SetupPage() {
             <TSFormField
               form={form}
               name="entityType"
+              requirement="required"
               validators={{ onBlur: fieldSchemas.entityType }}
             >
               {(field) => (
@@ -216,7 +234,10 @@ function SetupPage() {
         </Card>
       </EnterToSubmitForm>
 
-      <ImportCard variant="setup" onImported={() => navigate({ to: "/" })} />
+      {/* "Restore a backup" on the set-up-first screens links here. */}
+      <div id="restore" className="scroll-mt-16">
+        <ImportCard variant="setup" onImported={() => navigate({ to: "/" })} />
+      </div>
     </Page>
   );
 }

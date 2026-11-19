@@ -21,6 +21,7 @@ import { ArchiveDialog, type ArchiveReference } from "../components/archive-dial
 import { ParentName } from "../components/parent-name";
 import { optionalMoneyAmount } from "../lib/field-schemas";
 import { restoreRow, softDeleteWithUndo } from "../lib/soft-delete";
+import { SectionTitle } from "../components/section-title";
 
 const clientSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -116,12 +117,17 @@ function ClientsPage() {
       >
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium uppercase text-muted-foreground">
-              Add client
+            <CardTitle>
+              <SectionTitle>Add client</SectionTitle>
             </CardTitle>
           </CardHeader>
           <CardContent className="grid items-start gap-3 pb-2 @sm:grid-cols-2 @4xl:grid-cols-[2fr_1fr_1fr]">
-            <TSFormField form={form} name="name" validators={{ onBlur: fs.name }}>
+            <TSFormField
+              form={form}
+              name="name"
+              requirement="required"
+              validators={{ onBlur: fs.name }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Name</FormLabel>
@@ -136,7 +142,7 @@ function ClientsPage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="type">
+            <TSFormField form={form} name="type" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Type</FormLabel>
@@ -152,7 +158,12 @@ function ClientsPage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="defaultRate" validators={{ onBlur: fs.defaultRate }}>
+            <TSFormField
+              form={form}
+              name="defaultRate"
+              requirement="optional"
+              validators={{ onBlur: fs.defaultRate }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Default rate</FormLabel>

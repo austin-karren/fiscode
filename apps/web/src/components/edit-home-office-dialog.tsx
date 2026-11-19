@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,41 +8,40 @@ import {
   DialogTrigger,
 } from "@fiscode/ui/components/dialog";
 import { Button } from "@fiscode/ui/components/button";
-import { Input } from "@fiscode/ui/components/input";
-import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { homeOfficeRepo } from "@fiscode/db";
 import type { HomeOfficeRow } from "@fiscode/csv";
-import { HOME_OFFICE_METHOD_LABELS, labelOptions } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
+import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { optionalSqft } from "../lib/field-schemas";
-import { TSFormField } from "./forms/ts-form-field";
-import { CONFIG_YEARS_BACK, DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
-import { SelectWithLabels } from "./forms/select-with-labels";
+import {
+  centsField,
+  homeOfficeFieldSchemas,
+  overlapsSimplified,
+  SECOND_SIMPLIFIED_MESSAGE,
+  withAreaCheck,
+} from "../lib/home-office-form";
+import { HomeOfficeFields } from "./home-office-fields";
+import { dateToIso, isoToDate } from "./forms/date-picker";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { useToday } from "../lib/use-today";
+import { useEditDialog } from "../hooks/use-edit-dialog";
 
-const METHOD_OPTIONS = labelOptions(HOME_OFFICE_METHOD_LABELS);
-
-const editSchema = z.object({
-  startDate: z.date({ message: "Pick a start date" }),
-  endDate: z.date().optional(),
-  method: z.enum(["simplified", "actual"], { message: "Pick a method" }),
-  officeSqft: optionalSqft,
-  homeSqft: optionalSqft,
-});
+const editSchema = withAreaCheck(z.object(homeOfficeFieldSchemas));
 
 export function EditHomeOfficeDialog({
   row,
+  rows,
   onSaved,
 }: {
   row: HomeOfficeRow;
+  /** Every config, for the one-simplified-home-a-year check. */
+  rows: readonly HomeOfficeRow[];
   onSaved: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-
+  // Set when a save is refused for a second simplified home in a year.
+  const [methodError, setMethodError] = useState<string | undefined>();
   const today = useToday();
   const form = useForm({
     defaultValues: {
@@ -52,25 +50,41 @@ export function EditHomeOfficeDialog({
       method: (row.method as "simplified" | "actual") ?? "simplified",
       officeSqft: row.officeSqft === null ? "" : String(row.officeSqft),
       homeSqft: row.homeSqft === null ? "" : String(row.homeSqft),
+      rentMortgage: centsField(row.monthlyRentMortgageCents),
+      utilities: centsField(row.monthlyUtilitiesCents),
+      insurance: centsField(row.monthlyInsuranceCents),
     },
     validators: { onSubmit: editSchema as never },
     onSubmit: async ({ value }) => {
       const parsed = editSchema.parse(value);
+      const startDate = dateToIso(value.startDate!);
+      const endDate = value.endDate ? dateToIso(value.endDate) : null;
+      setMethodError(undefined);
+      if (overlapsSimplified(rows, { id: row.id, method: parsed.method, startDate, endDate })) {
+        setMethodError(SECOND_SIMPLIFIED_MESSAGE);
+        return;
+      }
+      // The engine reads the monthly costs for Actual only.
+      const actual = parsed.method === "actual";
       await homeOfficeRepo.update(row.id, {
-        startDate: dateToIso(value.startDate!),
-        endDate: value.endDate ? dateToIso(value.endDate) : null,
+        startDate,
+        endDate,
         method: parsed.method,
         officeSqft: parsed.officeSqft,
         homeSqft: parsed.homeSqft,
+        monthlyRentMortgageCents: actual ? parsed.rentMortgage : null,
+        monthlyUtilitiesCents: actual ? parsed.utilities : null,
+        monthlyInsuranceCents: actual ? parsed.insurance : null,
       });
       toast.success("Home office config updated.");
       setOpen(false);
       onSaved();
     },
   });
+  const { open, setOpen, onOpenChange } = useEditDialog(form, () => setMethodError(undefined));
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">
@@ -89,98 +103,8 @@ export function EditHomeOfficeDialog({
             void form.handleSubmit();
           }}
         >
-          <div className="grid gap-3">
-            <TSFormField form={form} name="startDate">
-              {(field) => (
-                <FormItem>
-                  <FormLabel>Start date</FormLabel>
-                  <FormControl>
-                    <DatePicker
-                      yearsBack={CONFIG_YEARS_BACK}
-                      value={field.state.value as Date | undefined}
-                      onBlur={field.handleBlur}
-                      onValueChange={(d) => field.handleChange(d ?? new Date())}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField form={form} name="endDate">
-              {(field) => (
-                <FormItem>
-                  <FormLabel>End date (optional)</FormLabel>
-                  <FormControl>
-                    <DatePicker
-                      yearsBack={CONFIG_YEARS_BACK}
-                      value={field.state.value as Date | undefined}
-                      onBlur={field.handleBlur}
-                      onValueChange={(d) => field.handleChange(d)}
-                      disableFuture={false}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField form={form} name="method">
-              {(field) => (
-                <FormItem>
-                  <FormLabel>Method</FormLabel>
-                  <FormControl>
-                    <SelectWithLabels
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onValueChange={(v) => field.handleChange(v as "simplified" | "actual")}
-                      items={METHOD_OPTIONS}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField
-              form={form}
-              name="officeSqft"
-              validators={{ onBlur: editSchema.shape.officeSqft }}
-            >
-              {(field) => (
-                <FormItem>
-                  <FormLabel>Office sqft</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            <TSFormField
-              form={form}
-              name="homeSqft"
-              validators={{ onBlur: editSchema.shape.homeSqft }}
-            >
-              {(field) => (
-                <FormItem>
-                  <FormLabel>Home sqft</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
+          <div className="@container grid gap-3">
+            <HomeOfficeFields form={form} methodError={methodError} />
           </div>
           <DialogFooter className="mt-4" showCloseButton>
             <form.Subscribe

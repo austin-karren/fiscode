@@ -19,6 +19,19 @@ const baseInput = (overrides: Partial<TaxInput> = {}): TaxInput => ({
   ...overrides,
 });
 
+// Even quarters of the base input's year, for the annualized method.
+const annualPeriods = () =>
+  [
+    ["2026-03-31", 30_000, 1_250],
+    ["2026-05-31", 50_000, 2_083.33],
+    ["2026-08-31", 80_000, 3_333.33],
+    ["2026-12-31", 120_000, 5_000],
+  ].map(([endsAt, g, e]) => ({
+    endsAt: isoDate(endsAt as string),
+    cumulativeGross1099: dollars(g as number),
+    cumulativeDeductibleExpenses: dollars(e as number),
+  }));
+
 describe("estimateYear (sole prop, MFJ, UT)", () => {
   it("produces a plausible full-year estimate for the target user", () => {
     const { estimate, quarterly, safeHarbor } = estimateYear({
@@ -42,13 +55,72 @@ describe("estimateYear (sole prop, MFJ, UT)", () => {
     expect(quarterly.method).toBe("even");
     expect(quarterly.payments).toHaveLength(4);
     const sum = quarterly.payments.reduce<Cents>((acc, p) => (acc + p.amount) as Cents, cents(0));
-    // 4 × round(0.25 × X) can differ from X by ±2 cents.
-    expect(Math.abs(sum - estimate.remainingOwed)).toBeLessThanOrEqual(2);
+    // Form 2210: the four installments add up to the required annual payment
+    // (line 9), which for a first-year filer is 90% of this year's tax.
+    expect(sum).toBe(safeHarbor.floor);
 
     // First-year safe harbor: floor = 90% of current.
     expect(safeHarbor.firstYear).toBe(true);
     expect(safeHarbor.priorYearTarget).toBeUndefined();
-    expect(safeHarbor.floor).toBe(Math.round(estimate.totalLiability * 0.9));
+    // Form 2210 line 5: 90% of this year's federal tax (income tax + SE tax).
+    expect(estimate.federalLiability).toBe(
+      (estimate.federal.federalIncomeTax + estimate.se.totalSeTax) as Cents,
+    );
+    expect(safeHarbor.floor).toBe(Math.round(estimate.federalLiability * 0.9));
+  });
+
+  // Form 2210 line 7: "Subtract line 6 from line 4. If less than $1,000, stop;
+  // you don't owe a penalty." Withholding is set so the tax left is exactly
+  // the boundary amount.
+  describe("the $1,000 no-penalty test (Form 2210 lines 4 and 7)", () => {
+    // Federal tax only (Form 2210 line 4 = federal income tax + SE tax), minus
+    // federal withholding only (line 6).
+    const leaving = (left: number) => {
+      const federal = estimateYear({ entity: "sole_prop", method: "even", input: baseInput() })
+        .estimate.federalLiability;
+      return baseInput({ spouseFederalWithholding: cents(federal - dollars(left)) });
+    };
+
+    for (const method of ["even", "annualized"] as const) {
+      const run = (left: number) =>
+        estimateYear({
+          entity: "sole_prop",
+          method,
+          input:
+            method === "annualized"
+              ? ({ ...leaving(left), periods: annualPeriods() } as never)
+              : leaving(left),
+        });
+
+      it(`${method}: $999.99 left after withholding → no installments`, () => {
+        const r = run(999.99);
+        expect(r.estimate.federalLiability - r.estimate.federalWithholding).toBe(dollars(999.99));
+        expect(r.quarterly.noInstallmentsRequired).toBe(true);
+        expect(r.quarterly.payments.map((p) => p.requiredInstallment)).toEqual([0, 0, 0, 0]);
+        expect(r.quarterly.payments.map((p) => p.amount)).toEqual([0, 0, 0, 0]);
+      });
+
+      it(`${method}: $1,000.00 and $1,000.01 left → installments are required`, () => {
+        for (const left of [1_000, 1_000.01]) {
+          const r = run(left);
+          expect(r.estimate.federalLiability - r.estimate.federalWithholding).toBe(dollars(left));
+          expect(r.quarterly.noInstallmentsRequired).toBe(false);
+          const req = r.quarterly.payments.reduce((a, p) => a + p.requiredInstallment, 0);
+          expect(req).toBe(r.safeHarbor.floor);
+        }
+      });
+    }
+
+    it("the reviewer's tiny demo ($4,000 of 1099 income) needs no installments", () => {
+      const r = estimateYear({
+        entity: "sole_prop",
+        method: "even",
+        input: baseInput({ gross1099: dollars(4_000), deductibleExpenses: cents(0) }),
+      });
+      expect(r.estimate.federalLiability).toBeLessThan(dollars(1_000));
+      expect(r.quarterly.noInstallmentsRequired).toBe(true);
+      expect(r.quarterly.payments.map((p) => p.amount)).toEqual([0, 0, 0, 0]);
+    });
   });
 
   it("spouse withholding reduces remainingOwed but not totalLiability", () => {

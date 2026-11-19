@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +26,7 @@ import { LabelWithTooltip } from "./forms/labeled";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { useToday } from "../lib/use-today";
+import { useEditDialog } from "../hooks/use-edit-dialog";
 
 const editSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -46,8 +46,6 @@ export function EditExpenseDialog({
   categories: ReadonlyArray<readonly [string, string]>;
   onSaved: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-
   const today = useToday();
   const form = useForm({
     defaultValues: {
@@ -74,9 +72,10 @@ export function EditExpenseDialog({
       onSaved();
     },
   });
+  const { open, setOpen, onOpenChange } = useEditDialog(form);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">
@@ -96,7 +95,7 @@ export function EditExpenseDialog({
           }}
         >
           <div className="grid gap-3">
-            <TSFormField form={form} name="date">
+            <TSFormField form={form} name="date" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Date</FormLabel>
@@ -111,7 +110,12 @@ export function EditExpenseDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="amount" validators={{ onBlur: editSchema.shape.amount }}>
+            <TSFormField
+              form={form}
+              name="amount"
+              requirement="required"
+              validators={{ onBlur: editSchema.shape.amount }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Amount</FormLabel>
@@ -127,7 +131,7 @@ export function EditExpenseDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="category">
+            <TSFormField form={form} name="category" requirement="required">
               {(field) => (
                 <FormItem>
                   <LabelWithTooltip tooltip={GLOSSARY.expenseCategory}>Category</LabelWithTooltip>
@@ -143,7 +147,7 @@ export function EditExpenseDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="description">
+            <TSFormField form={form} name="description" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Description</FormLabel>

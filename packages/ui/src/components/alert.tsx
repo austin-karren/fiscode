@@ -12,7 +12,7 @@ const alertVariants = cva(
         destructive:
           "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current",
         warning:
-          "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 *:data-[slot=alert-description]:text-amber-700/90 dark:*:data-[slot=alert-description]:text-amber-300/80 *:[svg]:text-current",
+          "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 *:data-[slot=alert-description]:text-amber-700 dark:*:data-[slot=alert-description]:text-amber-300 *:[svg]:text-current",
       },
     },
     defaultVariants: {
@@ -29,7 +29,9 @@ function Alert({
   return (
     <div
       data-slot="alert"
-      role="alert"
+      // Only an error that appears in response to an action interrupts a
+      // screen reader; a warning or note on the page is static text.
+      role={variant === "destructive" ? "alert" : undefined}
       className={cn(alertVariants({ variant }), className)}
       {...props}
     />

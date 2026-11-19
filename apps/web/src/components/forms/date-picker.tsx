@@ -94,6 +94,7 @@ export function DatePicker({
   onBlur,
   "aria-invalid": ariaInvalid,
   "aria-describedby": ariaDescribedBy,
+  "aria-required": ariaRequired,
 }: {
   value: Date | undefined;
   onValueChange: (date: Date | undefined) => void;
@@ -122,7 +123,13 @@ export function DatePicker({
             // and by its own text so both are announced.
             aria-labelledby={id ? `${id}-label ${id}-value` : undefined}
             aria-invalid={ariaInvalid}
-            aria-describedby={ariaDescribedBy}
+            // A button cannot be aria-required; a required date says so in
+            // its description instead.
+            aria-describedby={
+              [ariaDescribedBy, ariaRequired && id ? `${id}-required` : undefined]
+                .filter(Boolean)
+                .join(" ") || undefined
+            }
             // Focus moves into the calendar while it is open; that is not
             // the user leaving the field.
             onBlur={() => {
@@ -143,6 +150,11 @@ export function DatePicker({
               {value ? displayFormat(value) : placeholder}
             </span>
             <CalendarIcon className="ml-2 size-4 text-muted-foreground" />
+            {ariaRequired && id ? (
+              <span id={`${id}-required`} className="sr-only">
+                Required
+              </span>
+            ) : null}
           </Button>
         }
       />

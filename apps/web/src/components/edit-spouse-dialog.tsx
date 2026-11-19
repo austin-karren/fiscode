@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +22,7 @@ import { TSFormField } from "./forms/ts-form-field";
 import { CONFIG_YEARS_BACK, DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { useToday } from "../lib/use-today";
+import { useEditDialog } from "../hooks/use-edit-dialog";
 
 const editSchema = z.object({
   startDate: z.date({ message: "Pick a start date" }),
@@ -35,8 +35,6 @@ const editSchema = z.object({
 const centsToDollarsStr = (c: number) => (c / 100).toFixed(2);
 
 export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSaved: () => void }) {
-  const [open, setOpen] = useState(false);
-
   const today = useToday();
   const form = useForm({
     defaultValues: {
@@ -61,9 +59,10 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
       onSaved();
     },
   });
+  const { open, setOpen, onOpenChange } = useEditDialog(form);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">
@@ -83,7 +82,7 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
           }}
         >
           <div className="grid gap-3">
-            <TSFormField form={form} name="startDate">
+            <TSFormField form={form} name="startDate" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Start</FormLabel>
@@ -99,10 +98,10 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="endDate">
+            <TSFormField form={form} name="endDate" requirement="optional">
               {(field) => (
                 <FormItem>
-                  <FormLabel>End (optional)</FormLabel>
+                  <FormLabel>End</FormLabel>
                   <FormControl>
                     <DatePicker
                       yearsBack={CONFIG_YEARS_BACK}
@@ -116,7 +115,12 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="wages" validators={{ onBlur: editSchema.shape.wages }}>
+            <TSFormField
+              form={form}
+              name="wages"
+              requirement="optional"
+              validators={{ onBlur: editSchema.shape.wages }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Annual W-2 wages</FormLabel>
@@ -132,7 +136,12 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="fedWH" validators={{ onBlur: editSchema.shape.fedWH }}>
+            <TSFormField
+              form={form}
+              name="fedWH"
+              requirement="optional"
+              validators={{ onBlur: editSchema.shape.fedWH }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Fed withholding</FormLabel>
@@ -151,6 +160,7 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
             <TSFormField
               form={form}
               name="stateWH"
+              requirement="optional"
               validators={{ onBlur: editSchema.shape.stateWH }}
             >
               {(field) => (

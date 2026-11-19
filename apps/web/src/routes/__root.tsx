@@ -2,15 +2,21 @@ import { Toaster } from "@fiscode/ui/components/sonner";
 import { SidebarProvider, SidebarTrigger } from "@fiscode/ui/components/sidebar";
 import { Separator } from "@fiscode/ui/components/separator";
 import { TooltipProvider } from "@fiscode/ui/components/tooltip";
-import { Outlet, createRootRoute, useLocation } from "@tanstack/react-router";
+import { profileRepo } from "@fiscode/db";
+import { Outlet, createRootRoute, useLoaderData, useLocation } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import { AppSidebar } from "../components/app-sidebar";
 import { ErrorEmpty } from "../components/empty-states/error";
 import { NotFoundEmpty } from "../components/empty-states/not-found";
+import { SetupRequiredEmpty } from "../components/empty-states/setup-required";
+import { Page } from "../components/page";
 import { MAIN_ID, routeLabel } from "../lib/nav";
 
 export const Route = createRootRoute({
+  // Read on every navigation, so finishing setup (or restoring a backup)
+  // opens the app on the next screen without a reload.
+  loader: async () => ({ hasProfile: (await profileRepo.get()) !== undefined }),
   component: RootLayout,
   errorComponent: ({ error, reset }) => (
     <FullPageWrap>
@@ -37,8 +43,16 @@ function FullPageWrap({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Every screen but setup works on data that needs a profile (filing status,
+// state, SE start). Until one exists they show the way to set up or restore.
+const OPEN_BEFORE_SETUP = ["/setup"];
+
 function RootLayout() {
   const { pathname } = useLocation();
+  // Undefined while there is no root loader (a test's stand-in root).
+  const root = useLoaderData({ from: "__root__" }) as { hasProfile: boolean } | undefined;
+  const needsSetup =
+    root?.hasProfile === false && !OPEN_BEFORE_SETUP.some((p) => pathname.startsWith(p));
   return (
     <TooltipProvider delay={200}>
       {/* First in tab order, so a keyboard user can pass the sidebar. Focus is
@@ -71,7 +85,13 @@ function RootLayout() {
             tabIndex={-1}
             className="@container px-4 py-6 outline-none md:px-8 print:p-0"
           >
-            <Outlet />
+            {needsSetup ? (
+              <Page title={routeLabel(pathname)}>
+                <SetupRequiredEmpty />
+              </Page>
+            ) : (
+              <Outlet />
+            )}
           </main>
         </div>
         <Toaster richColors />

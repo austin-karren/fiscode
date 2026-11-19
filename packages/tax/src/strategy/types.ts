@@ -1,4 +1,4 @@
-import type { QuarterlyMethod } from "@fiscode/core";
+import type { Cents, QuarterlyMethod } from "@fiscode/core";
 import type {
   AnnualizedInput,
   QuarterlyPlan,
@@ -14,6 +14,8 @@ export interface TaxStrategy {
     input: TaxInput | AnnualizedInput,
     cfg: YearConfig,
     method: QuarterlyMethod,
+    /** Form 2210 line 9: the smaller of 90% of this year's tax and the prior-year amount. */
+    requiredAnnualPayment: Cents,
   ): QuarterlyPlan;
 }
 

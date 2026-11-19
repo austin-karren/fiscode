@@ -30,11 +30,13 @@ const filingStatusKeyed = <T extends z.ZodTypeAny>(value: T) =>
     hoh: value,
   });
 
-// v2 (2026 tax fixes): bumped so a payload cached by an older build, which
+// v4 (T3): adds the QBI phase-in band and the §199A(i) minimum.
+// v3 (T2): adds the Utah taxpayer credit and the MFS safe-harbor threshold.
+// v2 (T1): bumped so a payload cached by an older build, which
 // still holds the 2026 seed figures, is skipped on hydrate and refetched,
 // instead of overriding the sourced bundled config. Bump it whenever the
 // bundled figures change in a way a stale cached copy must not hide.
-export const TAX_YEAR_WIRE_SCHEMA_VERSION = "v2" as const;
+export const TAX_YEAR_WIRE_SCHEMA_VERSION = "v4" as const;
 
 export const taxYearWireSchema = z.object({
   schemaVersion: z.literal(TAX_YEAR_WIRE_SCHEMA_VERSION),
@@ -58,6 +60,8 @@ export const taxYearWireSchema = z.object({
   qbi: z.object({
     rate: ratePct,
     taxableIncomeLimit: filingStatusKeyed(dollarsNumber),
+    phaseInRange: filingStatusKeyed(dollarsNumber),
+    minimum: z.object({ deduction: dollarsNumber, qbiFloor: dollarsNumber }).nullable(),
   }),
   // The rate in force on Jan 1. Kept for older readers of this file.
   mileageRatePerMile: z.number().nonnegative(),
@@ -83,12 +87,20 @@ export const taxYearWireSchema = z.object({
     priorYearDefault: z.number().min(1).max(2),
     priorYearHighIncome: z.number().min(1).max(2),
     priorYearAgiThreshold: dollarsNumber,
+    priorYearAgiThresholdMfs: dollarsNumber,
   }),
   meals: z.object({ deductibleFraction: ratePct }),
   // 4 ISO YYYY-MM-DD strings in order Q1..Q4.
   quarterlyDueDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).length(4),
   // State -> flat rate. Sparse map — entries are 0..1.
   stateRates: z.record(z.string(), ratePct),
+  utahTaxpayerCredit: z.object({
+    creditRate: ratePct,
+    personalExemptionPerDependent: dollarsNumber,
+    phaseOutRate: ratePct,
+    phaseOutBase: filingStatusKeyed(dollarsNumber),
+    draft: z.boolean(),
+  }),
 });
 
 export type TaxYearWire = z.infer<typeof taxYearWireSchema>;
@@ -137,6 +149,16 @@ export const wireToYearConfig = (wire: TaxYearWire): YearConfig => {
         mfs: dollars(wire.qbi.taxableIncomeLimit.mfs),
         hoh: dollars(wire.qbi.taxableIncomeLimit.hoh),
       },
+      phaseInRange: {
+        single: dollars(wire.qbi.phaseInRange.single),
+        mfj: dollars(wire.qbi.phaseInRange.mfj),
+        mfs: dollars(wire.qbi.phaseInRange.mfs),
+        hoh: dollars(wire.qbi.phaseInRange.hoh),
+      },
+      minimum: wire.qbi.minimum && {
+        deduction: dollars(wire.qbi.minimum.deduction),
+        qbiFloor: dollars(wire.qbi.minimum.qbiFloor),
+      },
     },
     mileageRates: wire.mileageRates?.map((r) => ({
       from: isoDate(r.from),
@@ -152,6 +174,7 @@ export const wireToYearConfig = (wire: TaxYearWire): YearConfig => {
       priorYearDefault: wire.safeHarbor.priorYearDefault,
       priorYearHighIncome: wire.safeHarbor.priorYearHighIncome,
       priorYearAgiThreshold: dollars(wire.safeHarbor.priorYearAgiThreshold),
+      priorYearAgiThresholdMfs: dollars(wire.safeHarbor.priorYearAgiThresholdMfs),
     },
     meals: { deductibleFraction: wire.meals.deductibleFraction },
     quarterlyDueDates: [
@@ -161,6 +184,18 @@ export const wireToYearConfig = (wire: TaxYearWire): YearConfig => {
       isoDate(wire.quarterlyDueDates[3]!),
     ],
     stateRates: wire.stateRates as never,
+    utahTaxpayerCredit: {
+      creditRate: wire.utahTaxpayerCredit.creditRate,
+      personalExemptionPerDependent: dollars(wire.utahTaxpayerCredit.personalExemptionPerDependent),
+      phaseOutRate: wire.utahTaxpayerCredit.phaseOutRate,
+      phaseOutBase: {
+        single: dollars(wire.utahTaxpayerCredit.phaseOutBase.single),
+        mfj: dollars(wire.utahTaxpayerCredit.phaseOutBase.mfj),
+        mfs: dollars(wire.utahTaxpayerCredit.phaseOutBase.mfs),
+        hoh: dollars(wire.utahTaxpayerCredit.phaseOutBase.hoh),
+      },
+      draft: wire.utahTaxpayerCredit.draft,
+    },
   };
 };
 
@@ -219,6 +254,16 @@ export const yearConfigToWire = (
       mfs: cfg.qbi.taxableIncomeLimit.mfs / 100,
       hoh: cfg.qbi.taxableIncomeLimit.hoh / 100,
     },
+    phaseInRange: {
+      single: cfg.qbi.phaseInRange.single / 100,
+      mfj: cfg.qbi.phaseInRange.mfj / 100,
+      mfs: cfg.qbi.phaseInRange.mfs / 100,
+      hoh: cfg.qbi.phaseInRange.hoh / 100,
+    },
+    minimum: cfg.qbi.minimum && {
+      deduction: cfg.qbi.minimum.deduction / 100,
+      qbiFloor: cfg.qbi.minimum.qbiFloor / 100,
+    },
   },
   mileageRatePerMile: cfg.mileageRates[0]!.ratePerMile,
   mileageRates: cfg.mileageRates.map((r) => ({ from: r.from, ratePerMile: r.ratePerMile })),
@@ -232,6 +277,7 @@ export const yearConfigToWire = (
     priorYearDefault: cfg.safeHarbor.priorYearDefault,
     priorYearHighIncome: cfg.safeHarbor.priorYearHighIncome,
     priorYearAgiThreshold: cfg.safeHarbor.priorYearAgiThreshold / 100,
+    priorYearAgiThresholdMfs: cfg.safeHarbor.priorYearAgiThresholdMfs / 100,
   },
   meals: { deductibleFraction: cfg.meals.deductibleFraction },
   quarterlyDueDates: [
@@ -241,6 +287,18 @@ export const yearConfigToWire = (
     cfg.quarterlyDueDates[3],
   ],
   stateRates: cfg.stateRates as Record<string, number>,
+  utahTaxpayerCredit: {
+    creditRate: cfg.utahTaxpayerCredit.creditRate,
+    personalExemptionPerDependent: cfg.utahTaxpayerCredit.personalExemptionPerDependent / 100,
+    phaseOutRate: cfg.utahTaxpayerCredit.phaseOutRate,
+    phaseOutBase: {
+      single: cfg.utahTaxpayerCredit.phaseOutBase.single / 100,
+      mfj: cfg.utahTaxpayerCredit.phaseOutBase.mfj / 100,
+      mfs: cfg.utahTaxpayerCredit.phaseOutBase.mfs / 100,
+      hoh: cfg.utahTaxpayerCredit.phaseOutBase.hoh / 100,
+    },
+    draft: cfg.utahTaxpayerCredit.draft,
+  },
 });
 
 /**

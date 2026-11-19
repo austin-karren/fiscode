@@ -21,12 +21,15 @@ export function SetupRequiredEmpty() {
         <EmptyTitle>Set up fiscode first</EmptyTitle>
         <EmptyDescription>
           Capture filing status, state of residence, and self-employment start date before using the
-          rest of the app.
+          rest of the app. Have a fiscode backup? Restore it instead.
         </EmptyDescription>
       </EmptyHeader>
-      <EmptyContent>
+      <EmptyContent className="flex-row flex-wrap justify-center">
         <Link to="/setup" className={buttonVariants()}>
           Run setup
+        </Link>
+        <Link to="/setup" hash="restore" className={buttonVariants({ variant: "outline" })}>
+          Restore a backup
         </Link>
       </EmptyContent>
     </Empty>

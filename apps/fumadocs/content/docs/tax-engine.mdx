@@ -41,20 +41,148 @@ its primary source in a comment beside it; anything not yet checked is marked
 | Bracket tops, MFS                         | $12,400 / $50,400 / $105,700 / $201,775 / $256,225 / $384,350  | Table 4                                                                                                                     |
 | Bracket tops, HOH                         | $17,700 / $67,450 / $105,700 / $201,750 / $256,200 / $640,600  | Table 2                                                                                                                     |
 | QBI threshold                             | $201,750 single and HOH, $201,775 MFS, $403,500 MFJ            | Rev. Proc. 2025-32 §4.26                                                                                                    |
+| QBI phase-in band above the threshold     | $75,000; $150,000 MFJ                                          | Rev. Proc. 2025-32 §4.26; [26 U.S.C. 199A(b)(3)(B)](https://uscode.house.gov)                                               |
+| QBI minimum deduction                     | $400 with $1,000 or more of QBI                                | IRC §199A(i); Rev. Proc. 2025-32 §2.12                                                                                      |
 | Social Security wage base                 | $184,500                                                       | [Schedule SE instructions](https://www.irs.gov/instructions/i1040sse)                                                       |
 | Business mileage                          | 72.5¢ Jan 1 – Jun 30; 76¢ from Jul 1                           | [Notice 2026-10](https://www.irs.gov/pub/irs-drop/n-26-10.pdf), [Announcement 2026-11](https://www.irs.gov/irb/2026-29_irb) |
 | Utah rate                                 | 4.45%                                                          | [Utah Code 59-10-104](https://le.utah.gov/xcode/title59/chapter10/C59-10-S104_2026050620260506.pdf)                         |
+| Utah personal exemption (DRAFT)           | $2,167 per qualifying dependent                                | [2026 TC-40 draft dated 10/20/26](https://files.tax.utah.gov/tax/forms/drafts/tc-40.pdf), line 9                            |
+| Utah credit phase-out base (DRAFT)        | $18,696 single and MFS, $28,045 HOH, $37,392 MFJ               | 2026 TC-40 draft, line 15                                                                                                   |
+| Safe-harbor prior-year AGI threshold      | $150,000; $75,000 if MFS                                       | [2026 Form 1040-ES](https://www.irs.gov/pub/irs-pdf/f1040es.pdf)                                                            |
 
 The mileage rate changed mid-year, so each trip is deducted at the rate in force on its date.
 
+### QBI deduction
+
+20% of qualified business income, at most 20% of taxable income before the deduction. Above the
+threshold, with no W-2 wages or property, it shrinks in proportion to how far taxable income is
+into the phase-in band, and is $0 at the band's end. From 2026, anyone with $1,000 or more of QBI
+gets at least $400 ([26 U.S.C. 199A(i)](https://uscode.house.gov), added by Pub. L. 119-21 §70105).
+
+### Utah income tax
+
+Utah taxes income starting from federal AGI, not federal taxable income (TC-40 line 7). The tax is
+4.45% of that, minus the nonrefundable taxpayer tax credit
+([Utah Code 59-10-1018](https://le.utah.gov/xcode/Title59/Chapter10/C59-10-S1018_2026050620260506.pdf)):
+6% of (the federal standard deduction + the personal exemption per dependent), reduced by 1.3% of
+income above the filing-status base, and never below zero. The 2026 exemption and base amounts
+come from Utah's draft 2026 TC-40 and may change when the final form is posted.
+
+### Home office
+
+Two methods, each prorated by the days the office is in use within the year, and never before the
+self-employment start date:
+
+- **Simplified:** $5 per square foot, at most 300 sq ft ($1,500 a year).
+- **Actual** ([Form 8829](https://www.irs.gov/pub/irs-dft/f8829--dft.pdf), 2026 draft; lines
+  match the [2025 instructions](https://www.irs.gov/instructions/i8829)): the business percentage
+  is office area ÷ home area (line 3, "Divide line 1 by line 2"). The monthly rent or mortgage
+  interest, utilities and insurance (column (b)) are multiplied by it (line 24, "Multiply line 23,
+  column (b), by line 7"). Part-year use: "you can deduct only the expenses paid or incurred for
+  the portion of the year you used your home for business" (instructions, Columns (a) and (b)). An
+  office larger than the home is rejected and deducts nothing.
+
+Both are limited by the business's gross income: the deduction is at most the tentative profit
+before it (Form 8829 line 8, Schedule C line 29; line 27 "Enter the smaller of line 15 or line
+26"; [Pub 587](https://www.irs.gov/publications/p587) "Gross income limitation", which applies to
+the simplified method too). What the limit cuts depends on the method:
+
+- **Actual:** carried to next year (Form 8829 line 43). fiscode reports it but does not carry it
+  across years.
+- **Simplified:** lost. "Amount in excess of gross income limitation may not be carried over"
+  ([IRS, simplified option](https://www.irs.gov/businesses/small-businesses-self-employed/simplified-option-for-home-office-deduction)).
+
+**Whose income counts:** every home office, one or several, is limited by the profit from the
+income, expenses and mileage dated within its own days in use. Pub 587: "If some of the income is
+from a place of business other than your home, you must first determine the part of your gross
+income from the business use of your home". For more than one home, the Line 8 instructions say:
+"include only the income earned and the deductions attributable to that income during the period
+you owned the home". So:
+
+- A home used from July 1 is limited by the profit dated from July 1. Income earned before it
+  counts toward no home office.
+- Each date belongs to one home, for both its deduction and its profit: when a move is entered as
+  "ends Jul 1" and "starts Jul 1", the new home has Jul 1. Any overlap is treated as a move to the
+  later home, which owns the shared days.
+- A config that deducts nothing (no costs, or an office larger than the home) has no days.
+- The total never exceeds the business's whole tentative profit. Any excess is cut from the latest
+  home back, and is lost or carried over by that home's method.
+
+**Mortgage interest and real estate taxes:** fiscode assumes the standard deduction, so their
+business share goes on lines 16 and 17 and is limited with the other operating expenses ("If you
+claim the standard deduction, you will not include any mortgage interest or real estate taxes on
+lines 10 and 11; instead, you will claim the entire business use of the home portion of those
+expenses using lines 16 and 17", instructions, Lines 9, 10 and 11). An itemizer would put them on
+lines 10 and 11, outside the limit; itemizing is not modelled. For an owner, enter the mortgage
+interest only, not the principal.
+
 Not modelled yet:
 
-- The 2026 QBI minimum deduction: $400 for $1,000 or more of QBI (Rev. Proc. 2025-32 §2.12).
-- The QBI phase-in above the threshold.
-- Utah's taxpayer tax credit. The estimate applies the flat rate.
-- The safe-harbor prior-year AGI threshold for married filing separately, $75,000
-  ([2026 Form 1040-ES](https://www.irs.gov/pub/irs-pdf/f1040es.pdf)). The estimate uses $150,000
-  for every filing status.
+- **Simplified part-year use by months.** fiscode prorates the simplified method by days. Pub 587
+  ("Part-year use or area changes") averages the allowable square footage over the 12 months and
+  counts a month only with 15 or more days of business use. Pub 587's Example 1 (business use
+  from July 20, 300 allowable sq ft) comes to $625. fiscode's day count gives $678.08.
+- **One simplified home a year.** "If you had more than one home during the year that you used
+  for business, you can use the simplified method for only one home" (instructions). fiscode
+  accepts two simplified configs in a year and caps them together at $1,500.
+- **Real estate taxes:** no field.
+- **Depreciation** for owners (lines 36–42): there is no purchase price or basis to compute it from.
+- **Direct expenses** (column (a), such as painting the office): no field yet.
+- **The actual-method carryover** across years (line 43 → next year's line 25).
+
+### Quarterly estimates
+
+The plan follows Form 2210. The lines used read the same in the
+[2025 form](https://www.irs.gov/pub/irs-pdf/f2210.pdf) and the
+[2026 draft](https://www.irs.gov/pub/irs-dft/f2210--dft.pdf) (created April 16, 2026):
+
+- If the federal tax left after federal withholding is under $1,000, no installments are required
+  and every card is $0 (lines 4 and 7: "If less than $1,000, stop; you don't owe a penalty"). The dashboard says
+  so in one sentence.
+- The year target is the required annual payment (line 9): the smaller of 90% of this year's
+  federal tax and the prior-year amount, which is the safe-harbor floor.
+- Regular method: each required installment is 25% of the target (line 10).
+- Annualized method (Schedule AI): each period's income, mileage, home office and other
+  expenses through that period are annualized and the year's tax figured on them. Each
+  installment is the smaller of the annualized amount, with any earlier reduction recaptured, and
+  the regular 25% plus whatever earlier regular installments left unused (lines 21-27). The four
+  always add up to the target.
+- Federal withholding counts as paid a quarter at a time
+  ([instructions](https://www.irs.gov/pub/irs-pdf/i2210.pdf)), so each card shows what is left to
+  pay after it.
+
+Notes on the quarterly plan:
+
+- Schedule AI Part II figures self-employment tax per period with a prorated Social Security
+  limit. Without W-2 wages of your own, that gives the same result as the annualized calculation
+  fiscode uses. With your own W-2 wages it would differ, and fiscode does not model them yet.
+- The plan is federal only, as Form 2210 is: federal income tax plus self-employment tax, minus
+  federal withholding. State tax and state withholding never enter it.
+
+### Utah prepayment
+
+Utah has no quarterly schedule and no $1,000 test. Its
+[TC-546](https://files.tax.utah.gov/tax/forms/current/tc-546.pdf) asks for a minimum by the
+return's due date: the lesser of 90% of this year's Utah tax and last year's Utah tax, minus Utah
+withholding ("If less than zero, a payment is not due at this time"). Unpaid, it costs "2 percent
+of the unpaid tax for each month of the extension period". The return is due the same day as the
+federal one ([Utah Code 59-10-514](https://le.utah.gov/xcode/Title59/Chapter10/59-10-S514.html)),
+April 15. fiscode has no input for last year's Utah tax, so it shows 90% of this year's.
+
+Not modelled yet:
+
+- The QBI minimum assumes the owner materially participates: §199A(i) counts only QBI from an
+  active business (§469(h)). A specified service business above the band would get no minimum.
+- QBI for a specified service business (§199A(d)), W-2 wages and qualified property. The
+  estimate treats the business as non-SSTB with no employees and no property, so above the
+  threshold the deduction phases down to $0 across the band (then the $400 minimum applies).
+- Utah additions to and subtractions from income, itemized deductions, and the extra exemption
+  for a dependent born in the year.
+- A spouse's W-2 wages and withholding count only when filing jointly; under any other status
+  fiscode counts none of them. Married filing separately in a community property state (AZ, CA,
+  ID, LA, NV, NM, TX, WA, WI) differs: each spouse reports half of the community income and
+  claims half of the withholding on it
+  ([Pub 555](https://www.irs.gov/pub/irs-pdf/p555.pdf)). Not modelled.
 
 `getYearConfig(year)` falls back to the nearest defined year and surfaces a console warning + UI
 banner — stale data is loud, not silent.

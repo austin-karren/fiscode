@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +23,7 @@ import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { archivedSuffix, pickableParents } from "./parent-name";
 import { useToday } from "../lib/use-today";
+import { useEditDialog } from "../hooks/use-edit-dialog";
 
 const editSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -41,8 +41,6 @@ export function EditMileageDialog({
   vehicles: VehicleRow[];
   onSaved: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-
   const today = useToday();
   const form = useForm({
     defaultValues: {
@@ -65,9 +63,10 @@ export function EditMileageDialog({
       onSaved();
     },
   });
+  const { open, setOpen, onOpenChange } = useEditDialog(form);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button variant="ghost" size="sm">
@@ -87,7 +86,7 @@ export function EditMileageDialog({
           }}
         >
           <div className="grid gap-3">
-            <TSFormField form={form} name="date">
+            <TSFormField form={form} name="date" requirement="required">
               {(field) => (
                 <FormItem>
                   <FormLabel>Date</FormLabel>
@@ -102,7 +101,12 @@ export function EditMileageDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="miles" validators={{ onBlur: editSchema.shape.miles }}>
+            <TSFormField
+              form={form}
+              name="miles"
+              requirement="required"
+              validators={{ onBlur: editSchema.shape.miles }}
+            >
               {(field) => (
                 <FormItem>
                   <FormLabel>Business miles</FormLabel>
@@ -119,7 +123,7 @@ export function EditMileageDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="vehicleId">
+            <TSFormField form={form} name="vehicleId" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Vehicle</FormLabel>
@@ -141,7 +145,7 @@ export function EditMileageDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="purpose">
+            <TSFormField form={form} name="purpose" requirement="optional">
               {(field) => (
                 <FormItem>
                   <FormLabel>Purpose</FormLabel>
