@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Toaster } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -30,6 +30,24 @@ describe("service worker update", () => {
     options().onNeedRefresh!();
     fireEvent.click(await screen.findByRole("button", { name: "Reload" }));
     expect(applyUpdate).toHaveBeenCalledWith(true);
+  });
+
+  it("warns that Reload reloads every open tab", async () => {
+    const { options } = setup();
+    options().onNeedRefresh!();
+    expect(
+      await screen.findByText(
+        /This reloads every open fiscode tab, and unsaved form input is lost\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("can be put off with Later, without applying the update", async () => {
+    const { applyUpdate, options } = setup();
+    options().onNeedRefresh!();
+    fireEvent.click(await screen.findByRole("button", { name: "Later" }));
+    await waitFor(() => expect(screen.queryByText("Update available")).not.toBeInTheDocument());
+    expect(applyUpdate).not.toHaveBeenCalled();
   });
 
   it("says once when the app is ready to work offline", async () => {
