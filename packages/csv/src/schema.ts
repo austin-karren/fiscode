@@ -10,7 +10,7 @@ import { z } from "zod";
 // lay the same fields out as one table per record type, with money in
 // dollars. The importer maps both back to this flat row before validating.
 
-export const CSV_SCHEMA_VERSION = "v2" as const;
+export const CSV_SCHEMA_VERSION = "v3" as const;
 
 export const recordTypeSchema = z.enum([
   "profile",
@@ -95,6 +95,7 @@ export const csvRowSchema = z.object({
   reason: optStr,
   flag_for_section_179: optBool,
   startup_expense: optBool,
+  placed_in_service_date: optStr,
 
   // time
   minutes: optInt,
@@ -170,6 +171,7 @@ export const CSV_COLUMNS: ReadonlyArray<keyof CsvRow> = [
   "reason",
   "flag_for_section_179",
   "startup_expense",
+  "placed_in_service_date",
   "minutes",
   "make",
   "model",
@@ -196,4 +198,4 @@ export const CSV_COLUMNS: ReadonlyArray<keyof CsvRow> = [
 ];
 
 /** Schema markers this build can read. A file with any other marker is refused. */
-export const READABLE_SCHEMA_VERSIONS: readonly string[] = ["v1", "v2"];
+export const READABLE_SCHEMA_VERSIONS: readonly string[] = ["v1", "v2", "v3"];

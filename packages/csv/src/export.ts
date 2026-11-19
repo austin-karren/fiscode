@@ -182,6 +182,7 @@ const bundleToRows = (bundle: Bundle): Record<string, string>[] => {
         notes: str(e.notes),
         flag_for_section_179: bool(e.flagForSection179),
         startup_expense: bool(e.startupExpense),
+        placed_in_service_date: str(e.placedInServiceDate),
         created_at: e.createdAt,
         updated_at: e.updatedAt,
         deleted_at: str(e.deletedAt),
