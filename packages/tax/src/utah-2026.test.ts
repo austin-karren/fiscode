@@ -91,12 +91,14 @@ describe("Utah 2026: flat rate on AGI minus the taxpayer tax credit", () => {
       input({ year: 2025, gross1099: dollars(60_000), deductibleExpenses: dollars(5_000) }),
       config2025,
     );
-    // 2025 federal: std deduction 15,000; SE tax and AGI as in 2026 = 51,114.37
+    // 2025 federal: std deduction 15,750 (Rev. Proc. 2025-32 §3.01). SE tax and
+    // AGI as in 2026 (wage base not reached) = 51,114.37
     // Tax 4.5% × 51,114.37 = 2,300.14665 = 2,300.15
-    // Credit 6% × 15,000 = 900.00; phase-out 1.3% × (51,114.37 − 18,213)
-    //   = 427.71781 = 427.72; credit 472.28
-    // Utah tax 2,300.15 − 472.28 = 1,827.87
-    expect(e.state.stateIncomeTax).toBe(dollars(1_827.87));
+    // Credit 6% × 15,750 = 945.00; phase-out 1.3% × (51,114.37 − 18,213)
+    //   = 427.71781 = 427.72; credit 945.00 − 427.72 = 517.28
+    // Utah tax 2,300.15 − 517.28 = 1,782.87
+    expect(e.state.taxpayerCredit).toBe(dollars(517.28));
+    expect(e.state.stateIncomeTax).toBe(dollars(1_782.87));
   });
 
   it("another state keeps the flat-rate path (no rate configured: no tax)", () => {

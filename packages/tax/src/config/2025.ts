@@ -4,11 +4,16 @@ import type { YearConfig } from "../types.ts";
 // 2025 seed values. todo: verify all figures against IRS / SSA for 2025.
 export const config2025: YearConfig = {
   year: 2025,
+  // Rev. Proc. 2025-32 §3.01, https://www.irs.gov/pub/irs-drop/rp-25-32.pdf:
+  // "Section 63(c)(7) as amended by the OBBBA provides the standard deduction
+  // amounts under § 63(c)(2) for any taxable year beginning in 2025": $31,500
+  // MFJ, $23,625 HOH, $15,750 single, $15,750 MFS. It replaces Rev. Proc.
+  // 2024-40 §2.15(1). (§3.02, the §179 limit, has no key here.)
   standardDeduction: {
-    single: dollars(15_000),
-    mfj: dollars(30_000),
-    mfs: dollars(15_000),
-    hoh: dollars(22_500),
+    single: dollars(15_750),
+    mfj: dollars(31_500),
+    mfs: dollars(15_750),
+    hoh: dollars(23_625),
   },
   ssWageBase: dollars(176_100),
   seTax: {

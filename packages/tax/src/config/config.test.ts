@@ -20,11 +20,13 @@ import { getYearConfig, hasExactConfig } from "./index.ts";
 describe("config 2025 — pinned values", () => {
   const c = config2025;
 
-  it("standard deduction", () => {
-    expect(c.standardDeduction.single).toBe(dollars(15_000));
-    expect(c.standardDeduction.mfj).toBe(dollars(30_000));
-    expect(c.standardDeduction.mfs).toBe(dollars(15_000));
-    expect(c.standardDeduction.hoh).toBe(dollars(22_500));
+  it("standard deduction as amended by OBBBA (Rev. Proc. 2025-32 §3.01)", () => {
+    expect(c.standardDeduction).toEqual({
+      single: dollars(15_750),
+      mfj: dollars(31_500),
+      mfs: dollars(15_750),
+      hoh: dollars(23_625),
+    });
   });
 
   it("SS wage base — $176,100 per SSA 2024-10-10 announcement", () => {
