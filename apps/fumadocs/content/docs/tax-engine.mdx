@@ -47,9 +47,14 @@ its primary source in a comment beside it; anything not yet checked is marked
 
 The mileage rate changed mid-year, so each trip is deducted at the rate in force on its date.
 
-Not modelled yet: the 2026 QBI minimum deduction ($400 for $1,000 or more of QBI, Rev. Proc.
-2025-32 §2.12), the QBI phase-in above the threshold, and Utah's taxpayer tax credit (the
-estimate applies the flat rate).
+Not modelled yet:
+
+- The 2026 QBI minimum deduction: $400 for $1,000 or more of QBI (Rev. Proc. 2025-32 §2.12).
+- The QBI phase-in above the threshold.
+- Utah's taxpayer tax credit. The estimate applies the flat rate.
+- The safe-harbor prior-year AGI threshold for married filing separately, $75,000
+  ([2026 Form 1040-ES](https://www.irs.gov/pub/irs-pdf/f1040es.pdf)). The estimate uses $150,000
+  for every filing status.
 
 `getYearConfig(year)` falls back to the nearest defined year and surfaces a console warning + UI
 banner — stale data is loud, not silent.

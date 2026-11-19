@@ -90,8 +90,10 @@ export const config2025: YearConfig = {
     isoDate("2026-01-15"),
   ],
   stateRates: {
-    // 2025 TC-40 line 10: "multiply line 9 by 4.5% (.045)".
-    // https://files.tax.utah.gov/tax/forms/current/tc-40.pdf
+    // 2025 TC-40 (form headed "2025"), line 10: "Utah tax - multiply line 9 by
+    // 4.5% (.045)". Read on 2026-11-18 at
+    // https://files.tax.utah.gov/tax/forms/current/tc-40.pdf, which is the
+    // current-year form and will show the 2026 form once Utah posts it.
     UT: 0.045,
   },
 };
