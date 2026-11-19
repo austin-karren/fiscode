@@ -56,7 +56,9 @@ export const NAV_GROUPS = [
 type NavItem = (typeof NAV_GROUPS)[number]["items"][number];
 
 export function isNavItemActive(item: NavItem, pathname: string): boolean {
-  return "exact" in item && item.exact ? pathname === item.to : pathname.startsWith(item.to);
+  if ("exact" in item && item.exact) return pathname === item.to;
+  // Whole segments only: /time must not claim a later /timeline.
+  return pathname === item.to || pathname.startsWith(`${item.to}/`);
 }
 
 // Screens that are reachable but not listed in the sidebar.

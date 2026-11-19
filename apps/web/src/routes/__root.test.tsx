@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@tanstack/react-router-devtools", () => ({ TanStackRouterDevtools: () => null }));
 
+import { routeLabel } from "../lib/nav";
 import { Route } from "./__root";
 
 const RootLayout = Route.options.component!;
@@ -79,6 +80,11 @@ describe("root layout", () => {
       expect(headerLabel()).toHaveTextContent(new RegExp(`^${label}$`));
     },
   );
+
+  it("names a screen by whole path segments", () => {
+    expect(routeLabel("/income/")).toBe("Income");
+    expect(routeLabel("/timeline")).toBe("fiscode");
+  });
 
   it("has one main landmark, holding the page", async () => {
     await renderAt("/income");

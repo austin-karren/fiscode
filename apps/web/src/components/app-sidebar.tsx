@@ -83,7 +83,11 @@ export function AppSidebar() {
       >
         {NAV_GROUPS.map((group) => (
           <SidebarGroup key={group.label}>
-            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            {/* Collapsed, the label is invisible but still lies over the last
+                item of the group above; it must not take that item's clicks. */}
+            <SidebarGroupLabel className="group-data-[collapsible=icon]:pointer-events-none">
+              {group.label}
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => {
@@ -114,7 +118,9 @@ export function AppSidebar() {
           asymmetric timing (out fast on collapse, in late on expand). */}
       <SidebarFooter className="gap-0 border-t border-sidebar-border">
         <SidebarGroup className="py-1">
-          <SidebarGroupLabel>Reference</SidebarGroupLabel>
+          <SidebarGroupLabel className="group-data-[collapsible=icon]:pointer-events-none">
+            Reference
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {EXTERNAL_LINKS.map((link) => (
