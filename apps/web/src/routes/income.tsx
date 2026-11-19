@@ -27,6 +27,8 @@ import { useToday } from "../lib/use-today";
 import { formatDate } from "../lib/format-date";
 import { INCOME_KIND_LABELS, labelFor } from "@fiscode/core";
 import { SectionTitle } from "../components/section-title";
+import { focusAfterRemoval } from "../lib/focus-after-removal";
+import { recordLabel } from "../lib/record-label";
 
 const KIND_OPTIONS = [
   { value: "recurring", label: "Recurring" },
@@ -120,14 +122,19 @@ function IncomePage() {
     addCard.current?.querySelector<HTMLElement>('[id$="-form-item"]')?.focus();
   };
 
-  const remove = (row: (typeof income)[number]) =>
-    softDeleteWithUndo({
+  // Focus moves to the next row (or the table) once this one is gone.
+  const remove = async (row: (typeof income)[number], from: HTMLElement) => {
+    const refocus = focusAfterRemoval(from);
+    await softDeleteWithUndo({
       repo: incomeRepo,
       row,
       message: "Income entry deleted.",
       undoneMessage: "Income entry restored.",
       onChange: () => router.invalidate(),
     });
+    await router.invalidate();
+    refocus();
+  };
 
   return (
     <Page
@@ -303,8 +310,13 @@ function IncomePage() {
                       <Button variant="ghost" size="sm" onClick={() => duplicate(i)}>
                         Duplicate
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => remove(i)}>
-                        Delete
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={(e) => void remove(i, e.currentTarget)}
+                      >
+                        Delete <span className="sr-only">{recordLabel.income(i)}</span>
                       </Button>
                     </div>
                   </DataTable.Cell>

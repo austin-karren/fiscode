@@ -27,6 +27,8 @@ import { GLOSSARY } from "../lib/tax-glossary";
 import { useToday } from "../lib/use-today";
 import { formatDate } from "../lib/format-date";
 import { SectionTitle } from "../components/section-title";
+import { focusAfterRemoval } from "../lib/focus-after-removal";
+import { recordLabel } from "../lib/record-label";
 
 const mileageSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -104,14 +106,19 @@ function MileagePage() {
     addCard.current?.querySelector<HTMLElement>('[id$="-form-item"]')?.focus();
   };
 
-  const remove = (row: (typeof mileage)[number]) =>
-    softDeleteWithUndo({
+  // Focus moves to the next row (or the table) once this one is gone.
+  const remove = async (row: (typeof mileage)[number], from: HTMLElement) => {
+    const refocus = focusAfterRemoval(from);
+    await softDeleteWithUndo({
       repo: mileageRepo,
       row,
       message: "Mileage entry deleted.",
       undoneMessage: "Mileage entry restored.",
       onChange: () => router.invalidate(),
     });
+    await router.invalidate();
+    refocus();
+  };
 
   const vehicleParent = (id: string | null) => {
     const v = allVehicles.find((vv) => vv.id === id);
@@ -282,8 +289,13 @@ function MileagePage() {
                       <Button variant="ghost" size="sm" onClick={() => duplicate(m)}>
                         Duplicate
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => remove(m)}>
-                        Delete
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={(e) => void remove(m, e.currentTarget)}
+                      >
+                        Delete <span className="sr-only">{recordLabel.mileage(m)}</span>
                       </Button>
                     </div>
                   </DataTable.Cell>

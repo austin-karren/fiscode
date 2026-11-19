@@ -47,7 +47,7 @@ describe("edit spouse dialog", () => {
   it("saves with the Save button and does not submit the form behind it", async () => {
     update.mockResolvedValueOnce(spouse);
     const { outerSubmit, onSaved } = renderInsideAddForm();
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
@@ -58,7 +58,7 @@ describe("edit spouse dialog", () => {
   it("saves on Enter in a field and does not submit the form behind it", async () => {
     update.mockResolvedValueOnce(spouse);
     const { outerSubmit, onSaved } = renderInsideAddForm();
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
     const wages = await screen.findByLabelText("Annual W-2 wages (optional)");
     fireEvent.keyDown(wages, { key: "Enter" });
 

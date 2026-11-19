@@ -3,7 +3,10 @@ import type { ReactNode } from "react";
 // Compound table primitive. Composition over prop-driven config.
 export function DataTable({ children }: { children: ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-md border border-border">
+    // relative: visually hidden text inside a row (record names on its
+    // buttons) is absolutely positioned and must stay inside this scroll box,
+    // or the page itself scrolls sideways on a phone.
+    <div className="relative overflow-x-auto rounded-md border border-border">
       <table className="w-full border-collapse text-sm">{children}</table>
     </div>
   );
