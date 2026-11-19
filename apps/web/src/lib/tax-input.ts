@@ -1,6 +1,7 @@
 import {
   addCents,
   cents,
+  countedExpenseDate,
   expensesCountedForYear,
   isPreStartStartupCost,
   startupDeductionBetween,
@@ -196,8 +197,9 @@ const tentativeProfitBetween = (
     .filter((r) => within(r.date))
     .reduce((sum, r) => sum + r.amountCents, 0);
   const expenses =
+    // By the date each counts on (equipment: its placed-in-service date).
     expensesCountedForYear(bundle.expenses, year, seStartDate)
-      .filter((r) => within(r.date))
+      .filter((r) => within(countedExpenseDate(r, seStartDate)))
       .reduce((sum, r) => sum + r.amountCents, 0) +
     // §195 startup costs: the start-year amount on the SE start date, amortization by month.
     startupDeductionBetween(bundle.expenses, seStartDate, from, to);
@@ -396,6 +398,12 @@ export type DerivedYear = {
    * `directExpenses`) and the total paid. The rest is amortized over 180 months.
    */
   startupCosts: { deductedThisYear: Cents; total: Cents };
+  /**
+   * Equipment counted this year for more than $2,500 without the §179 flag. fiscode deducts all
+   * equipment in full, which above the de minimis safe harbor ("up to $2,500 per item or invoice",
+   * Pub 334) assumes a section 179 election; the dashboard says so. No number changes.
+   */
+  equipmentAssumedSection179: number;
   totalDeductibleExpenses: Cents;
   activeEntityType: string;
   seStartDate: string;
@@ -443,6 +451,9 @@ export const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
     homeOfficeCarryover: limited.carryover,
     homeOfficeAreaRejected: limited.areaRejected,
     startupCosts: { deductedThisYear: startupThisYear, total: startupTotal },
+    equipmentAssumedSection179: expensesCountedForYear(bundle.expenses, year, seStartDate).filter(
+      (e) => e.category === "equipment" && !e.flagForSection179 && e.amountCents > 250_000,
+    ).length,
     totalDeductibleExpenses: total,
     activeEntityType: activeEntityFor(bundle, year)?.type ?? "sole_prop",
     seStartDate,
@@ -489,9 +500,10 @@ export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedIn
     const incomeRows = bundle.income.filter(
       (r) => r.deletedAt === null && r.sourceType === "1099" && r.date >= lower && r.date <= cutoff,
     );
-    // The year's counted expenses up to the cutoff.
+    // The year's counted expenses up to the cutoff, by the date each counts on
+    // (equipment: its placed-in-service date).
     const expRows = expensesCountedForYear(bundle.expenses, year, seStartDate).filter(
-      (r) => r.date <= cutoff,
+      (r) => countedExpenseDate(r, seStartDate) <= cutoff,
     );
     const cumGross = incomeRows.reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0));
     // Direct expenses plus mileage and home office through the cutoff, the same

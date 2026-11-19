@@ -3,24 +3,35 @@ export type ExpenseForYear = {
   date: string;
   deletedAt: string | null;
   startupExpense?: boolean | null;
+  /** Equipment: the date it was placed in service, when not the purchase date. */
+  placedInServiceDate?: string | null;
 };
 
 /**
- * The date an expense counts on. A startup expense (Section 195) paid before
- * the SE start counts on the SE start date: IRC §195(b)(1)(A) allows the
- * deduction "for the taxable year in which the active trade or business begins"
- * (https://www.govinfo.gov/link/uscode/26/195). Every other expense counts on
- * its own date. With no SE start, every expense counts on its own date.
- *
- * The yearly CSV uses this to put a startup cost in the year it counts.
+ * The date an expense counts on.
+ * - A startup expense (Section 195) paid before the SE start counts on the SE
+ *   start date: IRC §195(b)(1)(A) allows the deduction "for the taxable year in
+ *   which the active trade or business begins"
+ *   (https://www.govinfo.gov/link/uscode/26/195).
+ * - Equipment with a placed-in-service date counts on that date, and never
+ *   before the SE start. Pub 946 (https://www.irs.gov/publications/p946): "You
+ *   begin to depreciate your property when you place it in service for use in
+ *   your trade or business"; property converted to business use is placed in
+ *   service "on the date of the change", so equipment bought before the business
+ *   began counts on the SE start date.
+ * - Every other expense counts on its own date.
  */
 export const countedExpenseDate = (
-  expense: Pick<ExpenseForYear, "date" | "startupExpense">,
+  expense: Pick<ExpenseForYear, "date" | "startupExpense" | "placedInServiceDate">,
   seStartDate: string | null | undefined,
-): string =>
-  expense.startupExpense === true && seStartDate && expense.date < seStartDate
-    ? seStartDate
-    : expense.date;
+): string => {
+  if (expense.startupExpense === true && seStartDate && expense.date < seStartDate) {
+    return seStartDate;
+  }
+  const placed = expense.placedInServiceDate;
+  if (placed) return seStartDate && placed < seStartDate ? seStartDate : placed;
+  return expense.date;
+};
 
 /** A startup cost under §195: ticked as startup and paid before the SE start. */
 export const isPreStartStartupCost = (
@@ -92,8 +103,9 @@ const dayBeforeIso = (iso: string): string => {
  * The expenses that count toward `year`'s Schedule C one by one, in their given
  * order. An expense counts when all of these hold:
  * - it is not deleted (`deletedAt` is null);
- * - it is dated in `year` (by the `YYYY` of its ISO date);
- * - it is dated on or after the SE start date;
+ * - the date it counts on (`countedExpenseDate`: its own date, or for equipment
+ *   its placed-in-service date) is in `year`;
+ * - that date is on or after the SE start date;
  * - it is not a startup cost paid before the SE start. Those are deducted as a
  *   group under §195(b) (`startupDeductionBetween`): at most $5,000 in the year
  *   the business begins, the rest over 180 months.
@@ -112,7 +124,9 @@ export const expensesCountedForYear = <T extends ExpenseForYear>(
 ): T[] => {
   const yearPrefix = String(year);
   const floor = seStartDate || `${yearPrefix}-01-01`;
-  return expenses.filter(
-    (e) => e.deletedAt === null && e.date.slice(0, 4) === yearPrefix && e.date >= floor,
-  );
+  return expenses.filter((e) => {
+    if (e.deletedAt !== null || isPreStartStartupCost(e, seStartDate)) return false;
+    const date = countedExpenseDate(e, seStartDate);
+    return date.slice(0, 4) === yearPrefix && date >= floor;
+  });
 };

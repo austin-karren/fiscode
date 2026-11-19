@@ -209,3 +209,42 @@ describe("startupDeductionBetween: cumulative rounding (review #65 r2)", () => {
     expect(sum).toBe(1_000_000);
   });
 });
+
+// Pub 946 (https://www.irs.gov/publications/p946): "You begin to depreciate your property when you
+// place it in service for use in your trade or business"; property converted to business use is
+// placed in service "on the date of the change". Equipment counts on its placed-in-service date,
+// never before the SE start.
+describe("equipment counts in the year it is placed in service", () => {
+  const equipment = (date: string, placedInServiceDate: string | null) => ({
+    id: "eq",
+    date,
+    deletedAt: null as string | null,
+    startupExpense: false,
+    placedInServiceDate,
+  });
+
+  it("bought 2025-11-20, placed in service 2026-02-01 (SE start): counts in 2026, not 2025", () => {
+    const rows = [equipment("2025-11-20", "2026-02-01")];
+    expect(expensesCountedForYear(rows, 2025, "2026-02-01")).toEqual([]);
+    expect(expensesCountedForYear(rows, 2026, "2026-02-01")).toEqual(rows);
+    expect(countedExpenseDate(rows[0]!, "2026-02-01")).toBe("2026-02-01");
+  });
+
+  it("a placed-in-service date before the SE start counts on the SE start", () => {
+    const row = equipment("2025-11-20", "2025-12-01");
+    expect(countedExpenseDate(row, "2026-02-01")).toBe("2026-02-01");
+    expect(expensesCountedForYear([row], 2026, "2026-02-01")).toEqual([row]);
+  });
+
+  it("no placed-in-service date: the purchase date, as before (dropped if before the start)", () => {
+    const row = equipment("2025-11-20", null);
+    expect(countedExpenseDate(row, "2026-02-01")).toBe("2025-11-20");
+    expect(expensesCountedForYear([row], 2026, "2026-02-01")).toEqual([]);
+  });
+
+  it("placed in service in a later year than bought, after the start: counts in that later year", () => {
+    const row = equipment("2026-12-20", "2027-01-05");
+    expect(expensesCountedForYear([row], 2026, "2026-02-01")).toEqual([]);
+    expect(expensesCountedForYear([row], 2027, "2026-02-01")).toEqual([row]);
+  });
+});

@@ -297,6 +297,48 @@ describe("bug A: a startup cost counts in the year the business begins (IRC §19
   });
 });
 
+describe("equipment: placed-in-service date (Pub 946) and the §179 notice", () => {
+  const equipment = (id: string, date: string, amount: number, extra = {}) => ({
+    ...expense(id, date, amount),
+    category: "equipment",
+    ...extra,
+  });
+  const profile = { ...makeBundle().profile!, seStartDate: "2026-02-01" };
+
+  it("bought before the start, placed in service on it: counted in 2026, at the start", () => {
+    const b = makeBundle({
+      profile,
+      income: [income("i1", "2026-07-01", 10_000_00)],
+      expenses: [equipment("e1", "2025-11-20", 1_200_00, { placedInServiceDate: "2026-02-01" })],
+    });
+    expect(deriveYear(b, 2025).directExpenses).toBe(0);
+    expect(deriveYear(b, 2026).directExpenses).toBe(1_200_00);
+    // Annualized: in Q1 (through Mar 31), on the placed-in-service date.
+    expect(buildAnnualizedInput(b, 2026).periods[0].cumulativeDeductibleExpenses).toBe(1_200_00);
+  });
+
+  it("no placed-in-service date and bought before the start: still left out (form prefills it)", () => {
+    const b = makeBundle({ profile, expenses: [equipment("e1", "2025-11-20", 1_200_00)] });
+    expect(deriveYear(b, 2026).directExpenses).toBe(0);
+  });
+
+  it("notice: counted equipment over $2,500 without the §179 flag; no number change", () => {
+    const b = makeBundle({
+      profile,
+      income: [income("i1", "2026-07-01", 10_000_00)],
+      expenses: [
+        equipment("big", "2026-03-01", 3_000_00), // counted, over $2,500, not flagged: notice
+        equipment("flagged", "2026-03-01", 3_000_00, { flagForSection179: true }),
+        equipment("small", "2026-03-01", 2_500_00), // at the de minimis limit: no notice
+        expense("supplies", "2026-03-01", 4_000_00), // not equipment
+      ],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.equipmentAssumedSection179).toBe(1);
+    expect(d.directExpenses).toBe(3_000_00 + 3_000_00 + 2_500_00 + 4_000_00);
+  });
+});
+
 describe("deriveYear — simplified part-year use (Pub 587 average monthly square footage)", () => {
   // Pub 587 (2025), "Part-year use or area changes (for simplified method only)",
   // https://www.irs.gov/pub/irs-pdf/p587.pdf: add the allowable square feet used in each month
