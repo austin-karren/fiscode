@@ -82,6 +82,21 @@ export const config2026: YearConfig = {
       mfs: dollars(201_775),
       hoh: dollars(201_750),
     },
+    // RP-2025-32 §4.26 phase-in range amounts minus the thresholds: $276,750 /
+    // $553,500 / $276,775. IRC §199A(b)(3)(B): "$75,000 ($150,000 in the case
+    // of a joint return)".
+    phaseInRange: {
+      single: dollars(75_000),
+      mfj: dollars(150_000),
+      mfs: dollars(75_000),
+      hoh: dollars(75_000),
+    },
+    // 26 U.S.C. 199A(i), added by Pub. L. 119-21 §70105
+    // (https://uscode.house.gov, release point through Pub. L. 119-142): the
+    // deduction is "the greater of (A) the amount of such deduction determined
+    // without regard to this subsection, or (B) $400" for a taxpayer with at
+    // least $1,000 of active QBI. RP-2025-32 §2.12: years after Dec 31, 2025.
+    minimum: { deduction: dollars(400), qbiFloor: dollars(1_000) },
   },
   // Business rate changed mid-year.
   // 72.5 cents: Notice 2026-10, https://www.irs.gov/pub/irs-drop/n-26-10.pdf

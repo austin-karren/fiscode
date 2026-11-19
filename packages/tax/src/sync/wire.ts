@@ -30,12 +30,13 @@ const filingStatusKeyed = <T extends z.ZodTypeAny>(value: T) =>
     hoh: value,
   });
 
+// v4 (T3): adds the QBI phase-in band and the §199A(i) minimum.
 // v3 (T2): adds the Utah taxpayer credit and the MFS safe-harbor threshold.
 // v2 (T1): bumped so a payload cached by an older build, which
 // still holds the 2026 seed figures, is skipped on hydrate and refetched,
 // instead of overriding the sourced bundled config. Bump it whenever the
 // bundled figures change in a way a stale cached copy must not hide.
-export const TAX_YEAR_WIRE_SCHEMA_VERSION = "v3" as const;
+export const TAX_YEAR_WIRE_SCHEMA_VERSION = "v4" as const;
 
 export const taxYearWireSchema = z.object({
   schemaVersion: z.literal(TAX_YEAR_WIRE_SCHEMA_VERSION),
@@ -59,6 +60,8 @@ export const taxYearWireSchema = z.object({
   qbi: z.object({
     rate: ratePct,
     taxableIncomeLimit: filingStatusKeyed(dollarsNumber),
+    phaseInRange: filingStatusKeyed(dollarsNumber),
+    minimum: z.object({ deduction: dollarsNumber, qbiFloor: dollarsNumber }).nullable(),
   }),
   // The rate in force on Jan 1. Kept for older readers of this file.
   mileageRatePerMile: z.number().nonnegative(),
@@ -145,6 +148,16 @@ export const wireToYearConfig = (wire: TaxYearWire): YearConfig => {
         mfj: dollars(wire.qbi.taxableIncomeLimit.mfj),
         mfs: dollars(wire.qbi.taxableIncomeLimit.mfs),
         hoh: dollars(wire.qbi.taxableIncomeLimit.hoh),
+      },
+      phaseInRange: {
+        single: dollars(wire.qbi.phaseInRange.single),
+        mfj: dollars(wire.qbi.phaseInRange.mfj),
+        mfs: dollars(wire.qbi.phaseInRange.mfs),
+        hoh: dollars(wire.qbi.phaseInRange.hoh),
+      },
+      minimum: wire.qbi.minimum && {
+        deduction: dollars(wire.qbi.minimum.deduction),
+        qbiFloor: dollars(wire.qbi.minimum.qbiFloor),
       },
     },
     mileageRates: wire.mileageRates?.map((r) => ({
@@ -240,6 +253,16 @@ export const yearConfigToWire = (
       mfj: cfg.qbi.taxableIncomeLimit.mfj / 100,
       mfs: cfg.qbi.taxableIncomeLimit.mfs / 100,
       hoh: cfg.qbi.taxableIncomeLimit.hoh / 100,
+    },
+    phaseInRange: {
+      single: cfg.qbi.phaseInRange.single / 100,
+      mfj: cfg.qbi.phaseInRange.mfj / 100,
+      mfs: cfg.qbi.phaseInRange.mfs / 100,
+      hoh: cfg.qbi.phaseInRange.hoh / 100,
+    },
+    minimum: cfg.qbi.minimum && {
+      deduction: cfg.qbi.minimum.deduction / 100,
+      qbiFloor: cfg.qbi.minimum.qbiFloor / 100,
     },
   },
   mileageRatePerMile: cfg.mileageRates[0]!.ratePerMile,

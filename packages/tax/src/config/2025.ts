@@ -68,12 +68,24 @@ export const config2025: YearConfig = {
   },
   qbi: {
     rate: 0.2,
+    // Rev. Proc. 2024-40 §.27 (https://www.irs.gov/pub/irs-drop/rp-24-40.pdf):
+    // thresholds $197,300 / $394,600 MFJ; phase-in range amounts $247,300 /
+    // $494,600 MFJ, so the band is $50,000 / $100,000.
     taxableIncomeLimit: {
       single: dollars(197_300),
       mfj: dollars(394_600),
       mfs: dollars(197_300),
       hoh: dollars(197_300),
     },
+    phaseInRange: {
+      single: dollars(50_000),
+      mfj: dollars(100_000),
+      mfs: dollars(50_000),
+      hoh: dollars(50_000),
+    },
+    // No §199A(i) minimum in 2025 (Rev. Proc. 2025-32 §2.12: years after
+    // Dec 31, 2025).
+    minimum: null,
   },
   mileageRates: [{ from: isoDate("2025-01-01"), ratePerMile: 0.7 }],
   homeOffice: {
