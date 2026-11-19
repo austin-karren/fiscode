@@ -1,14 +1,7 @@
-import {
-  addCents,
-  cents,
-  dollars,
-  expensesCountedForYear,
-  type Cents,
-  yearOf,
-} from "@fiscode/core";
+import { addCents, cents, expensesCountedForYear, type Cents, yearOf } from "@fiscode/core";
 import type { Bundle } from "@fiscode/csv";
 import type { AnnualizedInput, TaxInput } from "@fiscode/tax";
-import { getYearConfig } from "@fiscode/tax";
+import { getYearConfig, mileageDeduction } from "@fiscode/tax";
 
 type ActiveSpouse = {
   annualW2WagesCents: number;
@@ -60,10 +53,11 @@ const sumMileageDeductionWithinYear = (
   seStartDate: string,
 ): Cents => {
   const cfg = getYearConfig(year);
-  const totalMiles = bundle.mileage
-    .filter((m) => m.deletedAt === null && inSeRange(m.date, seStartDate, year))
-    .reduce((acc, m) => acc + m.businessMiles, 0);
-  return dollars(totalMiles * cfg.mileageRatePerMile);
+  // Each trip at the rate in force on its date (2026 changed on July 1).
+  return mileageDeduction(
+    bundle.mileage.filter((m) => m.deletedAt === null && inSeRange(m.date, seStartDate, year)),
+    cfg,
+  );
 };
 
 const sumHomeOfficeWithinYear = (bundle: Bundle, year: number, seStartDate: string): Cents => {

@@ -105,9 +105,9 @@ const fetchAndValidate = async (year: number) => {
     detail: `${cfg.standardDeduction.mfj} === ${reference.standardDeduction.mfj}`,
   });
   log({
-    name: "mileageRatePerMile preserved",
-    ok: cfg.mileageRatePerMile === reference.mileageRatePerMile,
-    detail: `${cfg.mileageRatePerMile} === ${reference.mileageRatePerMile}`,
+    name: "mileageRates preserved",
+    ok: JSON.stringify(cfg.mileageRates) === JSON.stringify(reference.mileageRates),
+    detail: `${JSON.stringify(cfg.mileageRates)} === ${JSON.stringify(reference.mileageRates)}`,
   });
   log({
     name: "quarterlyDueDates preserved",

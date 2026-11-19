@@ -236,9 +236,11 @@ function YearEndPage() {
           Tax config used
         </h2>
         <p className="text-sm text-muted-foreground">
-          Year config: {getYearConfig(year).year}. Mileage rate: $
-          {getYearConfig(year).mileageRatePerMile.toFixed(3)}/mi. SS wage base:{" "}
-          {formatUSD(cents(getYearConfig(year).ssWageBase))}.
+          Year config: {getYearConfig(year).year}. Mileage rate:{" "}
+          {getYearConfig(year)
+            .mileageRates.map((r) => `$${r.ratePerMile.toFixed(3)}/mi from ${r.from}`)
+            .join(", ")}
+          . SS wage base: {formatUSD(cents(getYearConfig(year).ssWageBase))}.
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
           Tax figures change every year. Confirm them against the IRS and SSA before filing. The

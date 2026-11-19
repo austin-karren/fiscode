@@ -55,7 +55,20 @@ export const taxYearWireSchema = z.object({
     rate: ratePct,
     taxableIncomeLimit: filingStatusKeyed(dollarsNumber),
   }),
+  // The rate in force on Jan 1. Kept for older readers of this file.
   mileageRatePerMile: z.number().nonnegative(),
+  // Dated rates, oldest first, for a year whose rate changed mid-year.
+  // Optional, so a file written before this field still parses: the single
+  // rate above then applies all year.
+  mileageRates: z
+    .array(
+      z.object({
+        from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        ratePerMile: z.number().nonnegative(),
+      }),
+    )
+    .min(1)
+    .optional(),
   homeOffice: z.object({
     simplifiedRatePerSqft: dollarsNumber,
     simplifiedMaxSqft: z.number().int().nonnegative(),
@@ -121,7 +134,10 @@ export const wireToYearConfig = (wire: TaxYearWire): YearConfig => {
         hoh: dollars(wire.qbi.taxableIncomeLimit.hoh),
       },
     },
-    mileageRatePerMile: wire.mileageRatePerMile,
+    mileageRates: wire.mileageRates?.map((r) => ({
+      from: isoDate(r.from),
+      ratePerMile: r.ratePerMile,
+    })) ?? [{ from: isoDate(`${wire.year}-01-01`), ratePerMile: wire.mileageRatePerMile }],
     homeOffice: {
       simplifiedRatePerSqft: dollars(wire.homeOffice.simplifiedRatePerSqft),
       simplifiedMaxSqft: wire.homeOffice.simplifiedMaxSqft,
@@ -200,7 +216,8 @@ export const yearConfigToWire = (
       hoh: cfg.qbi.taxableIncomeLimit.hoh / 100,
     },
   },
-  mileageRatePerMile: cfg.mileageRatePerMile,
+  mileageRatePerMile: cfg.mileageRates[0]!.ratePerMile,
+  mileageRates: cfg.mileageRates.map((r) => ({ from: r.from, ratePerMile: r.ratePerMile })),
   homeOffice: {
     simplifiedRatePerSqft: cfg.homeOffice.simplifiedRatePerSqft / 100,
     simplifiedMaxSqft: cfg.homeOffice.simplifiedMaxSqft,

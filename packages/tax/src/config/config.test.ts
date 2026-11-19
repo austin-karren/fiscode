@@ -57,8 +57,8 @@ describe("config 2025 — pinned values", () => {
     expect(c.qbi.taxableIncomeLimit.single).toBe(dollars(197_300));
   });
 
-  it("mileage rate $0.70/mile (IRS Notice 2024-)", () => {
-    expect(c.mileageRatePerMile).toBe(0.7);
+  it("mileage rate $0.70/mile all year", () => {
+    expect(c.mileageRates).toEqual([{ from: "2025-01-01", ratePerMile: 0.7 }]);
   });
 
   it("home-office simplified: $5/sqft, 300 sqft cap, $1,500 max", () => {
@@ -74,8 +74,8 @@ describe("config 2025 — pinned values", () => {
     expect(c.safeHarbor.priorYearAgiThreshold).toBe(dollars(150_000));
   });
 
-  it("UT state rate", () => {
-    expect(c.stateRates.UT).toBe(0.0455);
+  it("UT state rate 4.5% (2025 TC-40 line 10)", () => {
+    expect(c.stateRates.UT).toBe(0.045);
   });
 
   it("quarterly due dates land in the right months and Jun 15 shifts to Jun 16 (Sunday)", () => {
@@ -87,22 +87,69 @@ describe("config 2025 — pinned values", () => {
   });
 });
 
-describe("config 2026 — pinned values (projections; verify when IRS releases Rev. Proc.)", () => {
+// Every 2026 value below is quoted from a primary source; the URL sits
+// beside the constant in 2026.ts.
+describe("config 2026 — pinned values (Rev. Proc. 2025-32, Notice 2026-10, Announcement 2026-11)", () => {
   const c = config2026;
 
-  it("standard deduction matches 2025 seed (placeholder — update once IRS releases 2026 figures)", () => {
-    // 2026 standard deduction is inflation-indexed by IRS Rev. Proc.
-    // Current seed mirrors 2025 — re-verify when the 2026 Rev. Proc. drops.
-    expect(c.standardDeduction.single).toBe(dollars(15_000));
-    expect(c.standardDeduction.mfj).toBe(dollars(30_000));
+  it("standard deduction", () => {
+    expect(c.standardDeduction).toEqual({
+      single: dollars(16_100),
+      mfj: dollars(32_200),
+      mfs: dollars(16_100),
+      hoh: dollars(24_150),
+    });
   });
 
-  it("SS wage base — $184,500 (SSA projection)", () => {
+  it("bracket tops for every filing status, rates 10..37%", () => {
+    const tops = (fs: keyof typeof c.brackets) => c.brackets[fs].map((b) => b.upTo);
+    expect(tops("mfj")).toEqual(
+      [24_800, 100_800, 211_400, 403_550, 512_450, 768_700]
+        .map((d) => dollars(d))
+        .concat(null as never),
+    );
+    expect(tops("single")).toEqual(
+      [12_400, 50_400, 105_700, 201_775, 256_225, 640_600]
+        .map((d) => dollars(d))
+        .concat(null as never),
+    );
+    expect(tops("mfs")).toEqual(
+      [12_400, 50_400, 105_700, 201_775, 256_225, 384_350]
+        .map((d) => dollars(d))
+        .concat(null as never),
+    );
+    expect(tops("hoh")).toEqual(
+      [17_700, 67_450, 105_700, 201_750, 256_200, 640_600]
+        .map((d) => dollars(d))
+        .concat(null as never),
+    );
+    for (const fs of ["mfj", "single", "mfs", "hoh"] as const) {
+      expect(c.brackets[fs].map((b) => b.rate)).toEqual([0.1, 0.12, 0.22, 0.24, 0.32, 0.35, 0.37]);
+    }
+  });
+
+  it("QBI threshold", () => {
+    expect(c.qbi.taxableIncomeLimit).toEqual({
+      single: dollars(201_750),
+      mfj: dollars(403_500),
+      mfs: dollars(201_775),
+      hoh: dollars(201_750),
+    });
+  });
+
+  it("SS wage base $184,500", () => {
     expect(c.ssWageBase).toBe(dollars(184_500));
   });
 
-  it("mileage rate $0.725/mile (placeholder — IRS publishes in mid-prior-year)", () => {
-    expect(c.mileageRatePerMile).toBe(0.725);
+  it("mileage: 72.5 cents to June 30, 76 cents from July 1", () => {
+    expect(c.mileageRates).toEqual([
+      { from: "2026-01-01", ratePerMile: 0.725 },
+      { from: "2026-07-01", ratePerMile: 0.76 },
+    ]);
+  });
+
+  it("UT state rate 4.45%", () => {
+    expect(c.stateRates.UT).toBe(0.0445);
   });
 
   it("quarterly due dates", () => {
