@@ -101,6 +101,55 @@ describe("entityRepo.update", () => {
   });
 });
 
+describe("shortening a period", () => {
+  // A ends on day D and B starts on day D: the allowed changeover.
+  const changeover = async () => {
+    const a = await entityRepo.create(input("sole_prop", "2024-01-01", "2026-11-18"));
+    const b = await entityRepo.create(input("single_member_llc", "2026-11-18", null));
+    return { a, b };
+  };
+
+  it("is rejected when it would leave two periods starting on one day", async () => {
+    const { a, b } = await changeover();
+
+    // Creating that one-day period is rejected ...
+    await rejection(entityRepo.create(input("sole_prop", "2026-11-18", "2026-11-18")));
+    // ... so shrinking an existing period into it is rejected too.
+    const err = await rejection(entityRepo.update(a.id, { startDate: "2026-11-18" }));
+
+    expect(err.conflict).toMatchObject({ id: b.id });
+    expect(err.preexisting).toBe(false);
+    expect(err.message).toContain("This overlaps your Single-member LLC period");
+    expect((await entityRepo.get(a.id))?.startDate).toBe("2024-01-01");
+  });
+
+  it("is saved when it creates no overlap", async () => {
+    const { a } = await changeover();
+    const saved = await entityRepo.update(a.id, { startDate: "2026-11-17" });
+    expect(saved?.startDate).toBe("2026-11-17");
+  });
+
+  it("is rejected for a conflict it creates, also for a period that already overlapped another", async () => {
+    // ent_a already overlaps ent_b. ent_c starts on the day ent_a ends.
+    await importBundle(
+      {
+        ...emptyBundle(),
+        entities: [
+          row("ent_a", "sole_prop", "2024-01-01", "2026-12-31"),
+          row("ent_b", "single_member_llc", "2026-11-02", "2026-11-30"),
+          row("ent_c", "sole_prop", "2026-12-31", null),
+        ],
+      },
+      "import-restore",
+    );
+
+    const err = await rejection(entityRepo.update("ent_a", { startDate: "2026-12-31" }));
+
+    expect(err.conflict).toMatchObject({ id: "ent_c" });
+    expect(err.preexisting).toBe(false);
+  });
+});
+
 describe("entityRepo.revertTo", () => {
   it("rejects bringing back a deleted period that would now overlap", async () => {
     const old = await entityRepo.create(input("sole_prop", "2024-01-01", null));
@@ -138,8 +187,8 @@ describe("periods that came in overlapping from a file", () => {
   it("either period can be ended, even on a day that leaves them overlapping", async () => {
     await importBundle(overlapping(), "import-restore");
 
-    // "End today" on the older one: it still overlaps the newer one, but it
-    // only got shorter, so it cannot have added an overlap.
+    // "End today" on the older one: it still overlaps the newer one, but that
+    // overlap was already there and the edit only made the period shorter.
     const older = await entityRepo.update("ent_a", { endDate: "2026-11-18" });
     expect(older?.endDate).toBe("2026-11-18");
 
@@ -157,7 +206,7 @@ describe("periods that came in overlapping from a file", () => {
     expect(saved).toMatchObject({ startDate: "2024-01-01", endDate: null });
   });
 
-  it("moving the start later is a shrink and goes through", async () => {
+  it("moving the start later, still overlapping as before, goes through", async () => {
     await importBundle(overlapping(), "import-restore");
     const saved = await entityRepo.update("ent_a", { startDate: "2025-01-01" });
     expect(saved?.startDate).toBe("2025-01-01");

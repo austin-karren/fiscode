@@ -56,12 +56,24 @@ const entityCrud = makeCrudRepo<EntityInsert, EntityRow>(entity, "entity", {
 
 type PeriodDates = Pick<EntityRow, "startDate" | "endDate">;
 
+// An open end is after every date; ISO dates compare as strings.
+const endOf = (p: PeriodDates) => p.endDate ?? "9999-12-31";
+
 /**
  * Throws when the period would break a rule: `EntityDatesError` for an end
  * before the start, `EntityOverlapError` for an overlap with another live one.
  *
- * `before` is the stored row when this is an edit. It decides whether an
- * overlap was already there, which changes the message.
+ * `before` is the stored row when this is an edit of a live period. An overlap
+ * with a period it already overlapped is "pre-existing": such pairs can come
+ * from a file, or from before this rule existed.
+ *
+ * - A pre-existing overlap is let through when the edit only shortens the
+ *   period (start not earlier, end not later than stored). The edit did not
+ *   cause it, and this is what lets either of two overlapping periods be ended
+ *   on any day.
+ * - Any other overlap is rejected. That includes one a shortening creates:
+ *   moving a period's start onto the day it ends, when the next period starts
+ *   that same day, leaves two periods with one start day.
  *
  * Limit: the check reads, then the caller writes, as two steps. fiscode is one
  * user in one tab; two tabs saving at the same moment could both pass.
@@ -72,17 +84,22 @@ const assertPeriodAllowed = async (
 ): Promise<void> => {
   if (endsBeforeStart(candidate)) throw new EntityDatesError(candidate);
   const live = await entityCrud.list();
-  const conflict = findEntityOverlap(live, candidate);
-  if (!conflict) return;
-  const preexisting =
+  // Every conflict, not only the first: one may be old and another new.
+  const conflicts = live
+    .filter((other) => findEntityOverlap([other], candidate) !== null)
+    .sort((x, y) => (x.startDate < y.startDate ? -1 : x.startDate > y.startDate ? 1 : 0));
+  if (conflicts.length === 0) return;
+  const overlappedBefore = (other: EntityRow): boolean =>
+    before !== undefined && findEntityOverlap([other], { ...before, id: undefined }) !== null;
+  const shrinks =
     before !== undefined &&
-    !before.deletedAt &&
-    findEntityOverlap([conflict], { ...before, id: undefined }) !== null;
-  throw new EntityOverlapError(conflict, { preexisting });
+    candidate.startDate >= before.startDate &&
+    endOf(candidate) <= endOf(before);
+  const added = conflicts.find((other) => !overlappedBefore(other));
+  if (added) throw new EntityOverlapError(added, { preexisting: false });
+  if (shrinks) return;
+  throw new EntityOverlapError(conflicts[0]!, { preexisting: true });
 };
-
-// An open end is after every date; ISO dates compare as strings.
-const endOf = (p: PeriodDates) => p.endDate ?? "9999-12-31";
 
 /**
  * Entity periods, with two rules on every write that can place a live period
@@ -91,10 +108,9 @@ const endOf = (p: PeriodDates) => p.endDate ?? "9999-12-31";
  * with an `EntityPeriodError` from @fiscode/core (`EntityDatesError` or
  * `EntityOverlapError`). See `findEntityOverlap` for what counts as an overlap.
  *
- * An update that only shrinks a period (start not earlier, end not later than
- * the stored row), or changes no date, is never rejected for an overlap: it
- * cannot add one. That is what lets a user with two overlapping periods end
- * either of them.
+ * An update that changes no date is never checked. An update that only
+ * shortens a period is rejected only for an overlap it would create, never for
+ * one that was already there; see `assertPeriodAllowed`.
  *
  * An import does not go through here. `importBundle` writes a file's rows as
  * they are, because a restore must reproduce the file exactly, overlapping or
@@ -118,12 +134,10 @@ export const entityRepo = {
       const revived = Boolean(before.deletedAt) && !after.deletedAt;
       const datesChanged = after.startDate !== before.startDate || after.endDate !== before.endDate;
       // Stored rows that already break a rule (they can come from a file) stay
-      // editable in every way that does not place the period anew.
+      // editable in every way that does not place the period anew. A period
+      // brought back from deleted is placed anew, so it has no "before".
       if (!after.deletedAt && (revived || datesChanged)) {
-        const shrinks =
-          !revived && after.startDate >= before.startDate && endOf(after) <= endOf(before);
-        if (endsBeforeStart(after)) throw new EntityDatesError(after);
-        if (!shrinks) await assertPeriodAllowed(after, before);
+        await assertPeriodAllowed(after, revived ? undefined : before);
       }
     }
     return entityCrud.update(id, patch);
