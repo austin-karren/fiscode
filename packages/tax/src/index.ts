@@ -13,3 +13,4 @@ export * from "./sync/overlay.ts";
 export * from "./mileage.ts";
 export * from "./installments.ts";
 export * from "./state-prepayment.ts";
+export * from "./home-office.ts";

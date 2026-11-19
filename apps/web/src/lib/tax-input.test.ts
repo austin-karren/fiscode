@@ -274,8 +274,9 @@ describe("deriveYear — home-office simplified", () => {
     expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(expected);
   });
 
-  it("returns 0 for actual method (not yet implemented in calc)", () => {
+  it("actual method with no monthly costs stored deducts $0", () => {
     const b = makeBundle({
+      income: [income("i1", "2026-03-15", 50_000_00)],
       homeOffice: [homeOffice("ho", "2026-01-01", null, 200, "actual")],
     });
     expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(0);
@@ -305,6 +306,79 @@ describe("deriveYear — home-office simplified", () => {
       homeOffice: [homeOffice("ho", "2027-01-01", null, 100)],
     });
     expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(0);
+  });
+});
+
+// Demo renter: 200 of 2,000 sq ft, $1,500 rent + $200 utilities + $30 insurance a month.
+const actualOffice = (
+  startDate: string,
+  officeSqft = 200,
+  homeSqft = 2000,
+): ReturnType<typeof homeOffice> => ({
+  ...homeOffice("ho", startDate, null, officeSqft, "actual"),
+  homeSqft,
+  monthlyRentMortgageCents: 150_000,
+  monthlyUtilitiesCents: 20_000,
+  monthlyInsuranceCents: 3_000,
+});
+
+describe("deriveYear — home-office actual (Form 8829)", () => {
+  it("renter, full year: $1,730 × 12 × 10% = $2,076.00", () => {
+    const b = makeBundle({
+      income: [income("i1", "2026-03-15", 50_000_00)],
+      homeOffice: [actualOffice("2026-01-01")],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBe(207_600);
+    expect(d.homeOfficeDisallowed).toBe(0);
+    expect(d.homeOfficeAreaRejected).toBe(0);
+  });
+
+  it("partial year, office from Jul 1: 184/365 of $2,076 = $1,046.53", () => {
+    const b = makeBundle({
+      income: [income("i1", "2026-03-15", 50_000_00)],
+      homeOffice: [actualOffice("2026-07-01")],
+    });
+    // 207,600 × 184 / 365 = 104,653.15 → 104,653¢
+    expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(104_653);
+  });
+
+  it("SE start mid-year clamps the office period the same way", () => {
+    const b = makeBundle({
+      profile: { ...makeBundle().profile!, seStartDate: "2026-07-01" },
+      income: [income("i1", "2026-08-15", 50_000_00)],
+      homeOffice: [actualOffice("2026-01-01")],
+    });
+    expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(104_653);
+  });
+
+  it("office larger than the home is rejected: $0 and counted", () => {
+    const b = makeBundle({
+      income: [income("i1", "2026-03-15", 50_000_00)],
+      homeOffice: [actualOffice("2026-01-01", 5000, 100)],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBe(0);
+    expect(d.homeOfficeAreaRejected).toBe(1);
+  });
+
+  it("limited by tentative profit (line 8): $1,000 income − $300 expenses = $700", () => {
+    const b = makeBundle({
+      income: [income("i1", "2026-03-15", 1_000_00)],
+      expenses: [expense("e1", "2026-04-01", 300_00)],
+      homeOffice: [actualOffice("2026-01-01")],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.homeOfficeDeduction).toBe(700_00);
+    // $2,076 − $700 = $1,376 not allowed this year (line 43, not tracked)
+    expect(d.homeOfficeDisallowed).toBe(1_376_00);
+  });
+
+  it("the simplified method is unchanged by the limit", () => {
+    const b = makeBundle({
+      homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
+    });
+    expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(75_000);
   });
 });
 
