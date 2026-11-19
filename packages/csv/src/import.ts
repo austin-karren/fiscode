@@ -25,13 +25,14 @@ import { decodeCell, HEADER_LOOKUP } from "./sections.ts";
 // value is guaranteed numeric. We still keep the `fallback` for `num` because
 // some columns are conceptually required-but-defaulted (e.g., dependents=0
 // when blank); the `numOrNull` form is used for genuinely-optional columns.
+// A cell of only spaces (a spreadsheet hand edit) is blank, like an empty one.
 const num = (v: string | undefined, fallback = 0): number => {
-  if (v === undefined || v === "") return fallback;
+  if (v === undefined || v.trim() === "") return fallback;
   return Number(v.trim());
 };
 
 const numOrNull = (v: string | undefined): number | null => {
-  if (v === undefined || v === "") return null;
+  if (v === undefined || v.trim() === "") return null;
   return Number(v.trim());
 };
 

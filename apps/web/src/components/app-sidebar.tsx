@@ -15,7 +15,7 @@ import {
 } from "@fiscode/ui/components/sidebar";
 import { NavThemeSwitcher, useThemeCycle } from "@fiscode/ui/components/nav-theme-switcher";
 import { Link, useLocation } from "@tanstack/react-router";
-import { BookOpen, Github } from "lucide-react";
+import { BookOpen, Code } from "lucide-react";
 
 import { useRef } from "react";
 
@@ -23,7 +23,7 @@ import { MAIN_ID, NAV_GROUPS, isNavItemActive } from "../lib/nav";
 
 const EXTERNAL_LINKS = [
   { href: "https://docs.fiscode.app", label: "Docs", icon: BookOpen },
-  { href: "https://github.com/austin-karren/fiscode", label: "GitHub", icon: Github },
+  { href: "https://github.com/austin-karren/fiscode", label: "GitHub", icon: Code },
 ] as const;
 
 // Expanded sidebar (and the mobile sheet): the three-way switcher. Collapsed

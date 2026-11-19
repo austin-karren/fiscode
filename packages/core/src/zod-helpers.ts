@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { parseUSD } from "./money.ts";
 
 /**
  * Shared zod validators for numeric form/CSV inputs. Centralized so that the
@@ -73,109 +72,6 @@ export const positiveNumericString = z.string().transform((s, ctx): number => {
   return n;
 });
 
-/** Non-empty integer. */
-export const integerString = z.string().transform((s, ctx): number => {
-  const trimmed = s.trim();
-  if (trimmed === "") {
-    ctx.addIssue({ code: "custom", message: "Required" });
-    return z.NEVER;
-  }
-  const n = Number(trimmed);
-  if (!Number.isFinite(n) || !Number.isInteger(n)) {
-    ctx.addIssue({ code: "custom", message: "Must be a whole number" });
-    return z.NEVER;
-  }
-  return n;
-});
-
-/** Non-negative integer (zero allowed). */
-export const nonNegativeIntegerString = z.string().transform((s, ctx): number => {
-  const trimmed = s.trim();
-  if (trimmed === "") {
-    ctx.addIssue({ code: "custom", message: "Required" });
-    return z.NEVER;
-  }
-  const n = Number(trimmed);
-  if (!Number.isFinite(n) || !Number.isInteger(n)) {
-    ctx.addIssue({ code: "custom", message: "Must be a whole number" });
-    return z.NEVER;
-  }
-  if (n < 0) {
-    ctx.addIssue({ code: "custom", message: "Must be ≥ 0" });
-    return z.NEVER;
-  }
-  return n;
-});
-
-/** Strictly positive integer (≥ 1). */
-export const positiveIntegerString = z.string().transform((s, ctx): number => {
-  const trimmed = s.trim();
-  if (trimmed === "") {
-    ctx.addIssue({ code: "custom", message: "Required" });
-    return z.NEVER;
-  }
-  const n = Number(trimmed);
-  if (!Number.isFinite(n) || !Number.isInteger(n)) {
-    ctx.addIssue({ code: "custom", message: "Must be a whole number" });
-    return z.NEVER;
-  }
-  if (n < 1) {
-    ctx.addIssue({ code: "custom", message: "Must be at least 1" });
-    return z.NEVER;
-  }
-  return n;
-});
-
-/** Optional integer: empty (or whitespace) → null; otherwise integer. */
-export const optionalIntegerString = z.string().transform((s, ctx): number | null => {
-  const trimmed = s.trim();
-  if (trimmed === "") return null;
-  const n = Number(trimmed);
-  if (!Number.isFinite(n) || !Number.isInteger(n)) {
-    ctx.addIssue({ code: "custom", message: "Must be a whole number" });
-    return z.NEVER;
-  }
-  return n;
-});
-
-/** Optional non-negative integer: empty → null; "0" allowed; negatives rejected. */
-export const optionalNonNegativeIntegerString = z.string().transform((s, ctx): number | null => {
-  const trimmed = s.trim();
-  if (trimmed === "") return null;
-  const n = Number(trimmed);
-  if (!Number.isFinite(n) || !Number.isInteger(n)) {
-    ctx.addIssue({ code: "custom", message: "Must be a whole number" });
-    return z.NEVER;
-  }
-  if (n < 0) {
-    ctx.addIssue({ code: "custom", message: "Must be ≥ 0" });
-    return z.NEVER;
-  }
-  return n;
-});
-
-/** USD string ($1,234.56, 1234, etc.) parsing to Cents. Rejects empty. */
-export const usdString = z.string().transform((s, ctx): number => {
-  const parsed = parseUSD(s);
-  if (parsed === undefined) {
-    ctx.addIssue({ code: "custom", message: "Enter a valid amount" });
-    return z.NEVER;
-  }
-  return parsed;
-});
-
-/** Optional USD string: blank → null; otherwise parses to Cents. */
-export const optionalUsdString = z.string().transform((s, ctx): number | null => {
-  const trimmed = s.trim();
-  if (trimmed === "") return null;
-  const parsed = parseUSD(trimmed);
-  if (parsed === undefined) {
-    ctx.addIssue({ code: "custom", message: "Enter a valid amount" });
-    return z.NEVER;
-  }
-  return parsed;
-});
-
 /** ISO date YYYY-MM-DD. Rejects anything else. */
 export const isoDateString = z.string().transform((s, ctx): string => {
   const trimmed = s.trim();
@@ -212,32 +108,6 @@ export const optionalIsoDateString = z.string().transform((s, ctx): string | nul
  * separately so the call site can be explicit about wire-format vs form-input.
  * (papaparse always emits string, never undefined, for a known column.)
  */
-
-/** CSV integer cell: "" → null; anything else must parse to a finite integer. */
-export const csvOptionalInteger = z.string().transform((s, ctx): number | null => {
-  if (s === "") return null;
-  const n = Number(s.trim());
-  if (!Number.isFinite(n) || !Number.isInteger(n)) {
-    ctx.addIssue({ code: "custom", message: `Expected an integer, got "${s}"` });
-    return z.NEVER;
-  }
-  return n;
-});
-
-/** CSV required integer cell (rejects empty + non-numeric). */
-export const csvRequiredInteger = z.string().transform((s, ctx): number => {
-  const trimmed = s.trim();
-  if (trimmed === "") {
-    ctx.addIssue({ code: "custom", message: "Required integer field is empty" });
-    return z.NEVER;
-  }
-  const n = Number(trimmed);
-  if (!Number.isFinite(n) || !Number.isInteger(n)) {
-    ctx.addIssue({ code: "custom", message: `Expected an integer, got "${s}"` });
-    return z.NEVER;
-  }
-  return n;
-});
 
 /** CSV boolean cell: "" → false, "0" → false, "1" → true. Else rejected. */
 export const csvBoolean = z

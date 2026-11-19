@@ -9,6 +9,7 @@ import {
   RETIREMENT_ACCOUNT_LABELS,
   VEHICLE_METHOD_LABELS,
   type LabelMap,
+  parseMoney,
 } from "@fiscode/core";
 
 import { CSV_COLUMNS, type CsvRow, type RecordType } from "./schema.ts";
@@ -346,17 +347,12 @@ function hundredthsToDecimal(raw: string, column: string): string {
 
 // Accepts what the export writes (`1234.56`) and what a spreadsheet may save
 // back: `1234`, `1234.5`, `$1,234.56`, `-$12.30`. Never more than two decimals,
-// because a third digit could not be stored exactly.
-const DECIMAL = /^(-?)\$?(-?)(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?$/;
-
+// because a third digit could not be stored exactly. The syntax rule is
+// `parseMoney` in @fiscode/core; a sign is allowed and no range is checked.
 const decimalToHundredths = (cell: string): string | undefined => {
-  const trimmed = cell.trim();
-  if (trimmed === "") return "";
-  const m = DECIMAL.exec(trimmed);
-  if (!m || (m[1] && m[2])) return undefined;
-  const value = Number(m[3]!.replace(/,/g, "")) * 100 + Number((m[4] ?? "").padEnd(2, "0"));
-  if (!Number.isSafeInteger(value)) return undefined;
-  return String(m[1] || m[2] ? -value || 0 : value);
+  const parsed = parseMoney(cell, { signed: true });
+  if (parsed.ok) return String(parsed.cents);
+  return parsed.reason === "empty" ? "" : undefined;
 };
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
