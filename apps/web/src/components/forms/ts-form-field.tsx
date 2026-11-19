@@ -3,6 +3,14 @@ import type { AnyFieldApi } from "@tanstack/react-form";
 import type { ReactNode } from "react";
 import type { ZodTypeAny } from "zod";
 
+/**
+ * A blur validator: a zod schema, or a function for a rule that reads another
+ * field (`fieldApi.form.getFieldValue`). It returns the message, or nothing.
+ */
+export type BlurValidator =
+  | ZodTypeAny
+  | ((args: { value: any; fieldApi: AnyFieldApi }) => string | undefined);
+
 // Bridges TanStack Form's `form.Field` render-prop API into shadcn's Form
 // context. Inside `children`, render `<FormItem>` / `<FormLabel>` /
 // `<FormControl>` / `<FormMessage>` like normal — they pick up the error
@@ -31,7 +39,7 @@ export function TSFormField({
 }: {
   form: any;
   name: string;
-  validators?: { onBlur?: ZodTypeAny };
+  validators?: { onBlur?: BlurValidator; onBlurListenTo?: string[] };
   error?: string;
   /** "required" or "optional"; leave out for a checkbox. See FormField. */
   requirement?: FieldRequirement;
@@ -39,7 +47,7 @@ export function TSFormField({
 }) {
   const FieldComp = form.Field as React.ComponentType<{
     name: string;
-    validators?: { onBlur?: ZodTypeAny };
+    validators?: { onBlur?: BlurValidator; onBlurListenTo?: string[] };
     children: (field: AnyFieldApi) => ReactNode;
   }>;
   return (
