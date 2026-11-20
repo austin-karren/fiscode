@@ -42,6 +42,16 @@ const controlLabelled = (label: string) => {
   return document.getElementById(el.getAttribute("for")!);
 };
 
+// Types a date into a date field: a save with no change writes nothing, so
+// each save below changes a field first.
+const typeDate = async (label: string, text: string) => {
+  fireEvent.click(controlLabelled(label)!);
+  const typed = await screen.findByLabelText("Type a date");
+  fireEvent.change(typed, { target: { value: text } });
+  fireEvent.keyDown(typed, { key: "Enter" });
+  await waitFor(() => expect(screen.queryByLabelText("Type a date")).not.toBeInTheDocument());
+};
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -53,7 +63,9 @@ describe("edit entity dialog", () => {
     const onSaved = vi.fn();
     render(<EditEntityDialog entity={llc} onSaved={onSaved} />);
     fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    await screen.findByRole("dialog");
+    await typeDate("Start", "11/03/2026");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(MESSAGE);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -66,7 +78,9 @@ describe("edit entity dialog", () => {
     const onSaved = vi.fn();
     render(<EditEntityDialog entity={llc} onSaved={onSaved} />);
     fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    await screen.findByRole("dialog");
+    await typeDate("Start", "11/03/2026");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await screen.findByRole("alert");
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -81,7 +95,9 @@ describe("edit entity dialog", () => {
     );
     render(<EditEntityDialog entity={llc} onSaved={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    await screen.findByRole("dialog");
+    await typeDate("End (optional)", "01/01/2023");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "The end date (Jan 1, 2023) is before the start date (Nov 2, 2026).",
@@ -92,7 +108,9 @@ describe("edit entity dialog", () => {
     update.mockRejectedValueOnce(new EntityOverlapError(soleProp));
     render(<EditEntityDialog entity={llc} onSaved={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    await screen.findByRole("dialog");
+    await typeDate("Start", "11/03/2026");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const message = await screen.findByText(MESSAGE);
     expect(fieldDescribedBy(message)).toHaveAttribute("aria-invalid", "true");
@@ -105,7 +123,9 @@ describe("edit entity dialog", () => {
     );
     render(<EditEntityDialog entity={llc} onSaved={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    await screen.findByRole("dialog");
+    await typeDate("End (optional)", "01/01/2023");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const message = await screen.findByText(/is before the start date/);
     expect(fieldDescribedBy(message)).toBe(controlLabelled("End (optional)"));
@@ -150,7 +170,9 @@ describe("edit entity dialog", () => {
       </form>,
     );
     fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    await screen.findByRole("dialog");
+    await typeDate("Start", "11/03/2026");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
     expect(outerSubmit).not.toHaveBeenCalled();

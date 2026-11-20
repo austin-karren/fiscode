@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { useState } from "react";
 
 /**
@@ -20,4 +21,15 @@ export function useEditDialog(form: { reset: () => void }, onOpen?: () => void) 
     setOpen(next);
   };
   return { open, setOpen, onOpenChange };
+}
+
+/**
+ * A save with every field still at its saved value writes nothing (the repos
+ * skip it), so it says so instead of "… updated." Returns true when the save
+ * should stop there.
+ */
+export function noChangesToSave(form: { state: { isDefaultValue: boolean } }): boolean {
+  if (!form.state.isDefaultValue) return false;
+  toast("No changes to save.");
+  return true;
 }

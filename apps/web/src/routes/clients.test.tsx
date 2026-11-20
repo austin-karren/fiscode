@@ -80,7 +80,9 @@ afterEach(() => {
 describe("archiving a client", () => {
   it("asks first, naming the client and how many rows reference it", async () => {
     renderPage();
-    fireEvent.click(within(rowFor("Demo Live Co")).getByRole("button", { name: "Archive" }));
+    fireEvent.click(
+      within(rowFor("Demo Live Co")).getByRole("button", { name: "Archive client Demo Live Co" }),
+    );
 
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText("Archive Demo Live Co?")).toBeInTheDocument();
@@ -93,7 +95,9 @@ describe("archiving a client", () => {
 
   it("does nothing on Cancel", async () => {
     renderPage();
-    fireEvent.click(within(rowFor("Demo Live Co")).getByRole("button", { name: "Archive" }));
+    fireEvent.click(
+      within(rowFor("Demo Live Co")).getByRole("button", { name: "Archive client Demo Live Co" }),
+    );
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
 
@@ -103,7 +107,9 @@ describe("archiving a client", () => {
 
   it("archives on confirm and offers Undo, which restores the exact row", async () => {
     renderPage();
-    fireEvent.click(within(rowFor("Demo Live Co")).getByRole("button", { name: "Archive" }));
+    fireEvent.click(
+      within(rowFor("Demo Live Co")).getByRole("button", { name: "Archive client Demo Live Co" }),
+    );
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Archive" }));
 
@@ -131,7 +137,7 @@ describe("archived clients", () => {
 
     const row = rowFor("Demo Archived Co");
     expect(within(row).getByText("· archived")).toBeInTheDocument();
-    expect(within(row).queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: /^Archive\b/ })).not.toBeInTheDocument();
 
     fireEvent.click(within(row).getByRole("button", { name: "Un-archive" }));
     await waitFor(() =>

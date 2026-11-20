@@ -258,6 +258,14 @@ describe("DatePicker typed date", () => {
     expect(typed()).toHaveValue("10/10/2026");
   });
 
+  it("selects the date on focus, so typing replaces it", async () => {
+    setup({ value: new Date(2026, 9, 10) });
+    await openWithKeyboard();
+    const box = typed() as HTMLInputElement;
+    fireEvent.focus(box);
+    expect([box.selectionStart, box.selectionEnd]).toEqual([0, "10/10/2026".length]);
+  });
+
   it.each(["03/14/2025", "2025-03-14"])("takes %s on Enter and closes", async (text) => {
     const { onValueChange, onBlur } = setup();
     await openWithKeyboard();

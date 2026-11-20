@@ -185,11 +185,26 @@ describe("hoursField", () => {
   it.each([
     [60, "1"],
     [75, "1.25"],
-    [83, "1.5"], // 1.38 h rounds to the nearest quarter
-    [7, "0.25"], // never below the smallest entry the form takes
+    [83, "1:23"], // off the quarter-hour step: exact, never rounded
+    [7, "0:07"],
     [1440, "24"],
   ])("shows %i minutes as %s hours, a value the time form takes", (minutes, text) => {
     expect(hoursField(minutes)).toBe(text);
     expect(hoursWorked.safeParse(text).success).toBe(true);
+  });
+
+  it.each([60, 75, 83, 7, 1439, 1440])("round-trips %i minutes exactly", (minutes) => {
+    const hours = hoursWorked.parse(hoursField(minutes));
+    expect(Math.round(hours * 60)).toBe(minutes);
+  });
+
+  it.each([
+    ["0:00", "Must be more than 0"],
+    ["24:01", "24 hours at most"],
+    ["1:60", "Enter hours, like 1.5"],
+  ])("refuses %s as h:mm", (text, message) => {
+    const result = hoursWorked.safeParse(text);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe(message);
   });
 });

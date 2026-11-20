@@ -21,7 +21,7 @@ import { z } from "zod";
 import { optionalMoneyAmount } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
-import { useEditDialog } from "../hooks/use-edit-dialog";
+import { noChangesToSave, useEditDialog } from "../hooks/use-edit-dialog";
 import { recordLabel } from "../lib/record-label";
 
 const editSchema = z.object({
@@ -41,7 +41,8 @@ export function EditClientDialog({ client, onSaved }: { client: ClientRow; onSav
           : "",
     },
     validators: { onSubmit: editSchema },
-    onSubmit: async ({ value }) => {
+    onSubmit: async ({ value, formApi }) => {
+      if (noChangesToSave(formApi)) return setOpen(false);
       await clientRepo.update(client.id, {
         name: value.name.trim(),
         type: value.type.trim() || null,

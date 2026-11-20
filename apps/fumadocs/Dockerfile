@@ -42,9 +42,10 @@ COPY . .
 RUN cd apps/fumadocs && bun run build
 
 # ----- runtime -------------------------------------------------------------
-# node:22-slim is small (~70 MB) and ships a TLS-capable Node. Nitro's
-# node-server output is plain ESM — no native deps to compile here.
-FROM node:22-slim AS runtime
+# node:24-slim matches `engines.node` (24.x) in package.json, is small and
+# ships a TLS-capable Node. Nitro's node-server output is plain ESM — no
+# native deps to compile here.
+FROM node:24-slim AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production

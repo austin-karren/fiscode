@@ -23,7 +23,7 @@ import { TSFormField } from "./forms/ts-form-field";
 import { CONFIG_YEARS_BACK, DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { useToday } from "../lib/use-today";
-import { useEditDialog } from "../hooks/use-edit-dialog";
+import { noChangesToSave, useEditDialog } from "../hooks/use-edit-dialog";
 import { recordLabel } from "../lib/record-label";
 
 const editSchema = z.object({
@@ -47,7 +47,8 @@ export function EditSpouseDialog({ spouse, onSaved }: { spouse: SpouseRow; onSav
       stateWH: centsToDollarsStr(spouse.annualStateWithholdingCents),
     },
     validators: { onSubmit: editSchema as never },
-    onSubmit: async ({ value }) => {
+    onSubmit: async ({ value, formApi }) => {
+      if (noChangesToSave(formApi)) return setOpen(false);
       const parsed = editSchema.parse(value);
       await spouseRepo.update(spouse.id, {
         startDate: dateToIso(value.startDate!),
