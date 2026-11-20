@@ -287,37 +287,49 @@ function ExpensesPage() {
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="startupExpense">
-              {(field) => (
-                <FormItem className="@sm:col-span-2 @4xl:col-span-5">
-                  <FieldLabel>
-                    <Field orientation="horizontal">
-                      <FormControl>
-                        <FieldCheckbox
-                          checked={field.state.value}
-                          onCheckedChange={(v) => field.handleChange(v)}
-                          onBlur={field.handleBlur}
-                        />
-                      </FormControl>
-                      <FieldContent>
-                        <FieldTitle>Startup expense (Section 195)</FieldTitle>
-                        <FieldDescription>
-                          Bought in anticipation of 1099 work — count it in the year even if dated
-                          before your SE start date.
-                        </FieldDescription>
-                      </FieldContent>
-                    </Field>
-                  </FieldLabel>
-                  <FormMessage />
-                </FormItem>
+            {/* §195 excludes depreciable property: equipment goes by its
+                placed-in-service date, so the box is off for Equipment. */}
+            <form.Subscribe selector={(st) => st.values.category === "equipment"}>
+              {(isEquipment) => (
+                <TSFormField form={form} name="startupExpense">
+                  {(field) => (
+                    <FormItem className="@sm:col-span-2 @4xl:col-span-5">
+                      <FieldLabel>
+                        <Field orientation="horizontal" data-disabled={isEquipment || undefined}>
+                          <FormControl>
+                            <FieldCheckbox
+                              checked={field.state.value}
+                              onCheckedChange={(v) => field.handleChange(v)}
+                              onBlur={field.handleBlur}
+                              disabled={isEquipment}
+                            />
+                          </FormControl>
+                          <FieldContent>
+                            <FieldTitle>Startup expense (Section 195)</FieldTitle>
+                            <FieldDescription>
+                              Bought in anticipation of 1099 work — count it in the year even if
+                              dated before your SE start date.
+                            </FieldDescription>
+                            {isEquipment ? (
+                              <FormDescription className="text-xs">
+                                Equipment uses its placed-in-service date instead.
+                              </FormDescription>
+                            ) : null}
+                          </FieldContent>
+                        </Field>
+                      </FieldLabel>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                </TSFormField>
               )}
-            </TSFormField>
+            </form.Subscribe>
             <form.Subscribe
               selector={(s) => ({ category: s.values.category, date: s.values.date })}
             >
               {({ category, date }) =>
                 category === "equipment" ? (
-                  <TSFormField form={form} name="placedInService">
+                  <TSFormField form={form} name="placedInService" requirement="optional">
                     {(field) => (
                       <FormItem>
                         <LabelWithTooltip tooltip={GLOSSARY.placedInService}>

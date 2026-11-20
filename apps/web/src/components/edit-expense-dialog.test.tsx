@@ -83,4 +83,35 @@ describe("edit expense: equipment placed in service", () => {
     const item = field.closest<HTMLElement>('[data-slot="form-item"]')!;
     expect(within(item).getByRole("button", { name: "More info" })).toBeInTheDocument();
   });
+
+  it("labels Placed in service as optional", async () => {
+    const field = await openAndSave(laptop);
+    const item = field.closest<HTMLElement>('[data-slot="form-item"]')!;
+    expect(item).toHaveTextContent("Placed in service (optional)");
+  });
+
+  it("turns the startup box off for Equipment, with the reason linked", async () => {
+    await openAndSave(laptop);
+    const box = screen.getByRole("checkbox", { name: /Startup expense/ });
+    expect(box).toHaveAttribute("aria-disabled", "true");
+    expect(box).toHaveAccessibleDescription("Equipment uses its placed-in-service date instead.");
+  });
+
+  it("leaves the startup box on, with no reason, for other categories", async () => {
+    render(
+      <EditExpenseDialog
+        expense={{ ...laptop, category: "software_subs" }}
+        categories={CATEGORIES}
+        onSaved={vi.fn()}
+        seStartDate="2026-02-01"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
+    await screen.findByRole("dialog");
+    const box = screen.getByRole("checkbox", { name: /Startup expense/ });
+    expect(box).not.toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.queryByText("Equipment uses its placed-in-service date instead."),
+    ).not.toBeInTheDocument();
+  });
 });

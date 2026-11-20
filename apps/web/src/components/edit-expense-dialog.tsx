@@ -11,7 +11,13 @@ import {
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { FieldCheckbox } from "./forms/field-checkbox";
-import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
+import {
+  FormControl,
+  FormDescription,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@fiscode/ui/components/form";
 import { expenseRepo } from "@fiscode/db";
 import type { ExpenseRow } from "@fiscode/csv";
 import { cents, formatUSD } from "@fiscode/core";
@@ -204,34 +210,47 @@ export function EditExpenseDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField form={form} name="startupExpense">
-              {(field) => (
-                <FormItem className="flex flex-row items-start gap-2">
-                  <FormControl>
-                    <FieldCheckbox
-                      checked={field.state.value}
-                      onCheckedChange={(v) => field.handleChange(v)}
-                      onBlur={field.handleBlur}
-                    />
-                  </FormControl>
-                  <div className="grid gap-0.5">
-                    <FormLabel className="text-sm font-normal">
-                      Startup expense (Section 195)
-                    </FormLabel>
-                    <span className="text-xs text-muted-foreground">
-                      Bought in anticipation of 1099 work — count it in the year even if dated
-                      before your SE start.
-                    </span>
-                  </div>
-                </FormItem>
+            {/* §195 excludes depreciable property: equipment goes by its
+                placed-in-service date, so the box is off for Equipment. A row
+                already ticked keeps its value until d-data rules on it. */}
+            <form.Subscribe selector={(st) => st.values.category === "equipment"}>
+              {(isEquipment) => (
+                <TSFormField form={form} name="startupExpense">
+                  {(field) => (
+                    <FormItem className="flex flex-row items-start gap-2">
+                      <FormControl>
+                        <FieldCheckbox
+                          checked={field.state.value}
+                          onCheckedChange={(v) => field.handleChange(v)}
+                          onBlur={field.handleBlur}
+                          disabled={isEquipment}
+                        />
+                      </FormControl>
+                      <div className="grid gap-0.5">
+                        <FormLabel className="text-sm font-normal">
+                          Startup expense (Section 195)
+                        </FormLabel>
+                        <span className="text-xs text-muted-foreground">
+                          Bought in anticipation of 1099 work — count it in the year even if dated
+                          before your SE start.
+                        </span>
+                        {isEquipment ? (
+                          <FormDescription className="text-xs">
+                            Equipment uses its placed-in-service date instead.
+                          </FormDescription>
+                        ) : null}
+                      </div>
+                    </FormItem>
+                  )}
+                </TSFormField>
               )}
-            </TSFormField>
+            </form.Subscribe>
             <form.Subscribe
               selector={(st) => ({ category: st.values.category, date: st.values.date })}
             >
               {({ category, date }) =>
                 category === "equipment" ? (
-                  <TSFormField form={form} name="placedInService">
+                  <TSFormField form={form} name="placedInService" requirement="optional">
                     {(field) => (
                       <FormItem>
                         <LabelWithTooltip tooltip={GLOSSARY.placedInService}>

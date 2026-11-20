@@ -149,4 +149,29 @@ describe("adding a run of expenses", () => {
     const field = within(addCard()).getByRole("button", { name: /Placed in service/ });
     expect(field).toHaveAccessibleDescription(GLOSSARY.placedInService);
   });
+
+  it("labels Placed in service as optional, and turns the startup box off for Equipment with the reason linked", () => {
+    loaded.expenses = [
+      { ...row, id: "ex_demo_eq", category: "equipment", placedInServiceDate: null },
+    ];
+    render(<ExpensesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    const card = within(addCard());
+    const field = card.getByRole("button", { name: /Placed in service/ });
+    expect(field.closest('[data-slot="form-item"]')).toHaveTextContent(
+      "Placed in service (optional)",
+    );
+    const box = card.getByRole("checkbox", { name: /Startup expense/ });
+    expect(box).toHaveAttribute("aria-disabled", "true");
+    expect(box).toHaveAccessibleDescription("Equipment uses its placed-in-service date instead.");
+  });
+
+  it("leaves the startup box on, with no reason, for other categories", () => {
+    render(<ExpensesPage />);
+    const box = within(addCard()).getByRole("checkbox", { name: /Startup expense/ });
+    expect(box).not.toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.queryByText("Equipment uses its placed-in-service date instead."),
+    ).not.toBeInTheDocument();
+  });
 });
