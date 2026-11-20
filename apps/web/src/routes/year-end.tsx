@@ -4,6 +4,7 @@ import { flushSync } from "react-dom";
 import { Card } from "@fiscode/ui/components/card";
 import { Button } from "@fiscode/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
+import { StartupIgnoredNotice } from "../components/startup-ignored-notice";
 import { buildBundle, clientRepo, vehicleRepo } from "@fiscode/db";
 import { exportBundle, exportFileName, type VehicleRow } from "@fiscode/csv";
 import { estimateBundleYear, getYearConfig } from "@fiscode/tax";
@@ -176,6 +177,8 @@ function YearEndPage() {
           </AlertDescription>
         </Alert>
       ) : null}
+
+      <StartupIgnoredNotice count={derived.startupIgnoredForEquipment} />
 
       <Card className="p-4 print:break-inside-avoid print:overflow-visible print:p-0 print:ring-0">
         <dl className="grid gap-2 gap-x-12 @md:grid-cols-2">

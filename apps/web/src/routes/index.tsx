@@ -19,6 +19,7 @@ import {
 } from "@fiscode/core";
 import { Badge } from "@fiscode/ui/components/badge";
 import { CircleAlert } from "lucide-react";
+import { StartupIgnoredNotice } from "../components/startup-ignored-notice";
 
 import { EntityUnsupportedAlert } from "../components/entity-unsupported-alert";
 import { GLOSSARY } from "../lib/tax-glossary";
@@ -77,6 +78,9 @@ function Dashboard() {
   const { profile, year, result, derived, hasExact } = useLoaderData({
     from: "/",
   });
+  // A real first year: self-employment began this year, so there is no
+  // prior-year return to use (not merely one left unentered).
+  const realFirstYear = derived ? Number(derived.seStartDate.slice(0, 4)) >= year : false;
   const today = todayIso();
   const upcoming = nextDueQuarter(result.quarterly, today);
   // The $1,000 rule (packages/tax): no federal estimated payment is required.
@@ -102,6 +106,7 @@ function Dashboard() {
       <ExcludedBeforeSeAlert derived={derived} />
       <OfficeAreaAlert rejected={derived.homeOfficeAreaRejected} />
       <Section179Notice count={derived.equipmentAssumedSection179} />
+      <StartupIgnoredNotice count={derived.startupIgnoredForEquipment} />
       <PriorYearReturnNotice applied={derived.priorYearFiguresApplied} year={year} />
 
       {/* One primary figure, the year's total; the three taxes it adds up
@@ -206,6 +211,8 @@ function Dashboard() {
             <Field label="90% of current year" tooltip={GLOSSARY.safeHarborCurrent}>
               {formatUSD(result.safeHarbor.currentYearTarget)}
             </Field>
+            {/* The engine's firstYear means "no prior-year figures": a real first
+                year (SE start this year) or last year's return not entered. */}
             <Field
               label={
                 result.safeHarbor.firstYear
@@ -219,15 +226,17 @@ function Dashboard() {
                   : undefined
               }
             >
-              {result.safeHarbor.firstYear
-                ? "n/a (first year)"
-                : formatUSD(result.safeHarbor.priorYearTarget!)}
+              {!result.safeHarbor.firstYear
+                ? formatUSD(result.safeHarbor.priorYearTarget!)
+                : realFirstYear
+                  ? "n/a (first year)"
+                  : "not entered"}
             </Field>
             <Field label="Floor (lower of two)" tooltip={GLOSSARY.safeHarborFloor}>
               {formatUSD(result.safeHarbor.floor)}
             </Field>
           </div>
-          {result.safeHarbor.firstYear ? (
+          {result.safeHarbor.firstYear && realFirstYear ? (
             <Alert variant="warning" className="mt-3">
               <CircleAlert />
               <AlertTitle>First-year filing</AlertTitle>
