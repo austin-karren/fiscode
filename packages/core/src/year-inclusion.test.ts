@@ -4,6 +4,7 @@ import {
   countedInYear,
   expenseYearDate,
   expenseYearExclusion,
+  startupTickIgnoredForEquipment,
   isBeforeSeStart,
   yearExclusion,
 } from "./year-inclusion.ts";
@@ -69,5 +70,27 @@ describe("expenseYearExclusion (#66: equipment counts on its placed-in-service d
   it("software carrying a CSV-only placed-in-service date stays on its own date", () => {
     const sub = { ...desk, category: "software_subs", placedInServiceDate: "2026-03-01" };
     expect(expenseYearDate(sub, se)).toBe("2025-11-20");
+  });
+});
+
+describe("startupTickIgnoredForEquipment (equipment is placed in service, never §195)", () => {
+  const se = "2026-02-01";
+  const row = (extra: Record<string, unknown>) => ({
+    date: "2025-11-20",
+    deletedAt: null,
+    category: "equipment",
+    startupExpense: true,
+    ...extra,
+  });
+  it("pre-start equipment ticked Startup: the tick is ignored", () => {
+    expect(startupTickIgnoredForEquipment(row({}), se)).toBe(true);
+  });
+  it("not ticked, not equipment, on or after the start, or deleted: nothing ignored", () => {
+    expect(startupTickIgnoredForEquipment(row({ startupExpense: false }), se)).toBe(false);
+    expect(startupTickIgnoredForEquipment(row({ category: "advertising" }), se)).toBe(false);
+    expect(startupTickIgnoredForEquipment(row({ date: "2026-02-01" }), se)).toBe(false);
+    expect(startupTickIgnoredForEquipment(row({ deletedAt: "2026-03-01T00:00:00.000Z" }), se)).toBe(
+      false,
+    );
   });
 });

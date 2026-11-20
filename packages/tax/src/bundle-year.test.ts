@@ -1038,3 +1038,44 @@ describe("estimateBundleYear annualized input — cumulative periods", () => {
     );
   });
 });
+
+describe("derived.startupIgnoredForEquipment (equipment ticked Startup is not §195)", () => {
+  const profile = { ...makeBundle().profile!, seStartDate: "2026-02-01" };
+  const laptop = (id: string, extra = {}) => ({
+    ...expense(id, "2025-11-20", 3_000_00),
+    category: "equipment",
+    startupExpense: true,
+    ...extra,
+  });
+
+  it("counts pre-start equipment ticked Startup in the year it counts (the SE start's), with no number change", () => {
+    const ticked = makeBundle({
+      profile,
+      expenses: [laptop("e1"), laptop("e2", { amountCents: 500_00 })],
+    });
+    const unticked = makeBundle({
+      profile,
+      expenses: [
+        laptop("e1", { startupExpense: false }),
+        laptop("e2", { amountCents: 500_00, startupExpense: false }),
+      ],
+    });
+    expect(deriveYear(ticked, 2026).startupIgnoredForEquipment).toBe(2);
+    expect(deriveYear(ticked, 2025).startupIgnoredForEquipment).toBe(0);
+    const { startupIgnoredForEquipment: _a, ...withTick } = deriveYear(ticked, 2026);
+    const { startupIgnoredForEquipment: _b, ...withoutTick } = deriveYear(unticked, 2026);
+    expect(withTick).toEqual(withoutTick);
+    expect(withTick.directExpenses).toBe(3_500_00);
+    expect(withTick.startupCosts.total).toBe(0);
+  });
+
+  it("0 when nothing is ticked, or the ticked row is a real startup cost", () => {
+    const b = makeBundle({
+      profile,
+      expenses: [
+        { ...expense("a1", "2025-12-01", 1_000_00), category: "advertising", startupExpense: true },
+      ],
+    });
+    expect(deriveYear(b, 2026).startupIgnoredForEquipment).toBe(0);
+  });
+});
