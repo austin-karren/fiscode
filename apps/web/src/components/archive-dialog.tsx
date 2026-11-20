@@ -35,10 +35,13 @@ export const describeReferences = (references: ArchiveReference[]): string => {
 // so it asks first and says how many rows are affected.
 export function ArchiveDialog({
   itemName,
+  recordName,
   references,
   onConfirm,
 }: {
   itemName: string;
+  /** The record in the button's accessible name, as Edit and Delete name it ("client Acme"). */
+  recordName: string;
   references: ArchiveReference[];
   onConfirm: () => Promise<void> | void;
 }) {
@@ -49,7 +52,7 @@ export function ArchiveDialog({
       <AlertDialogTrigger
         render={
           <Button variant="ghost" size="sm">
-            Archive
+            Archive <span className="sr-only">{recordName}</span>
           </Button>
         }
       />

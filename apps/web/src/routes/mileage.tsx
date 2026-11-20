@@ -3,7 +3,13 @@ import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-route
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
-import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
+import {
+  FormControl,
+  FormDescription,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@fiscode/ui/components/form";
 import { mileageRepo, profileRepo, vehicleRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Car } from "lucide-react";
@@ -16,7 +22,7 @@ import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
 import { DatePicker, dateToIso, isoToDate } from "../components/forms/date-picker";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
-import { LabelWithTooltip } from "../components/forms/labeled";
+import { InfoTooltip } from "../components/info-tooltip";
 import { NoDataEmpty } from "../components/empty-states/no-data";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
@@ -172,21 +178,26 @@ function MileagePage() {
               validators={{ onBlur: fs.miles }}
             >
               {(field) => (
-                <FormItem>
-                  <LabelWithTooltip tooltip={GLOSSARY.businessMiles}>
-                    Business miles
-                  </LabelWithTooltip>
+                // The hint button comes after the box in the DOM, so Tab reaches
+                // the field first; the grid still shows it beside the label.
+                <FormItem className="grid-cols-[auto_1fr] items-center gap-x-1.5">
+                  <FormLabel className="col-start-1 row-start-1">Business miles</FormLabel>
                   <FormControl>
                     <Input
                       ref={firstValue}
                       type="text"
                       inputMode="numeric"
+                      className="col-span-2"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
                     />
                   </FormControl>
-                  <FormMessage />
+                  <span className="col-start-2 row-start-1 inline-flex">
+                    <InfoTooltip text={GLOSSARY.businessMiles} />
+                  </span>
+                  <FormDescription className="sr-only">{GLOSSARY.businessMiles}</FormDescription>
+                  <FormMessage className="col-span-2" />
                 </FormItem>
               )}
             </TSFormField>

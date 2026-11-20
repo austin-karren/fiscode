@@ -22,6 +22,7 @@ import { ParentName } from "../components/parent-name";
 import { optionalMoneyAmount } from "../lib/field-schemas";
 import { restoreRow, softDeleteWithUndo } from "../lib/soft-delete";
 import { SectionTitle } from "../components/section-title";
+import { recordLabel } from "../lib/record-label";
 
 const clientSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -250,6 +251,7 @@ function ClientsPage() {
                         <EditClientDialog client={c} onSaved={() => router.invalidate()} />
                         <ArchiveDialog
                           itemName={c.name}
+                          recordName={recordLabel.client(c)}
                           references={referencesTo(c.id)}
                           onConfirm={() => archive(c)}
                         />

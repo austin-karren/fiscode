@@ -91,7 +91,7 @@ describe("duplicating a time entry", () => {
     loaded.entries = [];
   });
 
-  it("fills hours rounded to the quarter hour the form takes, for odd imported minutes", () => {
+  it("fills odd imported minutes exactly, never rounded to the quarter hour", () => {
     loaded.entries = [
       {
         id: "te_demo",
@@ -105,6 +105,8 @@ describe("duplicating a time entry", () => {
     ];
     render(<TimePage />);
     fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
-    expect(screen.getAllByLabelText("Hours")[0]).toHaveValue("1.5");
+    // 83 minutes is off the form's quarter-hour step: shown as h:mm, which
+    // saves back as the same 83 minutes.
+    expect(screen.getAllByLabelText("Hours")[0]).toHaveValue("1:23");
   });
 });
