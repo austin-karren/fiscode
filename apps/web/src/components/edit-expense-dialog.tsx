@@ -69,7 +69,20 @@ export function EditExpenseDialog({
     // Cast: zod's optional Date and TanStack Form's exactOptional differ (as in profile.tsx).
     validators: { onSubmit: editSchema as never },
     onSubmit: async ({ value, formApi }) => {
-      if (noChangesToSave(formApi)) return setOpen(false);
+      // The prefilled placed-in-service date is shown, not typed, so the form can look
+      // untouched while the row would still change: only skip when it wouldn't.
+      const placedInServiceDate = placedInServiceFor(
+        value.category,
+        value.date ? dateToIso(value.date) : undefined,
+        value.placedInService ? dateToIso(value.placedInService) : undefined,
+        seStartDate,
+      );
+      if (
+        noChangesToSave(formApi) &&
+        placedInServiceDate === (expense.placedInServiceDate ?? null)
+      ) {
+        return setOpen(false);
+      }
       const parsed = moneyAmount.parse(value.amount);
       await expenseRepo.update(expense.id, {
         date: dateToIso(value.date!),
@@ -78,12 +91,7 @@ export function EditExpenseDialog({
         description: value.description || null,
         flagForSection179: value.flagForSection179,
         startupExpense: value.startupExpense,
-        placedInServiceDate: placedInServiceFor(
-          value.category,
-          value.date ? dateToIso(value.date) : undefined,
-          value.placedInService ? dateToIso(value.placedInService) : undefined,
-          seStartDate,
-        ),
+        placedInServiceDate,
       });
       toast.success("Expense updated.");
       setOpen(false);
