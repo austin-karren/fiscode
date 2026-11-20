@@ -396,14 +396,15 @@ function ExcludedBeforeSeAlert({ derived }: { derived: DerivedYear }) {
   if (expense) parts.push(`${expense} expense${expense === 1 ? "" : "s"}`);
   if (mileage) parts.push(`${mileage} mileage trip${mileage === 1 ? "" : "s"}`);
   const summary = parts.join(", ");
+  const one = total === 1;
   return (
     <Alert variant="warning">
       <CircleAlert />
       <AlertTitle>Some rows are dated before your SE start date</AlertTitle>
       <AlertDescription>
-        {summary} dated before {formatDate(derived.seStartDate)} are not counted in this estimate.
-        They stay in your data — edit them or change your start date on{" "}
-        <Link to="/profile">your profile</Link>.
+        {summary} dated before {formatDate(derived.seStartDate)} {one ? "is" : "are"} not counted in
+        this estimate. {one ? "It stays" : "They stay"} in your data — edit {one ? "it" : "them"} or
+        change your start date on <Link to="/profile">your profile</Link>.
       </AlertDescription>
     </Alert>
   );
