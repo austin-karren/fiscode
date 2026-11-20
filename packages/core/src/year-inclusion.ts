@@ -119,3 +119,21 @@ export const expenseYearExclusion = (
     year,
     seStartDate,
   );
+
+/**
+ * Equipment ticked Startup and bought before the SE start: the tick is ignored. Equipment is
+ * placed in service, not a §195 start-up cost: §195(c)(1)(B) covers an amount which "if paid or
+ * incurred in connection with the operation of an existing active trade or business ... would be
+ * allowable as a deduction for the taxable year in which paid or incurred"
+ * (https://www.govinfo.gov/link/uscode/26/195), and equipment is capital property. It counts on
+ * its placed-in-service date instead (`countedExpenseDate`). The forms clear the tick for
+ * equipment; a row from a CSV or an older save can still carry it, and this names it.
+ */
+export const startupTickIgnoredForEquipment = (
+  expense: Pick<ExpenseForYear, "date" | "deletedAt" | "startupExpense" | "category">,
+  seStartDate: string | null | undefined,
+): boolean =>
+  expense.deletedAt === null &&
+  expense.startupExpense === true &&
+  expense.category === "equipment" &&
+  isBeforeSeStart(expense.date, seStartDate);
