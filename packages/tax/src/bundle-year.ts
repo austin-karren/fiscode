@@ -365,9 +365,11 @@ export type DerivedYear = {
   homeOfficeAreaRejected: number;
   /**
    * §195 startup costs (paid before the SE start): the year's deduction (included in
-   * `directExpenses`) and the total paid. The rest is amortized over 180 months.
+   * `directExpenses`), the total paid, and what is still to deduct after Dec 31 of the year
+   * (the total for a year before the start year; 0 with no SE start). The rest is amortized
+   * over 180 months.
    */
-  startupCosts: { deductedThisYear: Cents; total: Cents };
+  startupCosts: { deductedThisYear: Cents; total: Cents; remainingAfterYear: Cents };
   totalDeductibleExpenses: Cents;
   /** The entity active in the year (the latest one overlapping it), or sole_prop when none. */
   entityType: string;
@@ -399,6 +401,13 @@ const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
       .filter((e) => isPreStartStartupCost(e, seStartDate))
       .reduce((sum, e) => sum + e.amountCents, 0),
   );
+  const profileStart = bundle.profile?.seStartDate;
+  const startupRemaining = profileStart
+    ? cents(
+        startupTotal -
+          startupDeductionBetween(bundle.expenses, profileStart, profileStart, `${year}-12-31`),
+      )
+    : cents(0);
   const directExpenses = addCents(
     sumExpensesWithinYear(scheduleCExpenses(bundle.expenses), year, seStartDate),
     startupThisYear,
@@ -428,7 +437,11 @@ const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
     homeOfficeLost: limited.lost,
     homeOfficeCarryover: limited.carryover,
     homeOfficeAreaRejected: limited.areaRejected,
-    startupCosts: { deductedThisYear: startupThisYear, total: startupTotal },
+    startupCosts: {
+      deductedThisYear: startupThisYear,
+      total: startupTotal,
+      remainingAfterYear: startupRemaining,
+    },
     totalDeductibleExpenses: total,
     entityType,
     entityUnsupported: entityType === "s_corp",
