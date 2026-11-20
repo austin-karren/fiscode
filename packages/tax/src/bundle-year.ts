@@ -372,9 +372,10 @@ export type DerivedYear = {
   homeOfficeAreaRejected: number;
   /**
    * §195 startup costs (paid before the SE start): the year's deduction (included in
-   * `directExpenses`) and the total paid. The rest is amortized over 180 months.
+   * `directExpenses`), the total paid, and what is still to deduct after Dec 31 of the year
+   * (the total for a year before the start year). The rest is amortized over 180 months.
    */
-  startupCosts: { deductedThisYear: Cents; total: Cents };
+  startupCosts: { deductedThisYear: Cents; total: Cents; remainingAfterYear: Cents };
   /**
    * Equipment counted this year for more than $2,500 without the §179 flag. fiscode deducts all
    * equipment in full, which above the de minimis safe harbor ("up to $2,500 per item or invoice",
@@ -412,6 +413,10 @@ const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
       .filter((e) => isPreStartStartupCost(e, seStartDate))
       .reduce((sum, e) => sum + e.amountCents, 0),
   );
+  const startupRemaining = cents(
+    startupTotal -
+      startupDeductionBetween(bundle.expenses, seStartDate, seStartDate, `${year}-12-31`),
+  );
   const directExpenses = addCents(
     sumExpensesWithinYear(scheduleCExpenses(bundle.expenses), year, seStartDate),
     startupThisYear,
@@ -441,7 +446,11 @@ const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
     homeOfficeLost: limited.lost,
     homeOfficeCarryover: limited.carryover,
     homeOfficeAreaRejected: limited.areaRejected,
-    startupCosts: { deductedThisYear: startupThisYear, total: startupTotal },
+    startupCosts: {
+      deductedThisYear: startupThisYear,
+      total: startupTotal,
+      remainingAfterYear: startupRemaining,
+    },
     equipmentAssumedSection179: expensesCountedForYear(bundle.expenses, year, seStartDate).filter(
       (e) => e.category === "equipment" && !e.flagForSection179 && e.amountCents > 250_000,
     ).length,

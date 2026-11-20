@@ -294,8 +294,16 @@ describe("bug A: a startup cost counts in the year the business begins (IRC §19
 
   it("year-end: its own §195 line in 2026 (deducted and total), not a category", () => {
     const b = makeBundle({ profile, expenses: [startup] });
-    expect(deriveYear(b, 2026).startupCosts).toEqual({ deductedThisYear: 900_00, total: 900_00 });
-    expect(deriveYear(b, 2025).startupCosts).toEqual({ deductedThisYear: 0, total: 900_00 });
+    expect(deriveYear(b, 2026).startupCosts).toEqual({
+      deductedThisYear: 900_00,
+      total: 900_00,
+      remainingAfterYear: 0,
+    });
+    expect(deriveYear(b, 2025).startupCosts).toEqual({
+      deductedThisYear: 0,
+      total: 900_00,
+      remainingAfterYear: 900_00,
+    });
   });
 
   it("§195(b) limit: $12,000 paid before a Mar 2 start deducts $5,388.89, then $466.67", () => {
@@ -307,6 +315,60 @@ describe("bug A: a startup cost counts in the year the business begins (IRC §19
     });
     expect(deriveYear(b, 2026).directExpenses).toBe(5_388_89);
     expect(deriveYear(b, 2027).directExpenses).toBe(466_67);
+  });
+});
+
+describe("startupCosts.remainingAfterYear: the §195 amount still to deduct after Dec 31", () => {
+  const start = { ...makeBundle().profile!, seStartDate: "2026-07-01" };
+  const bundleWith = (amountCents: number) =>
+    makeBundle({
+      profile: start,
+      expenses: [{ ...expense("s", "2026-03-10", amountCents), startupExpense: true }],
+    });
+  const remaining = (b: Bundle, y: number) => deriveYear(b, y).startupCosts.remainingAfterYear;
+  const deductedThrough = (b: Bundle, y: number) => {
+    let sum = 0;
+    for (let k = 2026; k <= y; k++) sum += deriveYear(b, k).startupCosts.deductedThisYear;
+    return sum;
+  };
+
+  it("$20,000 from a Jul 1 2026 start: remaining plus deducted so far is the total", () => {
+    const b = bundleWith(20_000_00);
+    expect(remaining(b, 2025)).toBe(20_000_00);
+    for (const y of [2026, 2027, 2041, 2042]) {
+      expect(remaining(b, y) + deductedThrough(b, y)).toBe(20_000_00);
+    }
+    expect(remaining(b, 2026)).toBeGreaterThan(0);
+    expect(remaining(b, 2041)).toBe(0);
+    expect(remaining(b, 2042)).toBe(0);
+  });
+
+  it("the drop from one year to the next is the next year's deduction", () => {
+    const b = bundleWith(20_000_00);
+    for (const y of [2026, 2040, 2041]) {
+      expect(remaining(b, y) - remaining(b, y + 1)).toBe(
+        deriveYear(b, y + 1).startupCosts.deductedThisYear,
+      );
+    }
+  });
+
+  it("pins exact cents for a $20,000 total from a Jul 1 2026 start", () => {
+    const b = bundleWith(20_000_00);
+    expect(remaining(b, 2026)).toBe(14_500_00);
+    expect(remaining(b, 2027)).toBe(13_500_00);
+    expect(remaining(b, 2040)).toBe(500_00);
+  });
+
+  it("over $50,000 the first-year amount shrinks: $52,000 leaves $47,366.67 after 2026", () => {
+    expect(remaining(bundleWith(52_000_00), 2026)).toBe(47_366_67);
+  });
+
+  it("$5,000 or less is all deducted in the start year", () => {
+    expect(remaining(bundleWith(5_000_00), 2026)).toBe(0);
+  });
+
+  it("is 0 with no startup costs", () => {
+    expect(remaining(makeBundle({ profile: start }), 2026)).toBe(0);
   });
 });
 
