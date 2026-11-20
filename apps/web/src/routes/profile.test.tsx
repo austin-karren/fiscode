@@ -443,6 +443,26 @@ describe("last year's return (prior-year safe harbor)", () => {
     expect(saved).not.toHaveProperty("priorYearFiguresYear");
   });
 
+  it("2024 figures on file: one hint names them and asks for the 2025 return (review #72 r2)", () => {
+    Object.assign(profile, { priorYearTotalTaxCents: 150_000, priorYearFiguresYear: 2024 });
+    render(<ProfilePage />);
+    expect(
+      screen.getByText(
+        "Your 2024 return is on file ($1,500.00 tax). Enter your 2025 return for this year's safe harbor.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("no hint when the figures are 2025's or none are on file", () => {
+    Object.assign(profile, { priorYearTotalTaxCents: 150_000, priorYearFiguresYear: 2025 });
+    render(<ProfilePage />);
+    expect(screen.queryByText(/return is on file/)).not.toBeInTheDocument();
+    cleanup();
+    Object.assign(profile, { priorYearTotalTaxCents: null, priorYearFiguresYear: null });
+    render(<ProfilePage />);
+    expect(screen.queryByText(/return is on file/)).not.toBeInTheDocument();
+  });
+
   it("refuses an amount that isn't one", async () => {
     render(<ProfilePage />);
     const box = screen.getByLabelText(/^Your 2025 total tax/);

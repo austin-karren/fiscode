@@ -598,6 +598,15 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
+            {figuresStale ? (
+              <p className="text-sm text-muted-foreground @md:col-span-2">
+                Your {profile.priorYearFiguresYear} return is on file
+                {profile.priorYearTotalTaxCents !== null
+                  ? ` (${formatUSD(cents(profile.priorYearTotalTaxCents))} tax)`
+                  : ""}
+                . Enter your {priorYear} return for this year's safe harbor.
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-end gap-x-6 gap-y-2 @md:col-span-2">
               <TSFormField form={profileForm} name="tracksRoth">
                 {(field) => (
