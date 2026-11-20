@@ -330,6 +330,10 @@ describe("restore from history", () => {
       usesRetirement: false,
       quarterlyMethod: "annualized",
       prepLeadDays: 14,
+      priorYearTotalTaxCents: null,
+      priorYearAgiCents: null,
+      priorYearStateTaxCents: null,
+      priorYearFiguresYear: null,
       ...stamps,
     };
     const edited = { ...profile, filingStatus: "mfj" };

@@ -20,8 +20,8 @@ import type { StatePrepayment, TaxEstimate, TaxInput, YearConfig } from "./types
  * Unpaid by then: "a penalty equal to 2 percent of the unpaid tax for each
  * month of the extension period".
  *
- * fiscode has no input for last year's Utah tax or Utah prepayments, so it
- * uses line 3 (90% of this year's) and no prepayments.
+ * Line 4 is used when last year's Utah tax is entered (`priorYearStateTax`);
+ * otherwise line 5 is line 3. fiscode has no input for Utah prepayments.
  *
  * Due date: "on or before the return due date"; the Utah return is due "on or
  * before the day on which a federal individual income tax return is due"
@@ -36,10 +36,13 @@ export const computeStatePrepayment = (
 ): StatePrepayment | undefined => {
   if (input.state !== "UT") return undefined;
   const line3: Cents = mulRate(estimate.state.stateIncomeTax, cfg.safeHarbor.currentYearFraction);
+  const line4 = input.priorYearStateTax;
+  const usePrior = line4 !== undefined && line4 < line3;
+  const line5: Cents = usePrior ? line4 : line3;
   return {
     state: "UT",
     dueDate: shiftToBusinessDay(isoDate(`${input.year + 1}-04-15`)),
-    minimum: clampMinZero(subCents(line3, estimate.stateWithholding)),
-    basis: "currentYear90",
+    minimum: clampMinZero(subCents(line5, estimate.stateWithholding)),
+    basis: usePrior ? "priorYear" : "currentYear90",
   };
 };

@@ -34,6 +34,10 @@ const loaderData = {
     state: "UT",
     quarterlyMethod: "annualized",
     prepLeadDays: 14,
+    priorYearTotalTaxCents: null,
+    priorYearAgiCents: null,
+    priorYearStateTaxCents: null,
+    priorYearFiguresYear: null,
   },
   year: 2026,
   hasExact: true,
@@ -270,5 +274,29 @@ describe("dashboard banner for rows before the SE start: the verb agrees with th
         /^1 income entry, 1 expense, 1 mileage trip dated before .* are not counted/,
       ),
     ).toBeInTheDocument();
+  });
+});
+
+describe("dashboard: asks for last year's return when the prior-year safe harbor can't apply", () => {
+  const derived = loaderData.derived as { priorYearFiguresApplied?: boolean };
+  afterEach(() => {
+    delete derived.priorYearFiguresApplied;
+  });
+
+  it("figures missing or from another year: 'Enter your 2025 return', with a link to Profile", () => {
+    derived.priorYearFiguresApplied = false;
+    render(<Dashboard />);
+    const line = screen.getByText(/Enter your 2025 return/).closest("[data-slot=alert]")!;
+    expect(line).toHaveTextContent("Enter your 2025 return to use the prior-year safe harbor.");
+    expect(within(line as HTMLElement).getByRole("link", { name: "Profile" })).toHaveAttribute(
+      "href",
+      "/profile",
+    );
+  });
+
+  it("2025 figures applied: says nothing", () => {
+    derived.priorYearFiguresApplied = true;
+    render(<Dashboard />);
+    expect(screen.queryByText(/Enter your 2025 return/)).not.toBeInTheDocument();
   });
 });

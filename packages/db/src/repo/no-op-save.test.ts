@@ -33,6 +33,10 @@ const profileInput = {
   usesRetirement: false,
   quarterlyMethod: "annualized",
   prepLeadDays: 14,
+  priorYearTotalTaxCents: null,
+  priorYearAgiCents: null,
+  priorYearStateTaxCents: null,
+  priorYearFiguresYear: null,
 };
 
 describe("a save that changes nothing", () => {

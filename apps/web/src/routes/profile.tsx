@@ -4,11 +4,20 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { FieldCheckbox } from "../components/forms/field-checkbox";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
-import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
+import {
+  FormControl,
+  FormDescription,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
 import {
   EntityPeriodError,
   cents,
+  formatUSD,
+  todayIso,
+  yearOf,
   EntityOverlapError,
   canMoveEntityStart,
   ENTITY_TYPE_LABELS,
@@ -77,6 +86,10 @@ const profileSchema = z.object({
   prepLeadDays: leadDays,
   tracksRoth: z.boolean(),
   usesRetirement: z.boolean(),
+  // Last year's return, for the prior-year safe harbor. Blank is not entered (null); $0 is a value.
+  priorYearTotalTax: optionalMoneyAmountOrZero,
+  priorYearAgi: optionalMoneyAmountOrZero,
+  priorYearStateTax: optionalMoneyAmountOrZero,
 });
 
 const entitySchema = z.object({
@@ -138,6 +151,34 @@ function ProfileFormPanel({
   // Spouse income only enters a joint return. Read from the saved profile, so
   // the card follows what Save profile stored, not an unsaved pick.
   const filesJointly = profile.filingStatus === "mfj";
+  // Last year's return is the return for the year before the one being estimated (Pub 505:
+  // "the total tax shown on your 2025 return" for 2026). Saved figures carry that year, and
+  // the estimate uses them only for the year after it.
+  const priorYear = yearOf(todayIso()) - 1;
+  const figuresStale =
+    profile.priorYearFiguresYear !== null && profile.priorYearFiguresYear !== priorYear;
+  const priorYearFiguresToSave = (parsed: {
+    priorYearTotalTax: number | null;
+    priorYearAgi: number | null;
+    priorYearStateTax: number | null;
+  }) => {
+    const entered =
+      parsed.priorYearTotalTax !== null ||
+      parsed.priorYearAgi !== null ||
+      parsed.priorYearStateTax !== null;
+    // Left blank under a new year's labels: keep the older figures as they are (they no longer
+    // count, but they're the user's data).
+    if (!entered && figuresStale) return {};
+    return {
+      priorYearTotalTaxCents: parsed.priorYearTotalTax,
+      priorYearAgiCents: parsed.priorYearAgi,
+      priorYearStateTaxCents: parsed.priorYearStateTax,
+      priorYearFiguresYear: entered ? priorYear : null,
+    };
+  };
+  // A stored amount as the form shows it: blank when not entered, so $0 stays distinct.
+  const amountInput = (v: number | null) =>
+    v === null ? "" : formatUSD(cents(v)).replace(/[$,]/g, "");
 
   const profileForm = useForm({
     defaultValues: {
@@ -151,6 +192,10 @@ function ProfileFormPanel({
       prepLeadDays: String(profile.prepLeadDays),
       tracksRoth: profile.tracksRoth,
       usesRetirement: profile.usesRetirement,
+      // Figures from another year's return don't belong under this year's labels: start blank.
+      priorYearTotalTax: figuresStale ? "" : amountInput(profile.priorYearTotalTaxCents),
+      priorYearAgi: figuresStale ? "" : amountInput(profile.priorYearAgiCents),
+      priorYearStateTax: figuresStale ? "" : amountInput(profile.priorYearStateTaxCents),
     },
     // Cast because zod's optional Date doesn't line up with TanStack Form's
     // exactOptional handling.
@@ -170,6 +215,7 @@ function ProfileFormPanel({
         usesRetirement: parsed.usesRetirement,
         quarterlyMethod: parsed.quarterlyMethod,
         prepLeadDays: parsed.prepLeadDays,
+        ...priorYearFiguresToSave(parsed),
       });
       const newStart = dateToIso(value.seStartDate!);
       if (moveEntityStart && entityStartToMove(newStart) && !entityMoveBlocked(newStart)) {
@@ -475,6 +521,92 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
+            <TSFormField
+              form={profileForm}
+              name="priorYearTotalTax"
+              requirement="optional"
+              validators={{ onBlur: profileSchema.shape.priorYearTotalTax }}
+            >
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Your {priorYear} total tax</FormLabel>
+                  <FormControl>
+                    <Input
+                      inputMode="decimal"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="Not entered"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Your {priorYear} Form 1040 line 24, minus refundable credits (lines 27a–32).
+                    Leave blank if {priorYear} wasn't a full 12-month return, or if you didn't file.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField
+              form={profileForm}
+              name="priorYearAgi"
+              requirement="optional"
+              validators={{ onBlur: profileSchema.shape.priorYearAgi }}
+            >
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Your {priorYear} AGI</FormLabel>
+                  <FormControl>
+                    <Input
+                      inputMode="decimal"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="Not entered"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Your {priorYear} Form 1040 line 11b. Left blank, the estimate assumes it was
+                    over $150,000 ($75,000 if married filing separately) and uses 110%.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField
+              form={profileForm}
+              name="priorYearStateTax"
+              requirement="optional"
+              validators={{ onBlur: profileSchema.shape.priorYearStateTax }}
+            >
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Your {priorYear} Utah tax</FormLabel>
+                  <FormControl>
+                    <Input
+                      inputMode="decimal"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="Not entered"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Your Utah tax liability for {priorYear} (TC-546 line 4).
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            {figuresStale ? (
+              <p className="text-sm text-muted-foreground @md:col-span-2">
+                Your {profile.priorYearFiguresYear} return is on file
+                {profile.priorYearTotalTaxCents !== null
+                  ? ` (${formatUSD(cents(profile.priorYearTotalTaxCents))} tax)`
+                  : ""}
+                . Enter your {priorYear} return for this year's safe harbor.
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-end gap-x-6 gap-y-2 @md:col-span-2">
               <TSFormField form={profileForm} name="tracksRoth">
                 {(field) => (

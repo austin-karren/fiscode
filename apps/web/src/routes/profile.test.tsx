@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Toaster, toast } from "sonner";
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The bug only shows west of UTC, where midnight UTC is still the day
 // before. CI runs in UTC, so pin a western zone for this file.
@@ -38,6 +38,10 @@ const profile = {
   usesRetirement: false,
   quarterlyMethod: "annualized",
   prepLeadDays: 14,
+  priorYearTotalTaxCents: null,
+  priorYearAgiCents: null,
+  priorYearStateTaxCents: null,
+  priorYearFiguresYear: null,
 };
 
 // The database is SQLite over OPFS and the router needs a browser history;
@@ -382,5 +386,90 @@ describe("spouse income blocks", () => {
     expect(invalidate).toHaveBeenCalled();
     fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
     await waitFor(() => expect(spouseRevertTo).toHaveBeenCalledWith("sp_demo", block));
+  });
+});
+
+describe("last year's return (prior-year safe harbor)", () => {
+  // The estimate year is today's: Nov 19, 2026, so "last year" is the 2025 return.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 19, 9, 0));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    Object.assign(profile, {
+      priorYearTotalTaxCents: null,
+      priorYearAgiCents: null,
+      priorYearStateTaxCents: null,
+      priorYearFiguresYear: null,
+    });
+  });
+
+  it("labels the fields with the year and saves them as cents stamped 2025; $0 is 0, blank is null", async () => {
+    render(<ProfilePage />);
+    fireEvent.change(screen.getByLabelText(/^Your 2025 total tax/), {
+      target: { value: "3,210.50" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Your 2025 AGI/), { target: { value: "0" } });
+    expect(screen.getByLabelText(/^Your 2025 Utah tax/)).toHaveValue("");
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+
+    await waitFor(() => expect(upsert).toHaveBeenCalledTimes(1));
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        priorYearTotalTaxCents: 321_050,
+        priorYearAgiCents: 0,
+        priorYearStateTaxCents: null,
+        priorYearFiguresYear: 2025,
+      }),
+    );
+  });
+
+  it("shows 2025 figures under the 2025 labels", () => {
+    Object.assign(profile, { priorYearTotalTaxCents: 150_000, priorYearFiguresYear: 2025 });
+    render(<ProfilePage />);
+    expect(screen.getByLabelText(/^Your 2025 total tax/)).toHaveValue("1500.00");
+  });
+
+  it("2024 figures don't show under the 2025 labels, and a save leaving them blank keeps them", async () => {
+    Object.assign(profile, { priorYearTotalTaxCents: 150_000, priorYearFiguresYear: 2024 });
+    render(<ProfilePage />);
+    expect(screen.getByLabelText(/^Your 2025 total tax/)).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("Prep lead days"), { target: { value: "9" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+    await waitFor(() => expect(upsert).toHaveBeenCalledTimes(1));
+    const saved = (upsert.mock.calls[0] as unknown as [Record<string, unknown>])[0];
+    expect(saved).not.toHaveProperty("priorYearTotalTaxCents");
+    expect(saved).not.toHaveProperty("priorYearFiguresYear");
+  });
+
+  it("2024 figures on file: one hint names them and asks for the 2025 return (review #72 r2)", () => {
+    Object.assign(profile, { priorYearTotalTaxCents: 150_000, priorYearFiguresYear: 2024 });
+    render(<ProfilePage />);
+    expect(
+      screen.getByText(
+        "Your 2024 return is on file ($1,500.00 tax). Enter your 2025 return for this year's safe harbor.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("no hint when the figures are 2025's or none are on file", () => {
+    Object.assign(profile, { priorYearTotalTaxCents: 150_000, priorYearFiguresYear: 2025 });
+    render(<ProfilePage />);
+    expect(screen.queryByText(/return is on file/)).not.toBeInTheDocument();
+    cleanup();
+    Object.assign(profile, { priorYearTotalTaxCents: null, priorYearFiguresYear: null });
+    render(<ProfilePage />);
+    expect(screen.queryByText(/return is on file/)).not.toBeInTheDocument();
+  });
+
+  it("refuses an amount that isn't one", async () => {
+    render(<ProfilePage />);
+    const box = screen.getByLabelText(/^Your 2025 total tax/);
+    fireEvent.change(box, { target: { value: "abc" } });
+    fireEvent.blur(box);
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+    await waitFor(() => expect(box).toHaveAttribute("aria-invalid", "true"));
+    expect(upsert).not.toHaveBeenCalled();
   });
 });
