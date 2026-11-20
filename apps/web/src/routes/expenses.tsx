@@ -424,6 +424,7 @@ function ExpensesPage() {
                         expense={x}
                         categories={CATEGORIES}
                         onSaved={() => router.invalidate()}
+                        seStartDate={profile?.seStartDate}
                       />
                       <Button variant="ghost" size="sm" onClick={() => duplicate(x)}>
                         Duplicate

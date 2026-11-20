@@ -29,6 +29,7 @@ import { GLOSSARY } from "../lib/tax-glossary";
 import { useToday } from "../lib/use-today";
 import { useEditDialog } from "../hooks/use-edit-dialog";
 import { recordLabel } from "../lib/record-label";
+import { placedInServiceFor } from "../lib/equipment";
 
 const editSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -37,16 +38,20 @@ const editSchema = z.object({
   description: z.string(),
   flagForSection179: z.boolean(),
   startupExpense: z.boolean(),
+  placedInService: z.date().optional(),
 });
 
 export function EditExpenseDialog({
   expense,
   categories,
   onSaved,
+  seStartDate,
 }: {
   expense: ExpenseRow;
   categories: ReadonlyArray<readonly [string, string]>;
   onSaved: () => void;
+  /** For the equipment placed-in-service prefill. */
+  seStartDate?: string | null;
 }) {
   const today = useToday();
   const form = useForm({
@@ -57,8 +62,12 @@ export function EditExpenseDialog({
       description: expense.description ?? "",
       flagForSection179: expense.flagForSection179,
       startupExpense: expense.startupExpense ?? false,
+      placedInService: expense.placedInServiceDate
+        ? isoToDate(expense.placedInServiceDate)
+        : (undefined as Date | undefined),
     },
-    validators: { onSubmit: editSchema },
+    // Cast: zod's optional Date and TanStack Form's exactOptional differ (as in profile.tsx).
+    validators: { onSubmit: editSchema as never },
     onSubmit: async ({ value }) => {
       const parsed = moneyAmount.parse(value.amount);
       await expenseRepo.update(expense.id, {
@@ -68,6 +77,12 @@ export function EditExpenseDialog({
         description: value.description || null,
         flagForSection179: value.flagForSection179,
         startupExpense: value.startupExpense,
+        placedInServiceDate: placedInServiceFor(
+          value.category,
+          value.date ? dateToIso(value.date) : undefined,
+          value.placedInService ? dateToIso(value.placedInService) : undefined,
+          seStartDate,
+        ),
       });
       toast.success("Expense updated.");
       setOpen(false);
@@ -202,6 +217,37 @@ export function EditExpenseDialog({
                 </FormItem>
               )}
             </TSFormField>
+            <form.Subscribe selector={(st) => ({ category: st.values.category, date: st.values.date })}>
+              {({ category, date }) =>
+                category === "equipment" ? (
+                  <TSFormField form={form} name="placedInService">
+                    {(field) => (
+                      <FormItem>
+                        <FormLabel>Placed in service</FormLabel>
+                        <FormControl>
+                          <DatePicker
+                            value={
+                              (field.state.value as Date | undefined) ??
+                              isoToDate(
+                                placedInServiceFor(
+                                  category,
+                                  date ? dateToIso(date) : undefined,
+                                  undefined,
+                                  seStartDate,
+                                ) ?? "",
+                              )
+                            }
+                            onBlur={field.handleBlur}
+                            onValueChange={(d) => field.handleChange(d)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  </TSFormField>
+                ) : null
+              }
+            </form.Subscribe>
           </div>
           <DialogFooter className="mt-4">
             <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
