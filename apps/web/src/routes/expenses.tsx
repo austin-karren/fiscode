@@ -320,7 +320,9 @@ function ExpensesPage() {
                   <TSFormField form={form} name="placedInService">
                     {(field) => (
                       <FormItem>
-                        <FormLabel>Placed in service</FormLabel>
+                        <LabelWithTooltip tooltip={GLOSSARY.placedInService}>
+                          Placed in service
+                        </LabelWithTooltip>
                         <FormControl>
                           <DatePicker
                             value={

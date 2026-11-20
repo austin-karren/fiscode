@@ -16,6 +16,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   useRouter: () => ({ invalidate: vi.fn() }),
 }));
 
+import { GLOSSARY } from "../lib/tax-glossary";
 import { Route } from "./expenses";
 
 // What the loader returns; a test may give it rows.
@@ -136,5 +137,16 @@ describe("adding a run of expenses", () => {
     expect(card.getByLabelText("Date")).toHaveTextContent("Mar 5, 2026");
     expect(card.getByRole("combobox", { name: "Category" })).toHaveTextContent("Travel");
     await waitFor(() => expect(card.getByLabelText("Amount")).toHaveFocus());
+  });
+
+  it("links the basis hint (Pub 946) to Placed in service on the add form", () => {
+    // Demo: Duplicate an equipment row, so the add form shows the field.
+    loaded.expenses = [
+      { ...row, id: "ex_demo_eq", category: "equipment", placedInServiceDate: null },
+    ];
+    render(<ExpensesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    const field = within(addCard()).getByRole("button", { name: /Placed in service/ });
+    expect(field).toHaveAccessibleDescription(GLOSSARY.placedInService);
   });
 });
