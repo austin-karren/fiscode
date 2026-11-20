@@ -5,7 +5,7 @@ import type { TaxInput } from "./types.ts";
 
 // Utah prepayment, TC-546 (Rev. 10/26), https://files.tax.utah.gov/tax/forms/current/tc-546.pdf:
 //   line 3 = 90% of the Utah tax you expect to owe this year
-//   line 4 = last year's Utah tax liability (fiscode has no input for it: not used)
+//   line 4 = last year's Utah tax liability (input.priorYearStateTax, when entered)
 //   line 5 = the lesser of line 3 or line 4
 //   line 8 = line 5 − Utah withholding − prepayments; "If less than zero, a
 //            payment is not due at this time."
@@ -67,5 +67,21 @@ describe("Utah prepayment (TC-546)", () => {
 
   it("no Utah prepayment for another state", () => {
     expect(run({ state: "TX" }).statePrepayment).toBeUndefined();
+  });
+});
+
+describe("Utah prepayment with last year's Utah tax (TC-546 line 4)", () => {
+  // Same return as above: line 3 = 90% × 1,730.03 = 1,557.03.
+  it("last year's Utah tax is lower: line 5 is line 4", () => {
+    const r = run({ priorYearStateTax: dollars(1_200) });
+    expect(r.statePrepayment).toMatchObject({ minimum: dollars(1_200), basis: "priorYear" });
+  });
+  it("last year's Utah tax is higher: line 5 stays line 3", () => {
+    const r = run({ priorYearStateTax: dollars(2_000) });
+    expect(r.statePrepayment).toMatchObject({ minimum: dollars(1_557.03), basis: "currentYear90" });
+  });
+  it("last year's Utah tax was $0: nothing is due by the return date", () => {
+    const r = run({ priorYearStateTax: cents(0) });
+    expect(r.statePrepayment).toMatchObject({ minimum: cents(0), basis: "priorYear" });
   });
 });

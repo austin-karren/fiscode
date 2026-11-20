@@ -102,6 +102,7 @@ function Dashboard() {
       <ExcludedBeforeSeAlert derived={derived} />
       <OfficeAreaAlert rejected={derived.homeOfficeAreaRejected} />
       <Section179Notice count={derived.equipmentAssumedSection179} />
+      <PriorYearReturnNotice applied={derived.priorYearFiguresApplied} year={year} />
 
       {/* One primary figure, the year's total; the three taxes it adds up
           recede beside it. */}
@@ -382,6 +383,21 @@ function Section179Notice({ count }: { count: number }) {
         {count === 1 ? "is" : "are"} deducted in full this year, which assumes a Section 179
         election. Tick §179 candidate in <Link to="/expenses">Expenses</Link> to confirm, and check
         it with your accountant.
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+// The prior-year safe harbor needs the return for the year before this one (Pub 505: "the total
+// tax shown on your 2025 return" for 2026). Without it the floor is 90% of this year's tax.
+function PriorYearReturnNotice({ applied, year }: { applied: boolean | undefined; year: number }) {
+  if (applied !== false) return null;
+  return (
+    <Alert>
+      <CircleAlert />
+      <AlertDescription>
+        Enter your {year - 1} return to use the prior-year safe harbor. Add it on your{" "}
+        <Link to="/profile">Profile</Link>.
       </AlertDescription>
     </Alert>
   );

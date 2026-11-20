@@ -91,6 +91,8 @@ export type TaxInput = {
   priorYearTotalTax: Cents | undefined;
   /** Prior year AGI, for determining 100% vs 110% safe-harbor multiplier. */
   priorYearAgi: Cents | undefined;
+  /** Last year's state tax liability (Utah TC-546 line 4); undefined when not entered. */
+  priorYearStateTax?: Cents | undefined;
 };
 
 export type SeTaxBreakdown = {
@@ -168,8 +170,8 @@ export type StatePrepayment = {
   dueDate: IsoDate;
   /** TC-546 line 8: what to pay by `dueDate` after Utah withholding; $0 if none. */
   minimum: Cents;
-  /** Which TC-546 line 5 amount was used. Prior-year Utah tax is not an input. */
-  basis: "currentYear90";
+  /** Which TC-546 line 5 amount was used: line 3 (90% of this year's) or line 4 (last year's). */
+  basis: "currentYear90" | "priorYear";
 };
 
 export type SafeHarborResult = {
@@ -178,6 +180,11 @@ export type SafeHarborResult = {
   /** The lower of the two targets; meeting this avoids underpayment penalty. */
   floor: Cents;
   multiplierUsed: number | undefined;
+  /**
+   * Why that multiplier: last year's AGI over the threshold (110%), not over it (100%), or not
+   * entered (110%, since it might be over). Undefined in the first-year fallback.
+   */
+  multiplierReason?: "agi_over_threshold" | "agi_not_over_threshold" | "agi_not_entered";
   firstYear: boolean;
 };
 

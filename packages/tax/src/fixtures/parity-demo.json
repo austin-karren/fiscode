@@ -105,7 +105,8 @@
     },
     "totalDeductibleExpenses": 214831,
     "equipmentAssumedSection179": 0,
-    "startupIgnoredForEquipment": 0
+    "startupIgnoredForEquipment": 0,
+    "priorYearFiguresApplied": false
   },
   "even": {
     "estimate": {

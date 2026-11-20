@@ -301,14 +301,14 @@ describe("layout a person can read", () => {
   it("opens with two comment lines: what the file is, and how to read it", () => {
     const lines = stripBom(csv).split("\r\n");
     expect(lines.slice(0, 3)).toEqual([
-      "# fiscode export (schema: v3; scope: full)",
+      "# fiscode export (schema: v4; scope: full)",
       "# Money is in dollars. Dates are YYYY-MM-DD. Import this file at https://fiscode.app to restore it.",
       "",
     ]);
     const yearly = exportBundle(exampleBundle(), { scope: "yearly", year: 2026 });
-    expect(yearly).toContain("# fiscode export (schema: v3; scope: yearly; year: 2026)");
-    expect(parseCsv(yearly).provenance).toEqual({ schema: "v3", scope: "yearly", year: 2026 });
-    expect(parseCsv(csv).provenance).toEqual({ schema: "v3", scope: "full" });
+    expect(yearly).toContain("# fiscode export (schema: v4; scope: yearly; year: 2026)");
+    expect(parseCsv(yearly).provenance).toEqual({ schema: "v4", scope: "yearly", year: 2026 });
+    expect(parseCsv(csv).provenance).toEqual({ schema: "v4", scope: "full" });
   });
 
   it("gives ambiguous stored names a table-specific header", () => {
@@ -365,8 +365,9 @@ describe("layout a person can read", () => {
       "updated_at",
       "deleted_at",
     ]);
-    // No table drags along another record type's columns.
-    expect(Math.max(...header.map((h) => h.length))).toBeLessThanOrEqual(17);
+    // No table drags along another record type's columns. The widest is the profile (18 since
+    // v4 added last year's return and its year).
+    expect(Math.max(...header.map((h) => h.length))).toBeLessThanOrEqual(18);
   });
 
   it("omits a section that has no rows", () => {
@@ -523,7 +524,7 @@ describe("UTF-8 BOM", () => {
   it("imports a file with a BOM", () => {
     const { bundle, provenance, validationErrors } = parseCsv(exportFull(exampleBundle()));
     expect(validationErrors).toEqual([]);
-    expect(provenance.schema).toBe("v3");
+    expect(provenance.schema).toBe("v4");
     expect(bundle.profile?.id).toBe("profile");
   });
 
@@ -591,7 +592,7 @@ describe("import of files a person or a spreadsheet has touched", () => {
     expect(validationErrors).toEqual([]);
     expect(bundle).toEqual(exampleBundle());
     expect(provenance.scope).toBe("full");
-    expect(provenance.schema).toBe("v3");
+    expect(provenance.schema).toBe("v4");
   });
 
   it("reads LF line endings and ignores the label columns", () => {
@@ -740,7 +741,7 @@ describe("import errors a person can act on", () => {
   });
 
   it("refuses a file marked with a schema this build does not know", () => {
-    const csv = exportFull(exampleBundle()).replace("schema: v3", "schema: v9");
+    const csv = exportFull(exampleBundle()).replace("schema: v4", "schema: v9");
     const { bundle, validationErrors } = parseCsv(csv);
     expect(bundle).toEqual(emptyBundle());
     expect(validationErrors).toHaveLength(1);
@@ -790,6 +791,10 @@ describe("no stored field is left out", () => {
         usesRetirement: true,
         quarterlyMethod: "even",
         prepLeadDays: 21,
+        priorYearTotalTaxCents: 9_876_54,
+        priorYearAgiCents: 160_000_00,
+        priorYearStateTaxCents: 2_345_67,
+        priorYearFiguresYear: 2025,
         createdAt: stamp(),
         updatedAt: stamp(),
       },
