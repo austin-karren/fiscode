@@ -100,7 +100,8 @@
     "selfEmployedHealthInsurance": 0,
     "startupCosts": {
       "deductedThisYear": 507333,
-      "total": 720000
+      "total": 720000,
+      "remainingAfterYear": 212667
     },
     "totalDeductibleExpenses": 631756,
     "equipmentAssumedSection179": 0
