@@ -14,6 +14,8 @@ export const midYearBundle = (): Bundle => {
     {
       ...e0,
       id: "startup-1" as never,
+      // Not equipment: equipment is placed in service, never §195 (#66), and this row pins §195.
+      category: "advertising",
       date: "2026-03-01",
       amountCents: 720_000,
       startupExpense: true,
@@ -84,6 +86,8 @@ export const priorYearStartBundle = (): Bundle => {
     {
       ...e0,
       id: "startup-2025" as never,
+      // Not equipment: equipment is placed in service, never §195 (#66), and this row pins §195.
+      category: "advertising",
       date: "2025-10-01",
       amountCents: 1_800_000,
       startupExpense: true,

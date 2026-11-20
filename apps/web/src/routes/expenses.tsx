@@ -34,6 +34,7 @@ import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { InfoTooltip } from "../components/info-tooltip";
 import { NoDataEmpty } from "../components/empty-states/no-data";
+import { expenseYearDate } from "@fiscode/core";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditExpenseDialog } from "../components/edit-expense-dialog";
@@ -46,6 +47,7 @@ import { formatDate } from "../lib/format-date";
 import { SectionTitle } from "../components/section-title";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { recordLabel } from "../lib/record-label";
+import { placedInServiceFor } from "../lib/equipment";
 
 const CATEGORIES = Object.entries(EXPENSE_CATEGORY_LABELS);
 
@@ -58,6 +60,7 @@ const expenseFormSchema = z.object({
   description: z.string(),
   flagForSection179: z.boolean(),
   startupExpense: z.boolean(),
+  placedInService: z.date().optional(),
 });
 // Per-field schemas (onBlur). Form-level schema (onSubmit) re-runs them all.
 const fs = expenseFormSchema.shape;
@@ -82,13 +85,15 @@ function ExpensesPage() {
     description: "",
     flagForSection179: false,
     startupExpense: false,
+    placedInService: undefined as Date | undefined,
   };
   // The add card, and its first value field: focus targets after Add and Duplicate.
   const addCard = useRef<HTMLDivElement>(null);
   const firstValue = useRef<HTMLInputElement>(null);
   const form = useForm({
     defaultValues: empty,
-    validators: { onSubmit: expenseFormSchema },
+    // Cast: zod's optional Date and TanStack Form's exactOptional differ (as in profile.tsx).
+    validators: { onSubmit: expenseFormSchema as never },
     onSubmit: async ({ value, formApi }) => {
       const parsed = moneyAmount.parse(value.amount);
       await expenseRepo.create({
@@ -101,6 +106,12 @@ function ExpensesPage() {
         notes: null,
         flagForSection179: value.flagForSection179,
         startupExpense: value.startupExpense,
+        placedInServiceDate: placedInServiceFor(
+          value.category,
+          value.date ? dateToIso(value.date) : undefined,
+          value.placedInService ? dateToIso(value.placedInService) : undefined,
+          profile?.seStartDate,
+        ),
         deletedAt: null,
       });
       toast.success("Expense added.");
@@ -126,6 +137,7 @@ function ExpensesPage() {
         description: row.description ?? "",
         flagForSection179: row.flagForSection179,
         startupExpense: row.startupExpense,
+        placedInService: row.placedInServiceDate ? isoToDate(row.placedInServiceDate) : undefined,
       },
       { keepDefaultValues: true },
     );
@@ -300,6 +312,39 @@ function ExpensesPage() {
                 </FormItem>
               )}
             </TSFormField>
+            <form.Subscribe
+              selector={(s) => ({ category: s.values.category, date: s.values.date })}
+            >
+              {({ category, date }) =>
+                category === "equipment" ? (
+                  <TSFormField form={form} name="placedInService">
+                    {(field) => (
+                      <FormItem>
+                        <FormLabel>Placed in service</FormLabel>
+                        <FormControl>
+                          <DatePicker
+                            value={
+                              (field.state.value as Date | undefined) ??
+                              isoToDate(
+                                placedInServiceFor(
+                                  category,
+                                  date ? dateToIso(date) : undefined,
+                                  undefined,
+                                  profile?.seStartDate,
+                                ) ?? "",
+                              )
+                            }
+                            onBlur={field.handleBlur}
+                            onValueChange={(d) => field.handleChange(d)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  </TSFormField>
+                ) : null
+              }
+            </form.Subscribe>
           </CardContent>
           <CardFooter className="justify-end">
             <form.Subscribe
@@ -348,7 +393,7 @@ function ExpensesPage() {
                         <Badge variant="secondary">Startup §195</Badge>
                       ) : (
                         <PreSeStartBadge
-                          rowDate={x.date}
+                          rowDate={expenseYearDate(x, profile?.seStartDate)}
                           seStartDate={profile?.seStartDate}
                           startupHint
                         />
@@ -382,6 +427,7 @@ function ExpensesPage() {
                         expense={x}
                         categories={CATEGORIES}
                         onSaved={() => router.invalidate()}
+                        seStartDate={profile?.seStartDate}
                       />
                       <Button variant="ghost" size="sm" onClick={() => duplicate(x)}>
                         Duplicate

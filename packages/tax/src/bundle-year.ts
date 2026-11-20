@@ -1,7 +1,9 @@
 import {
   addCents,
   cents,
+  countedExpenseDate,
   countedInYear,
+  expenseYearExclusion,
   expensesCountedForYear,
   isPreStartStartupCost,
   startupDeductionBetween,
@@ -178,8 +180,9 @@ const tentativeProfitBetween = (
     .filter((r) => within(r.date))
     .reduce((sum, r) => sum + r.amountCents, 0);
   const expenses =
+    // By the date each counts on (equipment: its placed-in-service date).
     scheduleCExpenses(expensesCountedForYear(bundle.expenses, year, seStartDate))
-      .filter((r) => within(r.date))
+      .filter((r) => within(countedExpenseDate(r, seStartDate)))
       .reduce((sum, r) => sum + r.amountCents, 0) +
     // §195 startup costs: the start-year amount on the SE start date, amortization by month.
     startupDeductionBetween(bundle.expenses, seStartDate, from, to);
@@ -339,9 +342,13 @@ const countExcludedBeforeSeStart = (
     yearExclusion(r, year, seStartDate) === "before_se_start";
   return {
     income: bundle.income.filter((i) => i.sourceType === "1099" && beforeStart(i)).length,
-    // Startup costs paid before the start are deducted under §195, not excluded.
-    expense: bundle.expenses.filter((e) => beforeStart(e) && !isPreStartStartupCost(e, seStartDate))
-      .length,
+    // Startup costs paid before the start are deducted under §195, not excluded. Equipment counts
+    // on the date it is placed in service, never before the start (core expenseYearExclusion).
+    expense: bundle.expenses.filter(
+      (e) =>
+        expenseYearExclusion(e, year, seStartDate) === "before_se_start" &&
+        !isPreStartStartupCost(e, seStartDate),
+    ).length,
     mileage: bundle.mileage.filter(beforeStart).length,
   };
 };
@@ -368,6 +375,12 @@ export type DerivedYear = {
    * `directExpenses`) and the total paid. The rest is amortized over 180 months.
    */
   startupCosts: { deductedThisYear: Cents; total: Cents };
+  /**
+   * Equipment counted this year for more than $2,500 without the §179 flag. fiscode deducts all
+   * equipment in full, which above the de minimis safe harbor ("up to $2,500 per item or invoice",
+   * Pub 334) assumes a section 179 election; the dashboard says so. No number changes.
+   */
+  equipmentAssumedSection179: number;
   totalDeductibleExpenses: Cents;
   /** The entity active in the year (the latest one overlapping it), or sole_prop when none. */
   entityType: string;
@@ -429,6 +442,9 @@ const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
     homeOfficeCarryover: limited.carryover,
     homeOfficeAreaRejected: limited.areaRejected,
     startupCosts: { deductedThisYear: startupThisYear, total: startupTotal },
+    equipmentAssumedSection179: expensesCountedForYear(bundle.expenses, year, seStartDate).filter(
+      (e) => e.category === "equipment" && !e.flagForSection179 && e.amountCents > 250_000,
+    ).length,
     totalDeductibleExpenses: total,
     entityType,
     entityUnsupported: entityType === "s_corp",
@@ -475,9 +491,10 @@ const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedInput => 
       year,
       seStartDate,
     ).filter((r) => r.date <= cutoff);
-    // The year's counted expenses up to the cutoff.
+    // The year's counted expenses up to the cutoff, by the date each counts on
+    // (equipment: its placed-in-service date).
     const counted = expensesCountedForYear(bundle.expenses, year, seStartDate).filter(
-      (r) => r.date <= cutoff,
+      (r) => countedExpenseDate(r, seStartDate) <= cutoff,
     );
     const expRows = scheduleCExpenses(counted);
     const cumSehi = counted

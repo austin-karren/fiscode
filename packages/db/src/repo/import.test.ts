@@ -254,6 +254,7 @@ describe("importBundle → buildBundle — full round-trip parity", () => {
           notes: null,
           flagForSection179: false,
           startupExpense: false,
+          placedInServiceDate: null,
           createdAt: FIXED,
           updatedAt: FIXED,
           deletedAt: null,
@@ -269,6 +270,7 @@ describe("importBundle → buildBundle — full round-trip parity", () => {
           notes: null,
           flagForSection179: true,
           startupExpense: false,
+          placedInServiceDate: null,
           createdAt: FIXED,
           updatedAt: FIXED,
           deletedAt: null,
@@ -294,6 +296,7 @@ describe("importBundle → buildBundle — full round-trip parity", () => {
       notes: null,
       flagForSection179: false,
       startupExpense: false,
+      placedInServiceDate: null,
       deletedAt: null,
     });
     const round = await buildBundle();

@@ -113,6 +113,8 @@ export type ExpenseRow = Dated & {
   notes: string | null;
   flagForSection179: boolean;
   startupExpense: boolean;
+  /** Equipment: placed in service on this date (ISO), when not the purchase date. Null = purchase date. */
+  placedInServiceDate: string | null;
 };
 
 export type RetirementContributionRow = Dated & {

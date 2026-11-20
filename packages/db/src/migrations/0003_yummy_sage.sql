@@ -1,0 +1,1 @@
+ALTER TABLE `expense` ADD `placed_in_service_date` text;
