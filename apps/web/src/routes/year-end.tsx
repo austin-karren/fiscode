@@ -199,7 +199,7 @@ function YearEndPage() {
             // The allowed deduction, after its limit. It lowers income tax,
             // not net profit or SE tax.
             <Row
-              label={`${labelFor(EXPENSE_CATEGORY_LABELS, "health_insurance")} (Schedule 1 line 17)`}
+              label={`${labelFor(EXPENSE_CATEGORY_LABELS, "health_insurance")}, deductible (Schedule 1 line 17)`}
             >
               {formatUSD(result.estimate.selfEmployedHealthInsurance)}
             </Row>
@@ -258,8 +258,15 @@ function YearEndPage() {
               // expense, so they sit apart from the categories above.
               <tr className="break-inside-avoid border-t-2 border-border">
                 <td className="py-1">
-                  {labelFor(EXPENSE_CATEGORY_LABELS, "health_insurance")}: not Schedule C; an
-                  adjustment on Schedule 1 line 17.
+                  {labelFor(EXPENSE_CATEGORY_LABELS, "health_insurance")}, premiums paid: not
+                  Schedule C; an adjustment on Schedule 1 line 17.
+                  {result.estimate.selfEmployedHealthInsurance <
+                  derived.selfEmployedHealthInsurance ? (
+                    <span className="block text-xs text-muted-foreground">
+                      The deduction is limited to net profit minus half the SE tax:{" "}
+                      {formatUSD(result.estimate.selfEmployedHealthInsurance)}.
+                    </span>
+                  ) : null}
                 </td>
                 <td className="py-1 text-right tabular-nums">
                   {formatUSD(derived.selfEmployedHealthInsurance)}

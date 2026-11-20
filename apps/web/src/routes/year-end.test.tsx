@@ -254,16 +254,102 @@ describe("year-end loader", () => {
     Object.assign(loaderData, data);
     try {
       render(<YearEndPage />);
-      const line17 = screen.getByText("Self-employed health insurance (Schedule 1 line 17)");
+      const line17 = screen.getByText(
+        "Self-employed health insurance, deductible (Schedule 1 line 17)",
+      );
       expect(line17.closest("div")).toHaveTextContent(
         new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
           allowed / 100,
         ),
       );
       const paid = screen
-        .getByText(/not Schedule C; an adjustment on Schedule 1 line 17/)
+        .getByText(/premiums paid: not Schedule C; an adjustment on Schedule 1 line 17/)
         .closest("tr")!;
       expect(paid).toHaveTextContent("$6,000.00");
+    } finally {
+      Object.assign(loaderData, saved);
+    }
+  });
+
+  it("says the deduction is capped when the premium is over net profit minus half the SE tax", async () => {
+    // Demo data plus a $50,000 premium: more than the year's net profit allows.
+    const example = exampleBundle();
+    const base = example.expenses[0]!;
+    db.bundle = {
+      ...example,
+      expenses: [
+        ...example.expenses,
+        {
+          ...base,
+          id: "exp_demo_hi",
+          date: "2026-03-01",
+          category: "health_insurance",
+          amountCents: 5_000_000,
+          startupExpense: false,
+        },
+      ],
+    };
+    db.clients = example.clients;
+    db.vehicles = example.vehicles;
+    const loader = Route.options.loader as unknown as () => Promise<typeof loaderData>;
+    const data = await loader();
+    const estimate = (
+      data.result as unknown as {
+        estimate: {
+          selfEmployedHealthInsurance: number;
+          netProfit: number;
+          se: { totalSeTax: number };
+        };
+      }
+    ).estimate;
+    const allowed = estimate.selfEmployedHealthInsurance;
+    expect(allowed).toBeLessThan(5_000_000);
+    expect(allowed).toBe(estimate.netProfit - Math.round(estimate.se.totalSeTax / 2));
+
+    const saved = { ...loaderData };
+    Object.assign(loaderData, data);
+    try {
+      render(<YearEndPage />);
+      const usd = (c: number) =>
+        new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(c / 100);
+      const deductible = screen.getByText(
+        "Self-employed health insurance, deductible (Schedule 1 line 17)",
+      );
+      expect(deductible.closest("div")).toHaveTextContent(usd(allowed));
+      const paid = screen.getByText(/premiums paid/).closest("tr")!;
+      expect(paid).toHaveTextContent("$50,000.00");
+      expect(paid).toHaveTextContent(
+        `The deduction is limited to net profit minus half the SE tax: ${usd(allowed)}.`,
+      );
+    } finally {
+      Object.assign(loaderData, saved);
+    }
+  });
+
+  it("adds no limit note when the whole premium is deductible", async () => {
+    const example = exampleBundle();
+    const base = example.expenses[0]!;
+    db.bundle = {
+      ...example,
+      expenses: [
+        ...example.expenses,
+        {
+          ...base,
+          id: "exp_demo_hi",
+          date: "2026-03-01",
+          category: "health_insurance",
+          amountCents: 100_000,
+          startupExpense: false,
+        },
+      ],
+    };
+    const loader = Route.options.loader as unknown as () => Promise<typeof loaderData>;
+    const data = await loader();
+    const saved = { ...loaderData };
+    Object.assign(loaderData, data);
+    try {
+      render(<YearEndPage />);
+      expect(screen.queryByText(/The deduction is limited/)).not.toBeInTheDocument();
     } finally {
       Object.assign(loaderData, saved);
     }
