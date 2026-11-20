@@ -775,6 +775,11 @@ describe("deriveYear — entityType + latestOverlap", () => {
     expect(s.result).toEqual(estimateBundleYear(soleProp, 2026).result);
   });
 
+  it("does not flag a single-member LLC: it is taxed as a sole proprietorship", () => {
+    const b = makeBundle({ entities: [entity("llc", "2026-01-01", null, "single_member_llc")] });
+    expect(estimateBundleYear(b, 2026).derived.entityUnsupported).toBe(false);
+  });
+
   it("falls back to 'sole_prop' if no entity overlaps", () => {
     const b = makeBundle({
       entities: [entity("old", "2020-01-01", "2022-12-31", "sole_prop")],

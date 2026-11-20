@@ -4,8 +4,8 @@ import { ENTITY_TYPE_LABELS, labelFor } from "@fiscode/core";
 import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
 import type { DerivedYear } from "@fiscode/tax";
 
-// The tax engine has sole-proprietor math only. When the year's entity is
-// anything else, say so beside the numbers.
+// The tax engine has sole-proprietor math only. When the year's entity is an
+// S corp, say so beside the numbers.
 export function EntityUnsupportedAlert({
   derived,
 }: {

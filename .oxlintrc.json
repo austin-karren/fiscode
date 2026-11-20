@@ -41,13 +41,20 @@
                 "allowTypeImports": true,
                 "message": "@fiscode/tax may only `import type` from @fiscode/csv: the tax engine reads a Bundle but must not load the CSV layer."
               }
+            ],
+            "patterns": [
+              {
+                "group": ["@fiscode/csv/*"],
+                "allowTypeImports": true,
+                "message": "@fiscode/tax may only `import type` from @fiscode/csv: the tax engine reads a Bundle but must not load the CSV layer."
+              }
             ]
           }
         ]
       }
     },
     {
-      "files": ["packages/tax/src/**/*.test.ts"],
+      "files": ["packages/tax/src/**/*.test.ts", "packages/tax/src/fixtures/**"],
       "rules": {
         "typescript/no-restricted-imports": "off"
       }

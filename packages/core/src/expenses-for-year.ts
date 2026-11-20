@@ -1,4 +1,4 @@
-import { countedInYear } from "./year-inclusion.ts";
+import { countedInYear, isBeforeSeStart } from "./year-inclusion.ts";
 
 /** The fields of an expense that decide whether it counts toward a tax year. */
 export type ExpenseForYear = {
@@ -31,8 +31,7 @@ export const isPreStartStartupCost = (
 ): boolean =>
   expense.deletedAt === null &&
   expense.startupExpense === true &&
-  Boolean(seStartDate) &&
-  expense.date < seStartDate!;
+  isBeforeSeStart(expense.date, seStartDate);
 
 const isoFirstOfMonth = (monthIndex: number): string => {
   const y = Math.floor(monthIndex / 12);

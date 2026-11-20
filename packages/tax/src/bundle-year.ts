@@ -372,8 +372,9 @@ export type DerivedYear = {
   /** The entity active in the year (the latest one overlapping it), or sole_prop when none. */
   entityType: string;
   /**
-   * True when `entityType` is not sole_prop. The estimate is still computed as a sole
-   * proprietorship: no other entity's math exists yet.
+   * True for an S corp. The estimate is still computed as a sole proprietorship: no S-corp
+   * math exists yet. A single-member LLC is a disregarded entity, taxed as a sole
+   * proprietorship, so its estimate is right and this stays false.
    */
   entityUnsupported: boolean;
   seStartDate: string;
@@ -430,7 +431,7 @@ const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
     startupCosts: { deductedThisYear: startupThisYear, total: startupTotal },
     totalDeductibleExpenses: total,
     entityType,
-    entityUnsupported: entityType !== "sole_prop",
+    entityUnsupported: entityType === "s_corp",
     seStartDate,
     excludedBeforeSeStart: countExcludedBeforeSeStart(bundle, year, seStartDate),
   };

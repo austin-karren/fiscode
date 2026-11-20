@@ -2,29 +2,11 @@ import { describe, expect, it } from "vitest";
 import { exampleBundle, type Bundle } from "@fiscode/csv";
 
 import { estimateBundleYear } from "./bundle-year.ts";
+import { edgesBundle, midYearBundle, priorYearStartBundle } from "./fixtures/parity-bundles.ts";
 import demo from "./fixtures/parity-demo.json";
+import edges from "./fixtures/parity-edges.json";
 import midyear from "./fixtures/parity-midyear.json";
-
-// The scenarios the estimateBundleYear refactor was checked against (invented
-// values only). Each runs both quarterly methods.
-
-/** The demo data with a July 1 SE start: income and expenses on both sides, plus a startup cost. */
-const midYearBundle = (): Bundle => {
-  const b = exampleBundle();
-  b.profile = { ...b.profile!, seStartDate: "2026-07-01" };
-  const e0 = b.expenses[0]!;
-  b.expenses = [
-    ...b.expenses,
-    {
-      ...e0,
-      id: "startup-1" as never,
-      date: "2026-03-01",
-      amountCents: 720_000,
-      startupExpense: true,
-    },
-  ];
-  return b;
-};
+import priorYearStart from "./fixtures/parity-prior-year-start.json";
 
 const runScenario = (b: Bundle) => {
   const out: Record<string, unknown> = {};
@@ -44,13 +26,19 @@ const runScenario = (b: Bundle) => {
   return out;
 };
 
-// Parity gate: the numbers recorded on main before estimateBundleYear existed
+// Parity gate: the numbers main computed before estimateBundleYear existed
 // (fixtures/parity-*.json). A change here changes a number the app shows.
 describe("estimateBundleYear parity", () => {
   it("demo data: every total, quarterly amount and the safe harbor match", () => {
     expect(runScenario(exampleBundle())).toEqual(demo);
   });
-  it("SE start Jul 1 with rows on both sides and a startup cost: everything matches", () => {
+  it("SE start Jul 1 with rows on both sides and a startup cost", () => {
     expect(runScenario(midYearBundle())).toEqual(midyear);
+  });
+  it("rows on the SE start date, deleted rows of every kind, a deleted startup cost", () => {
+    expect(runScenario(edgesBundle())).toEqual(edges);
+  });
+  it("SE start in the prior year with a prior-year startup cost", () => {
+    expect(runScenario(priorYearStartBundle())).toEqual(priorYearStart);
   });
 });
