@@ -30,6 +30,9 @@ const makeBundle = (overrides: Partial<Bundle> = {}): Bundle => ({
     usesRetirement: false,
     quarterlyMethod: "annualized",
     prepLeadDays: 14,
+    priorYearTotalTaxCents: null,
+    priorYearAgiCents: null,
+    priorYearStateTaxCents: null,
     createdAt: FIXED,
     updatedAt: FIXED,
   },
@@ -974,5 +977,65 @@ describe("estimateBundleYear annualized input — cumulative periods", () => {
     expect(ann.periods[3].cumulativeDeductibleExpenses).toBe(
       deriveYear(b, 2026).totalDeductibleExpenses,
     );
+  });
+});
+
+describe("prior-year safe harbor from the profile (Pub 505; Utah TC-546 line 4)", () => {
+  const withPrior = (prior: { tax: number | null; agi: number | null; state: number | null }) =>
+    makeBundle({
+      profile: {
+        ...makeBundle().profile!,
+        priorYearTotalTaxCents: prior.tax,
+        priorYearAgiCents: prior.agi,
+        priorYearStateTaxCents: prior.state,
+      },
+    });
+
+  it("passes last year's figures to the engine as entered", () => {
+    const input = inputFor(withPrior({ tax: 3_000_00, agi: 90_000_00, state: 500_00 }), 2026);
+    expect(input).toMatchObject({
+      priorYearTotalTax: 3_000_00,
+      priorYearAgi: 90_000_00,
+      priorYearStateTax: 500_00,
+    });
+  });
+
+  it("AGI $90,000: 100% of last year's $3,000 tax, so the prior-year target is $3,000", () => {
+    const { result } = estimateBundleYear(
+      withPrior({ tax: 3_000_00, agi: 90_000_00, state: null }),
+      2026,
+    );
+    expect(result.safeHarbor.firstYear).toBe(false);
+    expect(result.safeHarbor.multiplierUsed).toBe(1.0);
+    expect(result.safeHarbor.priorYearTarget).toBe(3_000_00);
+  });
+
+  it("AGI $150,000.01: 110%, so $3,300", () => {
+    const { result } = estimateBundleYear(
+      withPrior({ tax: 3_000_00, agi: 150_000_01, state: null }),
+      2026,
+    );
+    expect(result.safeHarbor.multiplierUsed).toBe(1.1);
+    expect(result.safeHarbor.priorYearTarget).toBe(3_300_00);
+  });
+
+  it("nothing entered: the first-year fallback, as before", () => {
+    const { result, input } = estimateBundleYear(
+      withPrior({ tax: null, agi: null, state: null }),
+      2026,
+    );
+    expect(result.safeHarbor.firstYear).toBe(true);
+    expect(input).toMatchObject({ priorYearTotalTax: undefined, priorYearAgi: undefined });
+  });
+
+  it("a $0 prior-year tax is a real value, not 'not entered': the target is $0", () => {
+    const b = withPrior({ tax: 0, agi: 40_000_00, state: 0 });
+    b.income = [income("i1", "2026-05-15", 60_000_00)];
+    const { result } = estimateBundleYear(b, 2026);
+    expect(result.estimate.state.stateIncomeTax).toBeGreaterThan(0);
+    expect(result.safeHarbor.firstYear).toBe(false);
+    expect(result.safeHarbor.priorYearTarget).toBe(0);
+    expect(result.safeHarbor.floor).toBe(0);
+    expect(result.statePrepayment).toMatchObject({ minimum: 0, basis: "priorYear" });
   });
 });

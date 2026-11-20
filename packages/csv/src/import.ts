@@ -56,6 +56,9 @@ const rowToBundle = (rows: CsvRow[]): Bundle => {
           usesRetirement: bool(r.uses_retirement),
           quarterlyMethod: r.quarterly_method ?? "annualized",
           prepLeadDays: num(r.prep_lead_days, 14),
+          priorYearTotalTaxCents: numOrNull(r.prior_year_total_tax_cents),
+          priorYearAgiCents: numOrNull(r.prior_year_agi_cents),
+          priorYearStateTaxCents: numOrNull(r.prior_year_state_tax_cents),
           createdAt: r.created_at ?? "",
           updatedAt: r.updated_at ?? "",
         } satisfies ProfileRow;

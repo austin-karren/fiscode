@@ -19,6 +19,10 @@ export type ProfileRow = {
   usesRetirement: boolean;
   quarterlyMethod: string;
   prepLeadDays: number;
+  /** Last year's return, cents; null when not entered (Pub 505; Utah TC-546 line 4). */
+  priorYearTotalTaxCents: number | null;
+  priorYearAgiCents: number | null;
+  priorYearStateTaxCents: number | null;
   createdAt: string;
   updatedAt: string;
 };

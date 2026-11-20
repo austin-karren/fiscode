@@ -15,7 +15,7 @@ The layout lives in `packages/csv/src/sections.ts`. The stored fields live in
 ## What the file looks like
 
 ```
-# fiscode export (schema: v3; scope: full)
+# fiscode export (schema: v4; scope: full)
 # Money is in dollars. Dates are YYYY-MM-DD. Import this file at https://fiscode.app to restore it.
 
 # Income
@@ -175,7 +175,7 @@ or `yearly` plus the year). The second says how to read the file. A spreadsheet 
 text in column A. You can omit them in a hand-authored file.
 
 ```
-# fiscode export (schema: v3; scope: yearly; year: 2026)
+# fiscode export (schema: v4; scope: yearly; year: 2026)
 ```
 
 ## Old files (schema v1)
@@ -214,7 +214,7 @@ v1 files also had an `# exported:` time line. It is read and ignored.
 The `schema:` marker is used for one thing: a file marked `v1` never carried the `'` formula
 guard, so its text is kept exactly as written.
 
-Exports are always written as v3. Schema v3 adds one column, `placed_in_service_date` on expenses; v1 and v2 files still import (a v2 file gives it empty). An app version older than v3 refuses a v3 file rather than read it wrongly.
+Exports are always written as v4. Schema v4 adds three profile columns, `prior_year_total_tax`, `prior_year_agi` and `prior_year_state_tax`; schema v3 added `placed_in_service_date` on expenses. v1, v2 and v3 files still import, with the newer columns empty. An app version older than v4 refuses a v4 file rather than read it wrongly.
 
 ## Columns by record type
 
@@ -262,6 +262,20 @@ Single row. Drives the tax engine's filing status, state, and feature flags.
     uses_retirement: {
       description: "yes = surface SEP / Solo 401(k) UI.",
       type: "yes / no",
+    },
+    prior_year_total_tax: {
+      description:
+        "Last year's total tax (Form 1040 line 24), for the prior-year safe harbor. Empty = not entered; 0 is a value. Added in schema v4.",
+      type: "money",
+    },
+    prior_year_agi: {
+      description:
+        "Last year's AGI (Form 1040 line 11b): over $150,000 ($75,000 MFS) the safe harbor is 110%. Added in schema v4.",
+      type: "money",
+    },
+    prior_year_state_tax: {
+      description: "Last year's Utah tax liability (TC-546 line 4). Added in schema v4.",
+      type: "money",
     },
   }}
 />
@@ -523,7 +537,7 @@ Common rejections:
 - Two exports of the same data are the same bytes, whenever and wherever they are made.
 - `Full export → restore into an empty database → full export` gives back the same bytes: the
   same rows, deleted ones included, and the same history.
-- Old v1 and v2 files import to the same state and re-export as v3.
+- Old v1, v2 and v3 files import to the same state and re-export as v4.
 
 These are enforced by vitest tests in `packages/csv/src/format.test.ts` (against a saved v1
 fixture) and `packages/db/src/repo/sync.test.ts` (through a real database).

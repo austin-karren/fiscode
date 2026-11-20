@@ -453,6 +453,9 @@ const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
   };
 };
 
+const centsOrUndefined = (v: number | null | undefined): Cents | undefined =>
+  v === null || v === undefined ? undefined : cents(v);
+
 /** Build a TaxInput suitable for `estimateYear` from the current bundle. */
 const buildTaxInput = (bundle: Bundle, year: number): TaxInput => {
   const profile = bundle.profile;
@@ -470,8 +473,11 @@ const buildTaxInput = (bundle: Bundle, year: number): TaxInput => {
     spouseW2Wages: cents(spouse?.annualW2WagesCents ?? 0),
     spouseFederalWithholding: cents(spouse?.annualFederalWithholdingCents ?? 0),
     spouseStateWithholding: cents(spouse?.annualStateWithholdingCents ?? 0),
-    priorYearTotalTax: undefined,
-    priorYearAgi: undefined,
+    // Last year's return as entered on the profile; null means not entered (the
+    // first-year fallback). $0 is a real value.
+    priorYearTotalTax: centsOrUndefined(profile.priorYearTotalTaxCents),
+    priorYearAgi: centsOrUndefined(profile.priorYearAgiCents),
+    priorYearStateTax: centsOrUndefined(profile.priorYearStateTaxCents),
   };
 };
 

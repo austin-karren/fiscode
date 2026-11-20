@@ -96,6 +96,9 @@ const profile = {
   usesRetirement: false,
   quarterlyMethod: "annualized",
   prepLeadDays: 14,
+  priorYearTotalTaxCents: null,
+  priorYearAgiCents: null,
+  priorYearStateTaxCents: null,
   ...stamps,
 };
 const bundle = (expenses: unknown[], extra: Record<string, unknown> = {}) => ({

@@ -16,6 +16,9 @@ const fullBundle = (): Bundle => ({
     usesRetirement: false,
     quarterlyMethod: "annualized",
     prepLeadDays: 14,
+    priorYearTotalTaxCents: null,
+    priorYearAgiCents: null,
+    priorYearStateTaxCents: null,
     createdAt: FIXED_TIMESTAMP,
     updatedAt: FIXED_TIMESTAMP,
   },
@@ -284,6 +287,45 @@ describe("CSV round-trip", () => {
     expect(bundle.expenses[0]!.amountCents).toBe(89_999);
   });
 
+  it("last year's tax, AGI and Utah tax round-trip on the profile (v4), $0 kept as 0", () => {
+    const bundle = fullBundle();
+    bundle.profile = {
+      ...bundle.profile!,
+      priorYearTotalTaxCents: 1_234_56,
+      priorYearAgiCents: 150_000_01,
+      priorYearStateTaxCents: 0,
+    };
+    const csv = exportBundle(bundle, { scope: "full" });
+    expect(csv).toContain("prior_year_total_tax,prior_year_agi,prior_year_state_tax");
+    expect(csv).toContain("1234.56,150000.01,0.00");
+    const { bundle: round, validationErrors } = parseCsv(csv);
+    expect(validationErrors).toEqual([]);
+    expect(round.profile).toMatchObject({
+      priorYearTotalTaxCents: 1_234_56,
+      priorYearAgiCents: 150_000_01,
+      priorYearStateTaxCents: 0,
+    });
+    expect(exportBundle(round, { scope: "full" })).toBe(csv);
+  });
+
+  it("a v3 file (no prior-year columns) still imports, with the fields null", () => {
+    const v3 = [
+      "# fiscode export (schema: v3; scope: full)",
+      "record_type,filing_status,filing_status_label,state,se_start_date,dependents,quarterly_method,quarterly_method_label,prep_lead_days,tracks_roth,uses_retirement,id,created_at,updated_at",
+      "profile,single,Single,UT,2026-02-01,0,annualized,Annualized,14,no,no,profile,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z",
+      "",
+    ].join("\n");
+    const { bundle, validationErrors, provenance } = parseCsv(v3);
+    expect(validationErrors).toEqual([]);
+    expect(provenance.schema).toBe("v3");
+    expect(bundle.profile).toMatchObject({
+      seStartDate: "2026-02-01",
+      priorYearTotalTaxCents: null,
+      priorYearAgiCents: null,
+      priorYearStateTaxCents: null,
+    });
+  });
+
   it("yearly export puts a startup cost paid before the SE start in the year the business begins", () => {
     // Paid 2025-12-15, SE start 2026-02-01: it counts in 2026 (IRC §195(b)), so the 2026
     // accountant file carries it and the 2025 file doesn't. The full export is unchanged.
@@ -369,7 +411,7 @@ describe("CSV round-trip", () => {
     const { provenance } = parseCsv(csv);
     expect(provenance.scope).toBe("yearly");
     expect(provenance.year).toBe(2026);
-    expect(provenance.schema).toBe("v3");
+    expect(provenance.schema).toBe("v4");
     expect(provenance.exportedAt).toBeUndefined();
   });
 

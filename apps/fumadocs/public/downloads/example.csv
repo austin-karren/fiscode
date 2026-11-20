@@ -1,9 +1,9 @@
-﻿# fiscode export (schema: v3; scope: full)
+﻿# fiscode export (schema: v4; scope: full)
 # Money is in dollars. Dates are YYYY-MM-DD. Import this file at https://fiscode.app to restore it.
 
 # Profile
-record_type,filing_status,filing_status_label,state,se_start_date,dependents,quarterly_method,quarterly_method_label,prep_lead_days,tracks_roth,uses_retirement,id,created_at,updated_at
-profile,mfj,Married filing jointly,UT,2024-01-01,0,annualized,Annualized installment,14,yes,yes,profile,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z
+record_type,filing_status,filing_status_label,state,se_start_date,dependents,quarterly_method,quarterly_method_label,prep_lead_days,tracks_roth,uses_retirement,prior_year_total_tax,prior_year_agi,prior_year_state_tax,id,created_at,updated_at
+profile,mfj,Married filing jointly,UT,2024-01-01,0,annualized,Annualized installment,14,yes,yes,,,,profile,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z
 
 # Business entity
 record_type,entity_type,entity_type_label,start_date,end_date,notes,id,created_at,updated_at,deleted_at

@@ -4,11 +4,18 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { FieldCheckbox } from "../components/forms/field-checkbox";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
-import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
+import {
+  FormControl,
+  FormDescription,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
 import {
   EntityPeriodError,
   cents,
+  formatUSD,
   EntityOverlapError,
   canMoveEntityStart,
   ENTITY_TYPE_LABELS,
@@ -77,6 +84,10 @@ const profileSchema = z.object({
   prepLeadDays: leadDays,
   tracksRoth: z.boolean(),
   usesRetirement: z.boolean(),
+  // Last year's return, for the prior-year safe harbor. Blank is not entered (null); $0 is a value.
+  priorYearTotalTax: optionalMoneyAmountOrZero,
+  priorYearAgi: optionalMoneyAmountOrZero,
+  priorYearStateTax: optionalMoneyAmountOrZero,
 });
 
 const entitySchema = z.object({
@@ -138,6 +149,9 @@ function ProfileFormPanel({
   // Spouse income only enters a joint return. Read from the saved profile, so
   // the card follows what Save profile stored, not an unsaved pick.
   const filesJointly = profile.filingStatus === "mfj";
+  // A stored amount as the form shows it: blank when not entered, so $0 stays distinct.
+  const amountInput = (v: number | null) =>
+    v === null ? "" : formatUSD(cents(v)).replace(/[$,]/g, "");
 
   const profileForm = useForm({
     defaultValues: {
@@ -151,6 +165,9 @@ function ProfileFormPanel({
       prepLeadDays: String(profile.prepLeadDays),
       tracksRoth: profile.tracksRoth,
       usesRetirement: profile.usesRetirement,
+      priorYearTotalTax: amountInput(profile.priorYearTotalTaxCents),
+      priorYearAgi: amountInput(profile.priorYearAgiCents),
+      priorYearStateTax: amountInput(profile.priorYearStateTaxCents),
     },
     // Cast because zod's optional Date doesn't line up with TanStack Form's
     // exactOptional handling.
@@ -170,6 +187,9 @@ function ProfileFormPanel({
         usesRetirement: parsed.usesRetirement,
         quarterlyMethod: parsed.quarterlyMethod,
         prepLeadDays: parsed.prepLeadDays,
+        priorYearTotalTaxCents: parsed.priorYearTotalTax,
+        priorYearAgiCents: parsed.priorYearAgi,
+        priorYearStateTaxCents: parsed.priorYearStateTax,
       });
       const newStart = dateToIso(value.seStartDate!);
       if (moveEntityStart && entityStartToMove(newStart) && !entityMoveBlocked(newStart)) {
@@ -471,6 +491,79 @@ function ProfileFormPanel({
                       onBlur={field.handleBlur}
                     />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField
+              form={profileForm}
+              name="priorYearTotalTax"
+              requirement="optional"
+              validators={{ onBlur: profileSchema.shape.priorYearTotalTax }}
+            >
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Last year's total tax</FormLabel>
+                  <FormControl>
+                    <Input
+                      inputMode="decimal"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="Not entered"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Form 1040 line 24. Leave blank in your first year.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField
+              form={profileForm}
+              name="priorYearAgi"
+              requirement="optional"
+              validators={{ onBlur: profileSchema.shape.priorYearAgi }}
+            >
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Last year's AGI</FormLabel>
+                  <FormControl>
+                    <Input
+                      inputMode="decimal"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="Not entered"
+                    />
+                  </FormControl>
+                  <FormDescription>Form 1040 line 11b.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            </TSFormField>
+            <TSFormField
+              form={profileForm}
+              name="priorYearStateTax"
+              requirement="optional"
+              validators={{ onBlur: profileSchema.shape.priorYearStateTax }}
+            >
+              {(field) => (
+                <FormItem>
+                  <FormLabel>Last year's Utah tax</FormLabel>
+                  <FormControl>
+                    <Input
+                      inputMode="decimal"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="Not entered"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Your Utah tax liability last year (TC-546 line 4).
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

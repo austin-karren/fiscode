@@ -179,6 +179,9 @@ describe("profileRepo — singleton semantics", () => {
       usesRetirement: false,
       quarterlyMethod: "annualized",
       prepLeadDays: 14,
+      priorYearTotalTaxCents: null,
+      priorYearAgiCents: null,
+      priorYearStateTaxCents: null,
     });
     expect(inserted.filingStatus).toBe("mfj");
     expect(inserted.id).toBe("profile");
@@ -193,6 +196,9 @@ describe("profileRepo — singleton semantics", () => {
       usesRetirement: true,
       quarterlyMethod: "even",
       prepLeadDays: 7,
+      priorYearTotalTaxCents: null,
+      priorYearAgiCents: null,
+      priorYearStateTaxCents: null,
     });
     expect(updated.filingStatus).toBe("single");
     expect(updated.state).toBe("CA");
@@ -213,6 +219,9 @@ describe("profileRepo.revertTo", () => {
     usesRetirement: false,
     quarterlyMethod: "annualized",
     prepLeadDays: 14,
+    priorYearTotalTaxCents: null,
+    priorYearAgiCents: null,
+    priorYearStateTaxCents: null,
   } as const;
 
   it("restores the snapshot and writes one revert history entry", async () => {

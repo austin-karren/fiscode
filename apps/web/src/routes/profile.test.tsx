@@ -38,6 +38,9 @@ const profile = {
   usesRetirement: false,
   quarterlyMethod: "annualized",
   prepLeadDays: 14,
+  priorYearTotalTaxCents: null,
+  priorYearAgiCents: null,
+  priorYearStateTaxCents: null,
 };
 
 // The database is SQLite over OPFS and the router needs a browser history;
@@ -382,5 +385,35 @@ describe("spouse income blocks", () => {
     expect(invalidate).toHaveBeenCalled();
     fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
     await waitFor(() => expect(spouseRevertTo).toHaveBeenCalledWith("sp_demo", block));
+  });
+});
+
+describe("last year's return (prior-year safe harbor)", () => {
+  it("saves the amounts as cents, $0 as 0 and a blank field as not entered (null)", async () => {
+    render(<ProfilePage />);
+    fireEvent.change(screen.getByLabelText(/^Last year's total tax/), {
+      target: { value: "3,210.50" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Last year's AGI/), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+
+    await waitFor(() => expect(upsert).toHaveBeenCalledTimes(1));
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        priorYearTotalTaxCents: 321_050,
+        priorYearAgiCents: 0,
+        priorYearStateTaxCents: null,
+      }),
+    );
+  });
+
+  it("refuses an amount that isn't one", async () => {
+    render(<ProfilePage />);
+    const box = screen.getByLabelText(/^Last year's total tax/);
+    fireEvent.change(box, { target: { value: "abc" } });
+    fireEvent.blur(box);
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+    await waitFor(() => expect(box).toHaveAttribute("aria-invalid", "true"));
+    expect(upsert).not.toHaveBeenCalled();
   });
 });
