@@ -86,7 +86,7 @@
     "activeEntityType": "sole_prop",
     "directExpenses": 712344,
     "excludedBeforeSeStart": {
-      "expense": 4,
+      "expense": 2,
       "income": 3,
       "mileage": 2
     },
