@@ -19,6 +19,7 @@ import {
   yearOf,
 } from "@fiscode/core";
 import { buildBundle, homeOfficeRepo } from "@fiscode/db";
+import { estimateBundleYear } from "@fiscode/tax";
 import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
@@ -32,7 +33,6 @@ import {
   SECOND_SIMPLIFIED_MESSAGE,
   withAreaCheck,
 } from "../lib/home-office-form";
-import { deriveYear } from "../lib/tax-input";
 import { HomeOfficeFields } from "../components/home-office-fields";
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
@@ -62,7 +62,11 @@ export const Route = createFileRoute("/home-office")({
     const bundle = await buildBundle();
     const year = yearOf(todayIso());
     // This year's limits, for the notices: area refused, carried, or lost.
-    return { rows: await homeOfficeRepo.list(), year, derived: deriveYear(bundle, year) };
+    return {
+      rows: await homeOfficeRepo.list(),
+      year, // No profile yet (setup not done): no estimate, so no notices.
+      derived: bundle.profile ? estimateBundleYear(bundle, year).derived : undefined,
+    };
   },
   component: HomeOfficePage,
 });
@@ -192,7 +196,7 @@ function HomeOfficePage() {
         </Card>
       </EnterToSubmitForm>
 
-      <HomeOfficeNotices year={year} derived={derived} />
+      {derived ? <HomeOfficeNotices year={year} derived={derived} /> : null}
 
       {rows.length === 0 ? (
         <NoDataEmpty

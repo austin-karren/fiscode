@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 
+import { isBeforeSeStart } from "@fiscode/core";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@fiscode/ui/components/tooltip";
 import { formatDate } from "../lib/format-date";
 
@@ -17,8 +18,8 @@ export function PreSeStartBadge({
   // Expenses only: a cost before the start can still count as a startup cost.
   startupHint?: boolean;
 }) {
-  if (!seStartDate || rowDate >= seStartDate) return null;
-  const why = `Not counted in the tax estimate: dated before your start date, ${formatDate(seStartDate)}.${
+  if (!isBeforeSeStart(rowDate, seStartDate)) return null;
+  const why = `Not counted in the tax estimate: dated before your start date, ${formatDate(seStartDate!)}.${
     startupHint ? " Tick Startup expense if it was a startup cost." : ""
   }`;
   return (

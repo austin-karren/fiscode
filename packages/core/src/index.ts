@@ -6,3 +6,4 @@ export * from "./zod-helpers.ts";
 export * from "./labels.ts";
 export * from "./entity-periods.ts";
 export * from "./expenses-for-year.ts";
+export * from "./year-inclusion.ts";

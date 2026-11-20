@@ -147,6 +147,7 @@
       },
       "devDependencies": {
         "@fiscode/config": "workspace:*",
+        "@fiscode/csv": "workspace:*",
         "typescript": "catalog:",
         "vite": "^8.3.8",
         "vitest": "catalog:",
