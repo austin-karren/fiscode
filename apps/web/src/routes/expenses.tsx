@@ -311,7 +311,9 @@ function ExpensesPage() {
                 </FormItem>
               )}
             </TSFormField>
-            <form.Subscribe selector={(s) => ({ category: s.values.category, date: s.values.date })}>
+            <form.Subscribe
+              selector={(s) => ({ category: s.values.category, date: s.values.date })}
+            >
               {({ category, date }) =>
                 category === "equipment" ? (
                   <TSFormField form={form} name="placedInService">

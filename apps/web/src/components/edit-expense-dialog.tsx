@@ -218,7 +218,9 @@ export function EditExpenseDialog({
                 </FormItem>
               )}
             </TSFormField>
-            <form.Subscribe selector={(st) => ({ category: st.values.category, date: st.values.date })}>
+            <form.Subscribe
+              selector={(st) => ({ category: st.values.category, date: st.values.date })}
+            >
               {({ category, date }) =>
                 category === "equipment" ? (
                   <TSFormField form={form} name="placedInService">

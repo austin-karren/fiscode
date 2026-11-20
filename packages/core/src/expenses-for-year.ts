@@ -5,6 +5,8 @@ export type ExpenseForYear = {
   startupExpense?: boolean | null;
   /** Equipment: the date it was placed in service, when not the purchase date. */
   placedInServiceDate?: string | null;
+  /** The expense category; health insurance is never a startup cost. */
+  category?: string;
 };
 
 /**
@@ -22,10 +24,15 @@ export type ExpenseForYear = {
  * - Every other expense counts on its own date.
  */
 export const countedExpenseDate = (
-  expense: Pick<ExpenseForYear, "date" | "startupExpense" | "placedInServiceDate">,
+  expense: Pick<ExpenseForYear, "date" | "startupExpense" | "placedInServiceDate" | "category">,
   seStartDate: string | null | undefined,
 ): string => {
-  if (expense.startupExpense === true && seStartDate && expense.date < seStartDate) {
+  if (
+    expense.startupExpense === true &&
+    expense.category !== "health_insurance" &&
+    seStartDate &&
+    expense.date < seStartDate
+  ) {
     return seStartDate;
   }
   const placed = expense.placedInServiceDate;
@@ -33,13 +40,19 @@ export const countedExpenseDate = (
   return expense.date;
 };
 
-/** A startup cost under §195: ticked as startup and paid before the SE start. */
+/**
+ * A startup cost under §195: ticked as startup and paid before the SE start.
+ * Self-employed health insurance never is one: it is a Schedule 1 line 17
+ * adjustment (Form 7206), and a premium paid before the business began covers no
+ * month of self-employment, so it counts nowhere.
+ */
 export const isPreStartStartupCost = (
-  expense: Pick<ExpenseForYear, "date" | "startupExpense" | "deletedAt">,
+  expense: Pick<ExpenseForYear, "date" | "startupExpense" | "deletedAt" | "category">,
   seStartDate: string | null | undefined,
 ): boolean =>
   expense.deletedAt === null &&
   expense.startupExpense === true &&
+  expense.category !== "health_insurance" &&
   Boolean(seStartDate) &&
   expense.date < seStartDate!;
 

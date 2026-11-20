@@ -101,6 +101,7 @@ function Dashboard() {
 
       <ExcludedBeforeSeAlert derived={derived} />
       <OfficeAreaAlert rejected={derived.homeOfficeAreaRejected} />
+      <Section179Notice count={derived.equipmentAssumedSection179} />
 
       {/* One primary figure, the year's total; the three taxes it adds up
           recede beside it. */}
@@ -364,6 +365,23 @@ function OfficeAreaAlert({ rejected }: { rejected: number }) {
         {rejected === 1 ? "A home office config has" : `${rejected} home office configs have`} an
         office larger than the home, so {rejected === 1 ? "it deducts" : "they deduct"} $0. Fix the
         square feet in <Link to="/home-office">Home office</Link>.
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+// fiscode deducts equipment in full. Above the de minimis safe harbor ("up to $2,500 per item or
+// invoice", Pub 334) that assumes a section 179 election; say so, without changing a number.
+function Section179Notice({ count }: { count: number }) {
+  if (!count) return null;
+  return (
+    <Alert>
+      <CircleAlert />
+      <AlertDescription>
+        {count === 1 ? "An equipment expense" : `${count} equipment expenses`} over $2,500{" "}
+        {count === 1 ? "is" : "are"} deducted in full this year, which assumes a Section 179
+        election. Tick §179 candidate in <Link to="/expenses">Expenses</Link> to confirm, and check
+        it with your accountant.
       </AlertDescription>
     </Alert>
   );

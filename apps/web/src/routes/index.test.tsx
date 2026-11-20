@@ -205,3 +205,29 @@ describe("dashboard home office warning", () => {
     expect(screen.queryByText(/office larger than the home/)).not.toBeInTheDocument();
   });
 });
+
+describe("dashboard Section 179 notice (equipment over $2,500, unflagged)", () => {
+  const derived = loaderData.derived as { equipmentAssumedSection179?: number };
+
+  afterEach(() => {
+    delete derived.equipmentAssumedSection179;
+  });
+
+  it("says the full deduction assumes a §179 election, with a link to Expenses", () => {
+    derived.equipmentAssumedSection179 = 1;
+    render(<Dashboard />);
+    const line = screen.getByText(/assumes a Section 179/).closest("[data-slot=alert]")!;
+    expect(line).toHaveTextContent(
+      "An equipment expense over $2,500 is deducted in full this year, which assumes a Section 179 election.",
+    );
+    expect(within(line as HTMLElement).getByRole("link", { name: "Expenses" })).toHaveAttribute(
+      "href",
+      "/expenses",
+    );
+  });
+
+  it("says nothing when there is none", () => {
+    render(<Dashboard />);
+    expect(screen.queryByText(/assumes a Section 179/)).not.toBeInTheDocument();
+  });
+});

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   countedExpenseDate,
   expensesCountedForYear,
+  isPreStartStartupCost,
   startupDeductionBetween,
 } from "./expenses-for-year.ts";
 
@@ -246,5 +247,30 @@ describe("equipment counts in the year it is placed in service", () => {
     const row = equipment("2026-12-20", "2027-01-05");
     expect(expensesCountedForYear([row], 2026, "2026-02-01")).toEqual([]);
     expect(expensesCountedForYear([row], 2027, "2026-02-01")).toEqual([row]);
+  });
+});
+
+describe("health insurance is never a §195 startup cost", () => {
+  // Premiums are a Schedule 1 line 17 adjustment (Form 7206), not a start-up expenditure; one
+  // paid before the business began covers no month of self-employment, so it counts nowhere.
+  const premium = {
+    id: "hi",
+    date: "2025-12-15",
+    deletedAt: null as string | null,
+    startupExpense: true,
+    category: "health_insurance",
+    amountCents: 60_000,
+  };
+
+  it("ticked startup and paid before the SE start: not in §195, not counted per row", () => {
+    expect(isPreStartStartupCost(premium, "2026-02-01")).toBe(false);
+    expect(startupDeductionBetween([premium], "2026-02-01", "2026-01-01", "2026-12-31")).toBe(0);
+    expect(expensesCountedForYear([premium], 2026, "2026-02-01")).toEqual([]);
+    expect(expensesCountedForYear([premium], 2025, "2026-02-01")).toEqual([]);
+  });
+
+  it("another category ticked startup still enters §195", () => {
+    const ads = { ...premium, id: "ads", category: "advertising" };
+    expect(startupDeductionBetween([ads], "2026-02-01", "2026-01-01", "2026-12-31")).toBe(60_000);
   });
 });
