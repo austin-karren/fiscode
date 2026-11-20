@@ -3,6 +3,7 @@ import {
   cents,
   countedExpenseDate,
   countedInYear,
+  expenseYearExclusion,
   expensesCountedForYear,
   isPreStartStartupCost,
   startupDeductionBetween,
@@ -341,9 +342,13 @@ const countExcludedBeforeSeStart = (
     yearExclusion(r, year, seStartDate) === "before_se_start";
   return {
     income: bundle.income.filter((i) => i.sourceType === "1099" && beforeStart(i)).length,
-    // Startup costs paid before the start are deducted under §195, not excluded.
-    expense: bundle.expenses.filter((e) => beforeStart(e) && !isPreStartStartupCost(e, seStartDate))
-      .length,
+    // Startup costs paid before the start are deducted under §195, not excluded. Equipment counts
+    // on the date it is placed in service, never before the start (core expenseYearExclusion).
+    expense: bundle.expenses.filter(
+      (e) =>
+        expenseYearExclusion(e, year, seStartDate) === "before_se_start" &&
+        !isPreStartStartupCost(e, seStartDate),
+    ).length,
     mileage: bundle.mileage.filter(beforeStart).length,
   };
 };

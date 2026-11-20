@@ -335,6 +335,12 @@ describe("equipment: placed-in-service date (Pub 946) and the §179 notice", () 
     expect(input.periods[0].cumulativeDeductibleExpenses).toBe(1_200_00);
   });
 
+  it("pre-start equipment is counted, so the dashboard does not call it excluded", () => {
+    const b = makeBundle({ profile, expenses: [equipment("e1", "2026-01-20", 899_99)] });
+    expect(deriveYear(b, 2026).directExpenses).toBe(899_99);
+    expect(deriveYear(b, 2026).excludedBeforeSeStart.expense).toBe(0);
+  });
+
   it("no placed-in-service date, bought before the start: counts on the SE start, as the form shows", () => {
     // Review #66 r1 ruling 3: the same rule as the prefill, applied in counting (no data write),
     // so a v2 import counts the same as after an untouched Save.
