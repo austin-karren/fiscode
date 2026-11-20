@@ -9,6 +9,16 @@ import type { SafeHarborResult, TaxEstimate, YearConfig } from "./types.ts";
  * prior-year AGI exceeded the threshold: $150,000, or $75,000 when this
  * year's filing status is married filing separately). True exemption requires a zero-tax
  * prior year. First-year filers fall back to the 90%-of-current target.
+ *
+ * Pub 505 (https://www.irs.gov/publications/p505), Required Annual Payment, General rule:
+ * "100% of the total tax shown on your 2025 return. Your 2025 tax return must cover all
+ * 12 months." Higher Income Taxpayers: "If your AGI for 2025 was more than $150,000 ($75,000
+ * if your filing status for 2026 is Married filing a separate return)", "substitute 110% for
+ * 100%". AGI "is the amount shown on Form 1040 or 1040-SR, line 11b"; the total tax "is the
+ * amount on Form 1040 or 1040–SR, line 24" (reduced by certain refundable credits).
+ * Form 2210 instructions (https://www.irs.gov/instructions/i2210): the smaller of "90% of
+ * your 2025 tax, or" "100% of your 2024 tax. Your 2024 tax return must cover a 12-month
+ * period." `priorYearTotalTax` undefined means no such year: the first-year fallback.
  */
 export const computeSafeHarbor = (
   estimate: TaxEstimate,
