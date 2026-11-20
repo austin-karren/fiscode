@@ -61,17 +61,36 @@ export const soleProprietorStrategy: TaxStrategy = {
 
     const se = computeSeTax(netProfit, input.filingStatus, cfg);
 
-    // AGI ≈ net profit + spouse W-2 wages − half SE tax. We don't model other
-    // adjustments yet (HSA, retirement, etc.) since the user has none.
+    // Self-employed health insurance, Form 7206 (2025), https://www.irs.gov/pub/irs-pdf/f7206.pdf:
+    // line 14 "Enter the smaller of line 3 [premiums] or line 13", where line 13 is the net profit
+    // (line 4) less the deductible part of SE tax (line 7; one business, so line 6 is 100%) less
+    // SEP/SIMPLE contributions (line 9; not modelled, so 0). It goes "on Schedule 1 (Form 1040),
+    // line 17": AGI, not net profit. "You can't subtract the self-employed health insurance
+    // deduction when figuring net earnings for your self-employment tax" (i7206), so `se` above
+    // is figured without it.
+    const sehiLimit = clampMinZero(subCents(netProfit, se.halfSeTaxDeduction));
+    const premiums = input.selfEmployedHealthInsurance ?? cents(0);
+    const selfEmployedHealthInsurance = premiums < sehiLimit ? premiums : sehiLimit;
+
+    // AGI ≈ net profit + spouse W-2 wages − half SE tax − SE health insurance. Other
+    // adjustments (HSA, retirement) are not modelled.
     const agi = clampMinZero(
-      subCents(addCents(netProfit, input.spouseW2Wages), se.halfSeTaxDeduction),
+      subCents(
+        addCents(netProfit, input.spouseW2Wages),
+        addCents(se.halfSeTaxDeduction, selfEmployedHealthInsurance),
+      ),
     );
 
     const stdDeduction = cfg.standardDeduction[input.filingStatus];
     const taxableIncomeBeforeQbi = clampMinZero(subCents(agi, stdDeduction));
 
-    // QBI base = net profit minus half SE tax (the "QBI component" deduction).
-    const qbiBase = clampMinZero(subCents(netProfit, se.halfSeTaxDeduction));
+    // QBI base = net profit minus the deductions attributable to the business: half SE tax and
+    // SE health insurance. Reg. 1.199A-3(b)(1)(vi): "deductions such as the deductible portion of
+    // the tax on self-employment income under section 164(f), the self-employed health insurance
+    // deduction under section 162(l) ... are considered attributable to a trade or business".
+    const qbiBase = clampMinZero(
+      subCents(netProfit, addCents(se.halfSeTaxDeduction, selfEmployedHealthInsurance)),
+    );
     const qbiDeduction = computeQbi(qbiBase, taxableIncomeBeforeQbi, input.filingStatus, cfg);
 
     const taxableIncome = clampMinZero(subCents(taxableIncomeBeforeQbi, qbiDeduction));
@@ -89,6 +108,7 @@ export const soleProprietorStrategy: TaxStrategy = {
       year: input.year,
       netProfit,
       agi,
+      selfEmployedHealthInsurance,
       se,
       federal: {
         taxableIncome,

@@ -679,6 +679,48 @@ describe("deriveYear — home-office actual (Form 8829)", () => {
   });
 });
 
+describe("self-employed health insurance leaves Schedule C (Form 7206, Schedule 1 line 17)", () => {
+  const premium = (id: string, date: string, amount: number) => ({
+    ...expense(id, date, amount),
+    category: "health_insurance",
+  });
+
+  it("premiums are not direct expenses; they go to their own field", () => {
+    const b = makeBundle({
+      income: [income("i1", "2026-03-15", 50_000_00)],
+      expenses: [expense("e1", "2026-04-01", 1_000_00), premium("h1", "2026-02-01", 500_00)],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.directExpenses).toBe(1_000_00);
+    expect(d.selfEmployedHealthInsurance).toBe(500_00);
+    expect(d.totalDeductibleExpenses).toBe(1_000_00);
+    const input = buildTaxInput(b, 2026);
+    expect(input.deductibleExpenses).toBe(1_000_00);
+    expect(input.selfEmployedHealthInsurance).toBe(500_00);
+  });
+
+  it("each annualized period carries the premiums paid through its end", () => {
+    const b = makeBundle({
+      income: [income("i1", "2026-01-15", 50_000_00)],
+      expenses: [premium("h1", "2026-02-01", 500_00), premium("h2", "2026-07-01", 500_00)],
+    });
+    const ann = buildAnnualizedInput(b, 2026);
+    expect(ann.periods[0].cumulativeSelfEmployedHealthInsurance).toBe(500_00);
+    expect(ann.periods[3].cumulativeSelfEmployedHealthInsurance).toBe(1_000_00);
+    expect(ann.periods[3].cumulativeDeductibleExpenses).toBe(0);
+  });
+
+  it("premiums do not lower the home office's income limit", () => {
+    // $1,000 income, $900 premiums, simplified 150 sq ft ($750): the limit is $1,000, not $100.
+    const b = makeBundle({
+      income: [income("i1", "2026-01-15", 1_000_00)],
+      expenses: [premium("h1", "2026-02-01", 900_00)],
+      homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
+    });
+    expect(deriveYear(b, 2026).homeOfficeDeduction).toBe(750_00);
+  });
+});
+
 describe("deriveYear — expense aggregation + total", () => {
   it("sums expenses within year and rolls up the total", () => {
     const b = makeBundle({
