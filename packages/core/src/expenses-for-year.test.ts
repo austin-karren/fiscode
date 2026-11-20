@@ -222,6 +222,7 @@ describe("equipment counts in the year it is placed in service", () => {
     deletedAt: null as string | null,
     startupExpense: false,
     placedInServiceDate,
+    category: "equipment",
   });
 
   it("bought 2025-11-20, placed in service 2026-02-01 (SE start): counts in 2026, not 2025", () => {
@@ -237,10 +238,10 @@ describe("equipment counts in the year it is placed in service", () => {
     expect(expensesCountedForYear([row], 2026, "2026-02-01")).toEqual([row]);
   });
 
-  it("no placed-in-service date: the purchase date, as before (dropped if before the start)", () => {
+  it("no placed-in-service date and bought before the start: the SE start (review #66 r1, ruling 3)", () => {
     const row = equipment("2025-11-20", null);
-    expect(countedExpenseDate(row, "2026-02-01")).toBe("2025-11-20");
-    expect(expensesCountedForYear([row], 2026, "2026-02-01")).toEqual([]);
+    expect(countedExpenseDate(row, "2026-02-01")).toBe("2026-02-01");
+    expect(expensesCountedForYear([row], 2026, "2026-02-01")).toEqual([row]);
   });
 
   it("placed in service in a later year than bought, after the start: counts in that later year", () => {
@@ -272,5 +273,50 @@ describe("health insurance is never a §195 startup cost", () => {
   it("another category ticked startup still enters §195", () => {
     const ads = { ...premium, id: "ads", category: "advertising" };
     expect(startupDeductionBetween([ads], "2026-02-01", "2026-01-01", "2026-12-31")).toBe(60_000);
+  });
+});
+
+// Review #66 r1. IRC §195(c)(1)(B) (https://www.govinfo.gov/link/uscode/26/195): a start-up
+// expenditure is one which "if paid or incurred in connection with the operation of an existing
+// active trade or business ... would be allowable as a deduction for the taxable year in which paid
+// or incurred". Equipment is capital property, placed in service instead (Pub 946).
+describe("equipment and §195; placed-in-service only for equipment", () => {
+  const row = (extra: Record<string, unknown>) => ({
+    id: "r",
+    date: "2025-12-15",
+    deletedAt: null as string | null,
+    startupExpense: false,
+    placedInServiceDate: null as string | null,
+    category: "equipment",
+    amountCents: 800_000,
+    ...extra,
+  });
+
+  it("pre-start equipment ticked Startup is placed in service, not amortized: $8,000 counts in full", () => {
+    const laptop = row({ startupExpense: true });
+    expect(isPreStartStartupCost(laptop, "2026-03-02")).toBe(false);
+    expect(startupDeductionBetween([laptop], "2026-03-02", "2026-01-01", "2026-12-31")).toBe(0);
+    expect(countedExpenseDate(laptop, "2026-03-02")).toBe("2026-03-02");
+    const counted = expensesCountedForYear([laptop], 2026, "2026-03-02");
+    expect(counted.reduce((s, e) => s + e.amountCents, 0)).toBe(800_000);
+  });
+
+  it("a placed-in-service date on a non-equipment row (CSV only) is ignored", () => {
+    const software = row({
+      category: "software_subs",
+      date: "2026-05-01",
+      placedInServiceDate: "2027-02-01",
+      amountCents: 100_000,
+    });
+    expect(countedExpenseDate(software, "2026-03-02")).toBe("2026-05-01");
+    expect(expensesCountedForYear([software], 2026, "2026-03-02")).toEqual([software]);
+    expect(expensesCountedForYear([software], 2027, "2026-03-02")).toEqual([]);
+  });
+
+  it("equipment bought before the start with no stored date counts on the SE start (as the prefill shows)", () => {
+    const laptop = row({});
+    expect(countedExpenseDate(laptop, "2026-03-02")).toBe("2026-03-02");
+    expect(expensesCountedForYear([laptop], 2026, "2026-03-02")).toEqual([laptop]);
+    expect(expensesCountedForYear([laptop], 2025, "2026-03-02")).toEqual([]);
   });
 });

@@ -317,9 +317,25 @@ describe("equipment: placed-in-service date (Pub 946) and the §179 notice", () 
     expect(buildAnnualizedInput(b, 2026).periods[0].cumulativeDeductibleExpenses).toBe(1_200_00);
   });
 
-  it("no placed-in-service date and bought before the start: still left out (form prefills it)", () => {
+  it("no placed-in-service date, bought before the start: counts on the SE start, as the form shows", () => {
+    // Review #66 r1 ruling 3: the same rule as the prefill, applied in counting (no data write),
+    // so a v2 import counts the same as after an untouched Save.
     const b = makeBundle({ profile, expenses: [equipment("e1", "2025-11-20", 1_200_00)] });
-    expect(deriveYear(b, 2026).directExpenses).toBe(0);
+    expect(deriveYear(b, 2025).directExpenses).toBe(0);
+    expect(deriveYear(b, 2026).directExpenses).toBe(1_200_00);
+  });
+
+  it("$8,000 of pre-start equipment ticked Startup: placed in service, $8,000 counts, §179 notice", () => {
+    // Equipment is never a §195 start-up cost (review #66 r1 ruling 1): no $5,000 limit.
+    const b = makeBundle({
+      profile,
+      income: [income("i1", "2026-07-01", 20_000_00)],
+      expenses: [equipment("e1", "2025-12-15", 8_000_00, { startupExpense: true })],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.directExpenses).toBe(8_000_00);
+    expect(d.startupCosts.total).toBe(0);
+    expect(d.equipmentAssumedSection179).toBe(1);
   });
 
   it("notice: counted equipment over $2,500 without the §179 flag; no number change", () => {

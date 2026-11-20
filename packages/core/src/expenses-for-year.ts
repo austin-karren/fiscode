@@ -11,22 +11,28 @@ export type ExpenseForYear = {
 
 /**
  * The date an expense counts on.
+ * - Equipment counts on the date it is placed in service: its stored
+ *   placed-in-service date, or its purchase date when none is stored, and
+ *   never before the SE start. Pub 946 (https://www.irs.gov/publications/p946):
+ *   "You begin to depreciate your property when you place it in service for use
+ *   in your trade or business"; property converted to business use is placed in
+ *   service "on the date of the change", so equipment bought before the business
+ *   began counts on the SE start date (the date the form prefills).
  * - A startup expense (Section 195) paid before the SE start counts on the SE
  *   start date: IRC §195(b)(1)(A) allows the deduction "for the taxable year in
  *   which the active trade or business begins"
  *   (https://www.govinfo.gov/link/uscode/26/195).
- * - Equipment with a placed-in-service date counts on that date, and never
- *   before the SE start. Pub 946 (https://www.irs.gov/publications/p946): "You
- *   begin to depreciate your property when you place it in service for use in
- *   your trade or business"; property converted to business use is placed in
- *   service "on the date of the change", so equipment bought before the business
- *   began counts on the SE start date.
- * - Every other expense counts on its own date.
+ * - Every other expense counts on its own date. A placed-in-service date on a
+ *   row that isn't equipment (possible only from a CSV) is ignored.
  */
 export const countedExpenseDate = (
   expense: Pick<ExpenseForYear, "date" | "startupExpense" | "placedInServiceDate" | "category">,
   seStartDate: string | null | undefined,
 ): string => {
+  if (expense.category === "equipment") {
+    const placed = expense.placedInServiceDate || expense.date;
+    return seStartDate && placed < seStartDate ? seStartDate : placed;
+  }
   if (
     expense.startupExpense === true &&
     expense.category !== "health_insurance" &&
@@ -35,8 +41,6 @@ export const countedExpenseDate = (
   ) {
     return seStartDate;
   }
-  const placed = expense.placedInServiceDate;
-  if (placed) return seStartDate && placed < seStartDate ? seStartDate : placed;
   return expense.date;
 };
 
@@ -44,7 +48,11 @@ export const countedExpenseDate = (
  * A startup cost under §195: ticked as startup and paid before the SE start.
  * Self-employed health insurance never is one: it is a Schedule 1 line 17
  * adjustment (Form 7206), and a premium paid before the business began covers no
- * month of self-employment, so it counts nowhere.
+ * month of self-employment, so it counts nowhere. Equipment never is one either:
+ * §195(c)(1)(B) covers an amount which "if paid or incurred in connection with the
+ * operation of an existing active trade or business ... would be allowable as a
+ * deduction for the taxable year in which paid or incurred", and equipment is
+ * capital property, placed in service instead (`countedExpenseDate`).
  */
 export const isPreStartStartupCost = (
   expense: Pick<ExpenseForYear, "date" | "startupExpense" | "deletedAt" | "category">,
@@ -53,6 +61,7 @@ export const isPreStartStartupCost = (
   expense.deletedAt === null &&
   expense.startupExpense === true &&
   expense.category !== "health_insurance" &&
+  expense.category !== "equipment" &&
   Boolean(seStartDate) &&
   expense.date < seStartDate!;
 
