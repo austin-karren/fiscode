@@ -84,7 +84,7 @@
   },
   "derived": {
     "activeEntityType": "sole_prop",
-    "directExpenses": 834999,
+    "directExpenses": 622332,
     "excludedBeforeSeStart": {
       "expense": 1,
       "income": 2,
@@ -99,10 +99,10 @@
     "seStartDate": "2026-07-01",
     "selfEmployedHealthInsurance": 0,
     "startupCosts": {
-      "deductedThisYear": 0,
-      "total": 0
+      "deductedThisYear": 507333,
+      "total": 720000
     },
-    "totalDeductibleExpenses": 844423,
+    "totalDeductibleExpenses": 631756,
     "equipmentAssumedSection179": 0
   },
   "even": {
