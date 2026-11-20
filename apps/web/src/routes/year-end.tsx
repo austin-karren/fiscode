@@ -123,6 +123,7 @@ function YearEndPage() {
   const hasYearData =
     derived.gross1099 > 0 ||
     derived.directExpenses > 0 ||
+    derived.selfEmployedHealthInsurance > 0 ||
     derived.mileageDeduction > 0 ||
     derived.homeOfficeDeduction > 0;
 
@@ -194,6 +195,15 @@ function YearEndPage() {
           <Row label="Net profit" tooltip={GLOSSARY.netProfit}>
             <b>{formatUSD(result.estimate.netProfit)}</b>
           </Row>
+          {derived.selfEmployedHealthInsurance > 0 ? (
+            // The allowed deduction, after its limit. It lowers income tax,
+            // not net profit or SE tax.
+            <Row
+              label={`${labelFor(EXPENSE_CATEGORY_LABELS, "health_insurance")} (Schedule 1 line 17)`}
+            >
+              {formatUSD(result.estimate.selfEmployedHealthInsurance)}
+            </Row>
+          ) : null}
           <Row label="Self-employment tax" tooltip={GLOSSARY.seTax}>
             {formatUSD(result.estimate.se.totalSeTax)}
           </Row>
@@ -243,7 +253,22 @@ function YearEndPage() {
                 </td>
               </tr>
             ) : null}
-            {Object.keys(totalsByCategory).length === 0 && derived.startupCosts.total === 0 ? (
+            {derived.selfEmployedHealthInsurance > 0 ? (
+              // Paid premiums: an adjustment on Schedule 1, not a Schedule C
+              // expense, so they sit apart from the categories above.
+              <tr className="break-inside-avoid border-t-2 border-border">
+                <td className="py-1">
+                  {labelFor(EXPENSE_CATEGORY_LABELS, "health_insurance")}: not Schedule C; an
+                  adjustment on Schedule 1 line 17.
+                </td>
+                <td className="py-1 text-right tabular-nums">
+                  {formatUSD(derived.selfEmployedHealthInsurance)}
+                </td>
+              </tr>
+            ) : null}
+            {Object.keys(totalsByCategory).length === 0 &&
+            derived.startupCosts.total === 0 &&
+            derived.selfEmployedHealthInsurance === 0 ? (
               <tr>
                 <td className="py-1 text-muted-foreground" colSpan={2}>
                   No expenses for {year}.

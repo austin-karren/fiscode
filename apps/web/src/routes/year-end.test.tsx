@@ -221,4 +221,51 @@ describe("year-end loader", () => {
     const data = await loader();
     expect(data.names).toEqual({ clients: db.clients, vehicles: db.vehicles });
   });
+
+  it("shows self-employed health insurance as a Schedule 1 line 17 adjustment, from engine output", async () => {
+    // Demo data plus a $6,000 premium paid in 2026.
+    const example = exampleBundle();
+    const base = example.expenses[0]!;
+    db.bundle = {
+      ...example,
+      expenses: [
+        ...example.expenses,
+        {
+          ...base,
+          id: "exp_demo_hi",
+          date: "2026-03-01",
+          category: "health_insurance",
+          amountCents: 600_000,
+          startupExpense: false,
+        },
+      ],
+    };
+    db.clients = example.clients;
+    db.vehicles = example.vehicles;
+    const loader = Route.options.loader as unknown as () => Promise<typeof loaderData>;
+    const data = await loader();
+    const allowed = (
+      data.result as unknown as { estimate: { selfEmployedHealthInsurance: number } }
+    ).estimate.selfEmployedHealthInsurance;
+    expect(allowed).toBeGreaterThan(0);
+    expect(data.totalsByCategory).not.toHaveProperty("health_insurance");
+
+    const saved = { ...loaderData };
+    Object.assign(loaderData, data);
+    try {
+      render(<YearEndPage />);
+      const line17 = screen.getByText("Self-employed health insurance (Schedule 1 line 17)");
+      expect(line17.closest("div")).toHaveTextContent(
+        new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+          allowed / 100,
+        ),
+      );
+      const paid = screen
+        .getByText(/not Schedule C; an adjustment on Schedule 1 line 17/)
+        .closest("tr")!;
+      expect(paid).toHaveTextContent("$6,000.00");
+    } finally {
+      Object.assign(loaderData, saved);
+    }
+  });
 });

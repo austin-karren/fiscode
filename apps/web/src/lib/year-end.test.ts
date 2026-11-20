@@ -1,3 +1,5 @@
+import { exampleBundle } from "@fiscode/csv";
+import { estimateBundleYear } from "@fiscode/tax";
 import { describe, expect, it } from "vitest";
 
 import { expenseTotalsByCategory, yearEndLists } from "./year-end";
@@ -39,6 +41,47 @@ describe("expenseTotalsByCategory", () => {
     // Deducted as a group under §195(b) (derived.startupCosts), so it isn't a per-category row.
     const rows = [expense("2026-02-10", "office_supplies", 4000, { startupExpense: true })];
     expect(expenseTotalsByCategory(rows, 2026, "2026-04-01")).toEqual({});
+  });
+
+  it("leaves self-employed health insurance out: it is a Schedule 1 adjustment, not Schedule C", () => {
+    const rows = [
+      expense("2026-03-01", "software_subs", 8950),
+      expense("2026-03-01", "health_insurance", 50_000),
+    ];
+    expect(expenseTotalsByCategory(rows, 2026, "2026-01-01")).toEqual({ software_subs: 8950 });
+  });
+
+  it("adds up, with the §195 deduction, to the engine's Direct expenses", () => {
+    // Demo data plus a $6,000 premium and a $900 startup cost paid before the start.
+    const bundle = exampleBundle();
+    const seStartDate = "2026-02-01";
+    bundle.profile = { ...bundle.profile!, seStartDate };
+    const base = bundle.expenses[0]!;
+    bundle.expenses = [
+      ...bundle.expenses,
+      {
+        ...base,
+        id: "exp_demo_hi",
+        date: "2026-03-01",
+        category: "health_insurance",
+        amountCents: 600_000,
+        startupExpense: false,
+      },
+      {
+        ...base,
+        id: "exp_demo_su",
+        date: "2025-12-15",
+        category: "software_subs",
+        amountCents: 90_000,
+        startupExpense: true,
+      },
+    ];
+    const { derived } = estimateBundleYear(bundle, 2026);
+    const totals = expenseTotalsByCategory(bundle.expenses, 2026, seStartDate);
+    const scheduleC = Object.values(totals).reduce((a, b) => a + b, 0);
+    expect(totals).not.toHaveProperty("health_insurance");
+    expect(derived.selfEmployedHealthInsurance).toBe(600_000);
+    expect(scheduleC + derived.startupCosts.deductedThisYear).toBe(derived.directExpenses);
   });
 
   it("leaves out deleted expenses and other years", () => {
