@@ -1,48 +1,4 @@
-/** The fields of an expense that decide whether it counts toward a tax year. */
-export type ExpenseForYear = {
-  date: string;
-  deletedAt: string | null;
-  startupExpense?: boolean | null;
-  /** Equipment: the date it was placed in service, when not the purchase date. */
-  placedInServiceDate?: string | null;
-  /** The expense category; health insurance is never a startup cost. */
-  category?: string;
-};
-
-/**
- * The date an expense counts on.
- * - Equipment counts on the date it is placed in service: its stored
- *   placed-in-service date, or its purchase date when none is stored, and
- *   never before the SE start. Pub 946 (https://www.irs.gov/publications/p946):
- *   "You begin to depreciate your property when you place it in service for use
- *   in your trade or business"; property converted to business use is placed in
- *   service "on the date of the change", so equipment bought before the business
- *   began counts on the SE start date (the date the form prefills).
- * - A startup expense (Section 195) paid before the SE start counts on the SE
- *   start date: IRC §195(b)(1)(A) allows the deduction "for the taxable year in
- *   which the active trade or business begins"
- *   (https://www.govinfo.gov/link/uscode/26/195).
- * - Every other expense counts on its own date. A placed-in-service date on a
- *   row that isn't equipment (possible only from a CSV) is ignored.
- */
-export const countedExpenseDate = (
-  expense: Pick<ExpenseForYear, "date" | "startupExpense" | "placedInServiceDate" | "category">,
-  seStartDate: string | null | undefined,
-): string => {
-  if (expense.category === "equipment") {
-    const placed = expense.placedInServiceDate || expense.date;
-    return seStartDate && placed < seStartDate ? seStartDate : placed;
-  }
-  if (
-    expense.startupExpense === true &&
-    expense.category !== "health_insurance" &&
-    seStartDate &&
-    expense.date < seStartDate
-  ) {
-    return seStartDate;
-  }
-  return expense.date;
-};
+import { expenseYearExclusion, isBeforeSeStart, type ExpenseForYear } from "./year-inclusion.ts";
 
 /**
  * A startup cost under §195: ticked as startup and paid before the SE start.
@@ -62,8 +18,7 @@ export const isPreStartStartupCost = (
   expense.startupExpense === true &&
   expense.category !== "health_insurance" &&
   expense.category !== "equipment" &&
-  Boolean(seStartDate) &&
-  expense.date < seStartDate!;
+  isBeforeSeStart(expense.date, seStartDate);
 
 const isoFirstOfMonth = (monthIndex: number): string => {
   const y = Math.floor(monthIndex / 12);
@@ -125,10 +80,10 @@ const dayBeforeIso = (iso: string): string => {
  * The expenses that count toward `year`'s Schedule C one by one, in their given
  * order. An expense counts when all of these hold:
  * - it is not deleted (`deletedAt` is null);
- * - the date it counts on (`countedExpenseDate`: its own date, or for equipment
- *   its placed-in-service date) is in `year`;
- * - that date is on or after the SE start date;
- * - it is not a startup cost paid before the SE start. Those are deducted as a
+ * - the date it counts toward a year on (`expenseYearDate`: its own date, or
+ *   for equipment its placed-in-service date) is in `year`, on or after the SE
+ *   start date (`expenseYearExclusion`);
+ * - so a startup cost paid before the SE start does not count here. Those are deducted as a
  *   group under §195(b) (`startupDeductionBetween`): at most $5,000 in the year
  *   the business begins, the rest over 180 months.
  *
@@ -143,12 +98,4 @@ export const expensesCountedForYear = <T extends ExpenseForYear>(
   expenses: readonly T[],
   year: number,
   seStartDate: string | null | undefined,
-): T[] => {
-  const yearPrefix = String(year);
-  const floor = seStartDate || `${yearPrefix}-01-01`;
-  return expenses.filter((e) => {
-    if (e.deletedAt !== null || isPreStartStartupCost(e, seStartDate)) return false;
-    const date = countedExpenseDate(e, seStartDate);
-    return date.slice(0, 4) === yearPrefix && date >= floor;
-  });
-};
+): T[] => expenses.filter((e) => expenseYearExclusion(e, year, seStartDate) === null);

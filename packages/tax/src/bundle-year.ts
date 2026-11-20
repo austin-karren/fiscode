@@ -2,49 +2,27 @@ import {
   addCents,
   cents,
   countedExpenseDate,
+  countedInYear,
   expensesCountedForYear,
   isPreStartStartupCost,
   startupDeductionBetween,
   type Cents,
-  yearOf,
+  yearExclusion,
 } from "@fiscode/core";
+// Type-only: @fiscode/csv is not a runtime dependency of @fiscode/tax (see .oxlintrc.json).
 import type { Bundle } from "@fiscode/csv";
-import type { AnnualizedInput, TaxInput } from "@fiscode/tax";
-import {
-  actualHomeOfficeExpenses,
-  getYearConfig,
-  limitToTentativeProfit,
-  mileageDeduction,
-} from "@fiscode/tax";
+
+import { getYearConfig } from "./config/index.ts";
+import { estimateYear, type EstimateResult } from "./engine.ts";
+import { actualHomeOfficeExpenses, limitToTentativeProfit } from "./home-office.ts";
+import { mileageDeduction } from "./mileage.ts";
+import type { AnnualizedInput, TaxInput } from "./types.ts";
 
 type ActiveSpouse = {
   annualW2WagesCents: number;
   annualFederalWithholdingCents: number;
   annualStateWithholdingCents: number;
 };
-
-// A row counts toward the year iff it lands in the calendar year AND on or
-// after the user's self-employment start date. Pre-SE rows are excluded
-// from the tax estimate but stay in the user's data; the dashboard surfaces
-// the excluded count so the discrepancy isn't silent. An empty seStartDate
-// (legacy data, manual SQL edits, broken imports) is treated as "no filter"
-// rather than "everything passes" — the previous `date >= ""` semantics
-// happened to do the right thing for lexical ISO dates but is fragile.
-const inSeRange = (date: string, seStartDate: string, year: number): boolean => {
-  const floor = seStartDate || `${year}-01-01`;
-  return yearOf(date as never) === year && date >= floor;
-};
-
-/**
- * The rows that count toward `year`: live, dated in the year, and on or after
- * the SE start. The income and mileage totals are sums over these, and the
- * year-end packet lists the same rows.
- */
-export const countedInYear = <T extends { date: string; deletedAt: string | null }>(
-  rows: readonly T[],
-  year: number,
-  seStartDate: string,
-): T[] => rows.filter((r) => r.deletedAt === null && inSeRange(r.date, seStartDate, year));
 
 const sumWithinYear = (
   rows: Array<{ date: string; amountCents: number; deletedAt: string | null }>,
@@ -90,9 +68,7 @@ const sumMileageDeductionWithinYear = (
   const cfg = getYearConfig(year);
   // Each trip at the rate in force on its date (2026 changed on July 1).
   return mileageDeduction(
-    bundle.mileage.filter(
-      (m) => m.deletedAt === null && inSeRange(m.date, seStartDate, year) && m.date <= through,
-    ),
+    countedInYear(bundle.mileage, year, seStartDate).filter((m) => m.date <= through),
     cfg,
   );
 };
@@ -361,27 +337,14 @@ const countExcludedBeforeSeStart = (
   year: number,
   seStartDate: string,
 ): ExcludedBeforeSeStart => {
-  const inYear = (d: string) => yearOf(d as never) === year;
-  const isExcluded = (d: string) => inYear(d) && d < seStartDate;
+  const beforeStart = (r: { date: string; deletedAt: string | null }) =>
+    yearExclusion(r, year, seStartDate) === "before_se_start";
   return {
-    income: bundle.income.filter(
-      (i) => i.deletedAt === null && i.sourceType === "1099" && isExcluded(i.date),
-    ).length,
-    // Every live expense dated in the year that the core rule leaves out of it, so the
-    // banner always matches what "Direct expenses" counts. (A startup cost paid in an
-    // earlier year can count in this one; it is not "excluded" here.)
-    expense: (() => {
-      const counted = new Set(expensesCountedForYear(bundle.expenses, year, seStartDate));
-      return bundle.expenses.filter(
-        (e) =>
-          e.deletedAt === null &&
-          inYear(e.date) &&
-          !counted.has(e) &&
-          // Startup costs paid before the start are deducted under §195, not excluded.
-          !isPreStartStartupCost(e, seStartDate),
-      ).length;
-    })(),
-    mileage: bundle.mileage.filter((m) => m.deletedAt === null && isExcluded(m.date)).length,
+    income: bundle.income.filter((i) => i.sourceType === "1099" && beforeStart(i)).length,
+    // Startup costs paid before the start are deducted under §195, not excluded.
+    expense: bundle.expenses.filter((e) => beforeStart(e) && !isPreStartStartupCost(e, seStartDate))
+      .length,
+    mileage: bundle.mileage.filter(beforeStart).length,
   };
 };
 
@@ -414,12 +377,19 @@ export type DerivedYear = {
    */
   equipmentAssumedSection179: number;
   totalDeductibleExpenses: Cents;
-  activeEntityType: string;
+  /** The entity active in the year (the latest one overlapping it), or sole_prop when none. */
+  entityType: string;
+  /**
+   * True for an S corp. The estimate is still computed as a sole proprietorship: no S-corp
+   * math exists yet. A single-member LLC is a disregarded entity, taxed as a sole
+   * proprietorship, so its estimate is right and this stays false.
+   */
+  entityUnsupported: boolean;
   seStartDate: string;
   excludedBeforeSeStart: ExcludedBeforeSeStart;
 };
 
-export const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
+const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
   // Floor at Jan 1 of the year if no profile — defensive; buildTaxInput
   // throws on missing profile anyway, but deriveYear is also called for
   // read-only dashboard display.
@@ -456,6 +426,7 @@ export const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
   );
   const homeOfficeDeduction = limited.allowed;
   const total = addCents(directExpenses, mileageDeduction, homeOfficeDeduction);
+  const entityType = activeEntityFor(bundle, year)?.type ?? "sole_prop";
   return {
     gross1099,
     directExpenses,
@@ -470,14 +441,15 @@ export const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
       (e) => e.category === "equipment" && !e.flagForSection179 && e.amountCents > 250_000,
     ).length,
     totalDeductibleExpenses: total,
-    activeEntityType: activeEntityFor(bundle, year)?.type ?? "sole_prop",
+    entityType,
+    entityUnsupported: entityType === "s_corp",
     seStartDate,
     excludedBeforeSeStart: countExcludedBeforeSeStart(bundle, year, seStartDate),
   };
 };
 
 /** Build a TaxInput suitable for `estimateYear` from the current bundle. */
-export const buildTaxInput = (bundle: Bundle, year: number): TaxInput => {
+const buildTaxInput = (bundle: Bundle, year: number): TaxInput => {
   const profile = bundle.profile;
   if (!profile) throw new Error("buildTaxInput: profile is required");
   const derived = deriveYear(bundle, year);
@@ -499,7 +471,7 @@ export const buildTaxInput = (bundle: Bundle, year: number): TaxInput => {
 };
 
 /** Cumulative period bundles for annualized installments. */
-export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedInput => {
+const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedInput => {
   const base = buildTaxInput(bundle, year);
   const seStartDate = bundle.profile?.seStartDate ?? `${year}-01-01`;
   const endsDates: Array<{ q: 1 | 2 | 3 | 4; ends: string }> = [
@@ -509,13 +481,11 @@ export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedIn
     { q: 4, ends: `${year}-12-31` },
   ];
   const cumulative = (cutoff: string) => {
-    const yStart = `${year}-01-01`;
-    // Same SE-start gate as deriveYear so cumulative totals reflect what
-    // the engine will actually count.
-    const lower = seStartDate > yStart ? seStartDate : yStart;
-    const incomeRows = bundle.income.filter(
-      (r) => r.deletedAt === null && r.sourceType === "1099" && r.date >= lower && r.date <= cutoff,
-    );
+    const incomeRows = countedInYear(
+      bundle.income.filter((r) => r.sourceType === "1099"),
+      year,
+      seStartDate,
+    ).filter((r) => r.date <= cutoff);
     // The year's counted expenses up to the cutoff, by the date each counts on
     // (equipment: its placed-in-service date).
     const counted = expensesCountedForYear(bundle.expenses, year, seStartDate).filter(
@@ -551,4 +521,28 @@ export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedIn
     };
   }) as unknown as AnnualizedInput["periods"];
   return { ...base, periods };
+};
+
+export type BundleYearEstimate = {
+  result: EstimateResult;
+  derived: DerivedYear;
+  /** What the engine was given: the annualized input when the profile picks that method. */
+  input: TaxInput | AnnualizedInput;
+};
+
+/**
+ * The year's estimate from the user's data: which rows count (the core year rule),
+ * the deductions they add up to, and the engine run by the profile's quarterly
+ * method. Every entity is estimated as a sole proprietorship for now;
+ * `derived.entityUnsupported` says when that is not the user's entity.
+ * Throws when the bundle has no profile.
+ */
+export const estimateBundleYear = (bundle: Bundle, year: number): BundleYearEstimate => {
+  const profile = bundle.profile;
+  if (!profile) throw new Error("estimateBundleYear: profile is required");
+  const method = profile.quarterlyMethod === "annualized" ? "annualized" : "even";
+  const input =
+    method === "annualized" ? buildAnnualizedInput(bundle, year) : buildTaxInput(bundle, year);
+  const result = estimateYear({ entity: "sole_prop", method, input });
+  return { result, derived: deriveYear(bundle, year), input };
 };

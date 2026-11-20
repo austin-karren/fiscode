@@ -1,3 +1,5 @@
+import { isBeforeSeStart } from "@fiscode/core";
+
 /**
  * The placed-in-service date an expense form saves. Only equipment has one. A
  * date the user picked wins. Otherwise equipment bought before the SE start is
@@ -14,6 +16,6 @@ export const placedInServiceFor = (
 ): string | null => {
   if (category !== "equipment") return null;
   if (entered) return entered;
-  if (purchaseDate && seStartDate && purchaseDate < seStartDate) return seStartDate;
+  if (purchaseDate && isBeforeSeStart(purchaseDate, seStartDate)) return seStartDate!;
   return null;
 };

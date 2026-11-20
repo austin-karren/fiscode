@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  countedExpenseDate,
   expensesCountedForYear,
   isPreStartStartupCost,
   startupDeductionBetween,
 } from "./expenses-for-year.ts";
+import { countedExpenseDate } from "./year-inclusion.ts";
 
 type Row = { id: string; date: string; deletedAt: string | null; startupExpense?: boolean };
 

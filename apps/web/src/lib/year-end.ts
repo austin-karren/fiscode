@@ -1,8 +1,6 @@
 import type { Bundle } from "@fiscode/csv";
-import { expensesCountedForYear, type ExpenseForYear } from "@fiscode/core";
+import { countedInYear, expensesCountedForYear, type ExpenseForYear } from "@fiscode/core";
 import { getYearConfig, mileageRateOn } from "@fiscode/tax";
-
-import { countedInYear } from "./tax-input";
 
 /**
  * The year-end packet's expense breakdown: totals in cents per category, over

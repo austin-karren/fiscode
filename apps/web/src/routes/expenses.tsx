@@ -34,6 +34,7 @@ import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { InfoTooltip } from "../components/info-tooltip";
 import { NoDataEmpty } from "../components/empty-states/no-data";
+import { expenseYearDate } from "@fiscode/core";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditExpenseDialog } from "../components/edit-expense-dialog";
@@ -392,7 +393,7 @@ function ExpensesPage() {
                         <Badge variant="secondary">Startup §195</Badge>
                       ) : (
                         <PreSeStartBadge
-                          rowDate={x.date}
+                          rowDate={expenseYearDate(x, profile?.seStartDate)}
                           seStartDate={profile?.seStartDate}
                           startupHint
                         />

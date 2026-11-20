@@ -6,7 +6,7 @@ import { Button } from "@fiscode/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
 import { buildBundle, clientRepo, vehicleRepo } from "@fiscode/db";
 import { exportBundle, exportFileName, type VehicleRow } from "@fiscode/csv";
-import { estimateYear, getYearConfig } from "@fiscode/tax";
+import { estimateBundleYear, getYearConfig } from "@fiscode/tax";
 import {
   cents,
   ENTITY_TYPE_LABELS,
@@ -22,7 +22,7 @@ import { CircleAlert, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 
 import { Page } from "../components/page";
-import { buildAnnualizedInput, buildTaxInput, deriveYear } from "../lib/tax-input";
+import { EntityUnsupportedAlert } from "../components/entity-unsupported-alert";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { formatDate } from "../lib/format-date";
 import { US_STATE_BY_CODE } from "../lib/us-states";
@@ -53,16 +53,7 @@ export const Route = createFileRoute("/year-end")({
       } as const;
     }
     const profile = bundle.profile;
-    const input =
-      profile.quarterlyMethod === "annualized"
-        ? buildAnnualizedInput(bundle, year)
-        : buildTaxInput(bundle, year);
-    const result = estimateYear({
-      entity: "sole_prop",
-      method: profile.quarterlyMethod === "annualized" ? "annualized" : "even",
-      input,
-    });
-    const derived = deriveYear(bundle, year);
+    const { result, derived } = estimateBundleYear(bundle, year);
     const totalsByCategory = expenseTotalsByCategory(bundle.expenses, year, profile.seStartDate);
     const lists = yearEndLists(bundle, year, derived.seStartDate);
     // The bundle leaves archived clients and vehicles out, but last year's
@@ -172,6 +163,7 @@ function YearEndPage() {
         </>
       }
     >
+      <EntityUnsupportedAlert derived={derived} />
       {exclTotal > 0 ? (
         <Alert variant="warning">
           <CircleAlert />
@@ -190,7 +182,7 @@ function YearEndPage() {
             {labelFor(FILING_STATUS_LABELS, profile.filingStatus)}
           </Row>
           <Row label="State">{US_STATE_BY_CODE[profile.state] ?? profile.state}</Row>
-          <Row label="Entity">{labelFor(ENTITY_TYPE_LABELS, derived.activeEntityType)}</Row>
+          <Row label="Entity">{labelFor(ENTITY_TYPE_LABELS, derived.entityType)}</Row>
           <Row label="1099 income" tooltip={GLOSSARY.income1099}>
             {formatUSD(derived.gross1099)}
           </Row>
