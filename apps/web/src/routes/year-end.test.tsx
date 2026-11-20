@@ -164,6 +164,21 @@ describe("year-end packet", () => {
     }
   });
 
+  it("hides the left-to-amortize row when nothing is left (demo $3,000, all deducted)", () => {
+    loaderData.derived.startupCosts = {
+      deductedThisYear: 300_000,
+      total: 300_000,
+      remainingAfterYear: 0,
+    };
+    try {
+      render(<YearEndPage />);
+      expect(screen.getByText(/Startup costs \(Section 195\)/)).toBeInTheDocument();
+      expect(screen.queryByText(/left to amortize/)).not.toBeInTheDocument();
+    } finally {
+      loaderData.derived.startupCosts = { deductedThisYear: 0, total: 0, remainingAfterYear: 0 };
+    }
+  });
+
   it("shows §195 startup costs: deducted this year, of the total paid (demo $12,000, start Mar 2)", () => {
     loaderData.derived.startupCosts = {
       deductedThisYear: 538_889,
@@ -175,6 +190,8 @@ describe("year-end packet", () => {
       const row = screen.getByText(/Startup costs \(Section 195\)/).closest("tr")!;
       expect(row).toHaveTextContent("of $12,000.00 paid before the business began");
       expect(row).toHaveTextContent("$5,388.89");
+      const left = screen.getByText("Startup costs left to amortize after 2026").closest("tr")!;
+      expect(left).toHaveTextContent("$6,611.11");
     } finally {
       loaderData.derived.startupCosts = { deductedThisYear: 0, total: 0, remainingAfterYear: 0 };
     }
@@ -354,6 +371,42 @@ describe("year-end loader", () => {
     try {
       render(<YearEndPage />);
       expect(screen.queryByText(/The deduction is limited/)).not.toBeInTheDocument();
+    } finally {
+      Object.assign(loaderData, saved);
+    }
+  });
+
+  it("shows what is left to amortize, from engine output (demo $20,000 startup, SE start Jul 1, 2026)", async () => {
+    const example = exampleBundle();
+    const base = example.expenses[0]!;
+    db.bundle = {
+      ...example,
+      profile: { ...example.profile!, seStartDate: "2026-07-01" },
+      expenses: [
+        ...example.expenses,
+        {
+          ...base,
+          id: "exp_demo_su",
+          date: "2026-03-01",
+          category: "software_subs",
+          amountCents: 2_000_000,
+          startupExpense: true,
+        },
+      ],
+    };
+    const loader = Route.options.loader as unknown as () => Promise<typeof loaderData>;
+    const data = await loader();
+    expect(data.derived.startupCosts).toMatchObject({
+      deductedThisYear: 550_000,
+      remainingAfterYear: 1_450_000,
+    });
+
+    const saved = { ...loaderData };
+    Object.assign(loaderData, data);
+    try {
+      render(<YearEndPage />);
+      const left = screen.getByText("Startup costs left to amortize after 2026").closest("tr")!;
+      expect(left).toHaveTextContent("$14,500.00");
     } finally {
       Object.assign(loaderData, saved);
     }

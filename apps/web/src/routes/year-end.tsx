@@ -253,6 +253,14 @@ function YearEndPage() {
                 </td>
               </tr>
             ) : null}
+            {derived.startupCosts.remainingAfterYear > 0 ? (
+              <tr className="break-inside-avoid border-b border-border/40 last:border-b-0">
+                <td className="py-1">Startup costs left to amortize after {year}</td>
+                <td className="py-1 text-right tabular-nums">
+                  {formatUSD(derived.startupCosts.remainingAfterYear)}
+                </td>
+              </tr>
+            ) : null}
             {derived.selfEmployedHealthInsurance > 0 ? (
               // Paid premiums: an adjustment on Schedule 1, not a Schedule C
               // expense, so they sit apart from the categories above.
