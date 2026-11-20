@@ -1,7 +1,21 @@
-import { expenseTotalsByCategory } from "./year-end";
 import { describe, expect, it } from "vitest";
 import type { Bundle } from "@fiscode/csv";
-import { buildAnnualizedInput, buildTaxInput, deriveYear } from "./tax-input.ts";
+
+import { estimateBundleYear } from "./bundle-year.ts";
+import type { AnnualizedInput } from "./types.ts";
+
+// Every test goes through estimateBundleYear: `derived` for the year's figures,
+// `input` for what the engine is given.
+const deriveYear = (b: Bundle, year: number) => estimateBundleYear(b, year).derived;
+const inputFor = (b: Bundle, year: number) => estimateBundleYear(b, year).input;
+const periodsFor = (b: Bundle, year: number): AnnualizedInput => {
+  const input = estimateBundleYear(
+    { ...b, profile: { ...b.profile!, quarterlyMethod: "annualized" } },
+    year,
+  ).input;
+  if (!("periods" in input)) throw new Error("expected the annualized input");
+  return input;
+};
 
 const FIXED = "2026-06-04T12:00:00.000Z";
 
@@ -257,7 +271,7 @@ describe("bug A: a startup cost counts in the year the business begins (IRC §19
       income: [income("i1", "2026-07-15", 10_000_00)],
       expenses: [startup],
     });
-    const ann = buildAnnualizedInput(b, 2026);
+    const ann = periodsFor(b, 2026);
     // Start Jul 1: Q1 (Mar 31) and Q2 (May 31) carry none; Q3 (Aug 31) and Q4 carry $900.
     expect(ann.periods[0].cumulativeDeductibleExpenses).toBe(0);
     expect(ann.periods[1].cumulativeDeductibleExpenses).toBe(0);
@@ -279,7 +293,6 @@ describe("bug A: a startup cost counts in the year the business begins (IRC §19
 
   it("year-end: its own §195 line in 2026 (deducted and total), not a category", () => {
     const b = makeBundle({ profile, expenses: [startup] });
-    expect(expenseTotalsByCategory([startup], 2026, "2026-02-01")).toEqual({});
     expect(deriveYear(b, 2026).startupCosts).toEqual({ deductedThisYear: 900_00, total: 900_00 });
     expect(deriveYear(b, 2025).startupCosts).toEqual({ deductedThisYear: 0, total: 900_00 });
   });
@@ -694,7 +707,7 @@ describe("self-employed health insurance leaves Schedule C (Form 7206, Schedule 
     expect(d.directExpenses).toBe(1_000_00);
     expect(d.selfEmployedHealthInsurance).toBe(500_00);
     expect(d.totalDeductibleExpenses).toBe(1_000_00);
-    const input = buildTaxInput(b, 2026);
+    const input = inputFor(b, 2026);
     expect(input.deductibleExpenses).toBe(1_000_00);
     expect(input.selfEmployedHealthInsurance).toBe(500_00);
   });
@@ -704,7 +717,7 @@ describe("self-employed health insurance leaves Schedule C (Form 7206, Schedule 
       income: [income("i1", "2026-01-15", 50_000_00)],
       expenses: [premium("h1", "2026-02-01", 500_00), premium("h2", "2026-07-01", 500_00)],
     });
-    const ann = buildAnnualizedInput(b, 2026);
+    const ann = periodsFor(b, 2026);
     expect(ann.periods[0].cumulativeSelfEmployedHealthInsurance).toBe(500_00);
     expect(ann.periods[3].cumulativeSelfEmployedHealthInsurance).toBe(1_000_00);
     expect(ann.periods[3].cumulativeDeductibleExpenses).toBe(0);
@@ -737,7 +750,7 @@ describe("deriveYear — expense aggregation + total", () => {
   });
 });
 
-describe("deriveYear — activeEntityType + latestOverlap", () => {
+describe("deriveYear — entityType + latestOverlap", () => {
   it("picks the most-recently-started entity that overlaps the year", () => {
     const b = makeBundle({
       entities: [
@@ -745,14 +758,28 @@ describe("deriveYear — activeEntityType + latestOverlap", () => {
         entity("new", "2026-07-01", null, "single_member_llc"),
       ],
     });
-    expect(deriveYear(b, 2026).activeEntityType).toBe("single_member_llc");
+    expect(deriveYear(b, 2026).entityType).toBe("single_member_llc");
+  });
+
+  it("flags an S corp as unsupported and still estimates it as a sole proprietorship", () => {
+    const income1099 = [income("i1", "2026-03-15", 50_000_00)];
+    const soleProp = makeBundle({ income: income1099 });
+    const sCorp = makeBundle({
+      income: income1099,
+      entities: [entity("s", "2026-01-01", null, "s_corp")],
+    });
+    const s = estimateBundleYear(sCorp, 2026);
+    expect(s.derived.entityType).toBe("s_corp");
+    expect(s.derived.entityUnsupported).toBe(true);
+    expect(estimateBundleYear(soleProp, 2026).derived.entityUnsupported).toBe(false);
+    expect(s.result).toEqual(estimateBundleYear(soleProp, 2026).result);
   });
 
   it("falls back to 'sole_prop' if no entity overlaps", () => {
     const b = makeBundle({
       entities: [entity("old", "2020-01-01", "2022-12-31", "sole_prop")],
     });
-    expect(deriveYear(b, 2026).activeEntityType).toBe("sole_prop");
+    expect(deriveYear(b, 2026).entityType).toBe("sole_prop");
   });
 
   it("ignores soft-deleted entities", () => {
@@ -762,11 +789,11 @@ describe("deriveYear — activeEntityType + latestOverlap", () => {
         entity("real", "2026-01-01", null, "sole_prop"),
       ],
     });
-    expect(deriveYear(b, 2026).activeEntityType).toBe("sole_prop");
+    expect(deriveYear(b, 2026).entityType).toBe("sole_prop");
   });
 });
 
-describe("buildTaxInput — spouse selection + withholding", () => {
+describe("estimateBundleYear input — spouse selection + withholding", () => {
   it("picks the latest spouse overlapping the year and forwards withholding amounts", () => {
     const b = makeBundle({
       spouses: [
@@ -776,7 +803,7 @@ describe("buildTaxInput — spouse selection + withholding", () => {
     });
     b.spouses[1]!.annualFederalWithholdingCents = 4_000_00;
     b.spouses[1]!.annualStateWithholdingCents = 1_800_00;
-    const input = buildTaxInput(b, 2026);
+    const input = inputFor(b, 2026);
     expect(input.spouseW2Wages).toBe(40_000_00);
     expect(input.spouseFederalWithholding).toBe(4_000_00);
     expect(input.spouseStateWithholding).toBe(1_800_00);
@@ -786,7 +813,7 @@ describe("buildTaxInput — spouse selection + withholding", () => {
     const b = makeBundle({
       spouses: [spouse("past", "2020-01-01", "2022-12-31", 30_000_00)],
     });
-    const input = buildTaxInput(b, 2026);
+    const input = inputFor(b, 2026);
     expect(input.spouseW2Wages).toBe(0);
     expect(input.spouseFederalWithholding).toBe(0);
     expect(input.spouseStateWithholding).toBe(0);
@@ -795,18 +822,18 @@ describe("buildTaxInput — spouse selection + withholding", () => {
   it("throws when profile is missing", () => {
     const b = makeBundle();
     b.profile = undefined;
-    expect(() => buildTaxInput(b, 2026)).toThrow(/profile is required/);
+    expect(() => inputFor(b, 2026)).toThrow(/profile is required/);
   });
 });
 
-describe("buildTaxInput — dependents", () => {
+describe("estimateBundleYear input — dependents", () => {
   it("passes the profile's dependents to the engine (Utah personal exemption)", () => {
     const b = makeBundle({ profile: { ...makeBundle().profile!, dependents: 2 } });
-    expect(buildTaxInput(b, 2026).dependents).toBe(2);
+    expect(inputFor(b, 2026).dependents).toBe(2);
   });
 });
 
-describe("buildAnnualizedInput — cumulative periods", () => {
+describe("estimateBundleYear annualized input — cumulative periods", () => {
   it("cumulates income and expenses by quarter-end (3/5/8/12)", () => {
     const b = makeBundle({
       income: [
@@ -821,7 +848,7 @@ describe("buildAnnualizedInput — cumulative periods", () => {
         expense("z", "2026-09-01", 750_00),
       ],
     });
-    const ann = buildAnnualizedInput(b, 2026);
+    const ann = periodsFor(b, 2026);
     expect(ann.periods[0].cumulativeGross1099).toBe(10_000_00);
     expect(ann.periods[1].cumulativeGross1099).toBe(30_000_00);
     expect(ann.periods[2].cumulativeGross1099).toBe(45_000_00);
@@ -835,7 +862,7 @@ describe("buildAnnualizedInput — cumulative periods", () => {
       profile: { ...makeBundle().profile!, seStartDate: "2026-05-01" },
       income: [income("pre", "2026-03-01", 10_000_00), income("post", "2026-05-15", 20_000_00)],
     });
-    const ann = buildAnnualizedInput(b, 2026);
+    const ann = periodsFor(b, 2026);
     // Q1 ends 2026-03-31 → pre-SE row is gated out, post-SE row not yet earned.
     expect(ann.periods[0].cumulativeGross1099).toBe(0);
     // Q2 ends 2026-05-31 → post-SE row counts.
@@ -847,7 +874,7 @@ describe("buildAnnualizedInput — cumulative periods", () => {
       income: [income("nov", "2026-11-02", 10_000_00)],
       homeOffice: [actualOffice("2026-01-01")],
     });
-    const ann = buildAnnualizedInput(b, 2026);
+    const ann = periodsFor(b, 2026);
     // Q1–Q3: no income yet, so no home office
     expect(ann.periods[0].cumulativeDeductibleExpenses).toBe(0);
     expect(ann.periods[2].cumulativeDeductibleExpenses).toBe(0);
@@ -861,7 +888,7 @@ describe("buildAnnualizedInput — cumulative periods", () => {
       mileage: [mileage("feb", "2026-02-10", 100), mileage("jul", "2026-07-10", 100)],
       homeOffice: [homeOffice("ho", "2026-01-01", null, 150)],
     });
-    const ann = buildAnnualizedInput(b, 2026);
+    const ann = periodsFor(b, 2026);
     // Q1 (to Mar 31): mileage 100 × $0.725 = $72.50
     //   home office (Pub 587 months) Jan–Mar 3 × 150 / 12 = 37.5 sq ft × $5 = $187.50
     //   → $260.00 (no direct expenses)

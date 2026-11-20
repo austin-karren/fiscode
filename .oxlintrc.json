@@ -27,5 +27,30 @@
     "**/routeTree.gen.ts",
     "**/*.d.ts",
     "**/_generated/**"
+  ],
+  "overrides": [
+    {
+      "files": ["packages/tax/src/**/*.ts"],
+      "rules": {
+        "typescript/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@fiscode/csv",
+                "allowTypeImports": true,
+                "message": "@fiscode/tax may only `import type` from @fiscode/csv: the tax engine reads a Bundle but must not load the CSV layer."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/tax/src/**/*.test.ts"],
+      "rules": {
+        "typescript/no-restricted-imports": "off"
+      }
+    }
   ]
 }

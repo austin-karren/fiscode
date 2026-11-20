@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { exampleBundle, type Bundle } from "@fiscode/csv";
-import { estimateYear } from "@fiscode/tax";
-import { buildAnnualizedInput, buildTaxInput } from "./tax-input.ts";
+import { estimateBundleYear } from "@fiscode/tax";
 
 // DF-06: the quarterly plan follows Form 2210. The four required installments
 // add up to the year's required annual payment (line 9, the safe-harbor
@@ -9,11 +8,7 @@ import { buildAnnualizedInput, buildTaxInput } from "./tax-input.ts";
 // Demo data only.
 
 const plan = (b: Bundle, method: "even" | "annualized") =>
-  estimateYear({
-    entity: "sole_prop",
-    method,
-    input: method === "annualized" ? buildAnnualizedInput(b, 2026) : buildTaxInput(b, 2026),
-  });
+  estimateBundleYear({ ...b, profile: { ...b.profile!, quarterlyMethod: method } }, 2026).result;
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 

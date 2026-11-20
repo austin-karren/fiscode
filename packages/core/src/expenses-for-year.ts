@@ -1,3 +1,5 @@
+import { countedInYear } from "./year-inclusion.ts";
+
 /** The fields of an expense that decide whether it counts toward a tax year. */
 export type ExpenseForYear = {
   date: string;
@@ -109,10 +111,4 @@ export const expensesCountedForYear = <T extends ExpenseForYear>(
   expenses: readonly T[],
   year: number,
   seStartDate: string | null | undefined,
-): T[] => {
-  const yearPrefix = String(year);
-  const floor = seStartDate || `${yearPrefix}-01-01`;
-  return expenses.filter(
-    (e) => e.deletedAt === null && e.date.slice(0, 4) === yearPrefix && e.date >= floor,
-  );
-};
+): T[] => countedInYear(expenses, year, seStartDate);

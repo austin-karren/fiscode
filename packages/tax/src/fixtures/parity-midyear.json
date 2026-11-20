@@ -1,0 +1,190 @@
+{
+  "annualized": {
+    "estimate": {
+      "agi": 4542511,
+      "federal": {
+        "federalIncomeTax": 131401,
+        "qbiDeduction": 8502,
+        "taxableIncome": 1314009
+      },
+      "federalLiability": 137864,
+      "federalWithholding": 450000,
+      "netProfit": 45743,
+      "remainingOwed": 0,
+      "se": {
+        "additionalMedicareTax": 0,
+        "halfSeTaxDeduction": 3232,
+        "medicareTax": 1225,
+        "netSeEarnings": 42244,
+        "regularSeTax": 6463,
+        "socialSecurityTax": 5238,
+        "totalSeTax": 6463
+      },
+      "selfEmployedHealthInsurance": 0,
+      "spouseWithholding": 630000,
+      "state": {
+        "rate": 0.0445,
+        "stateIncomeTax": 19385,
+        "taxableIncome": 4542511,
+        "taxpayerCredit": 182757
+      },
+      "stateWithholding": 180000,
+      "totalLiability": 157249,
+      "year": 2026
+    },
+    "quarterly": {
+      "method": "annualized",
+      "noInstallmentsRequired": true,
+      "payments": [
+        {
+          "amount": 0,
+          "dueDate": "2026-04-15",
+          "periodEnd": "2026-03-31",
+          "periodStart": "2026-01-01",
+          "quarter": 1,
+          "requiredInstallment": 0
+        },
+        {
+          "amount": 0,
+          "dueDate": "2026-06-15",
+          "periodEnd": "2026-05-31",
+          "periodStart": "2026-04-01",
+          "quarter": 2,
+          "requiredInstallment": 0
+        },
+        {
+          "amount": 0,
+          "dueDate": "2026-09-15",
+          "periodEnd": "2026-08-31",
+          "periodStart": "2026-06-01",
+          "quarter": 3,
+          "requiredInstallment": 0
+        },
+        {
+          "amount": 0,
+          "dueDate": "2027-01-15",
+          "periodEnd": "2026-12-31",
+          "periodStart": "2026-09-01",
+          "quarter": 4,
+          "requiredInstallment": 0
+        }
+      ]
+    },
+    "safeHarbor": {
+      "currentYearTarget": 124078,
+      "firstYear": true,
+      "floor": 124078
+    },
+    "statePrepayment": {
+      "basis": "currentYear90",
+      "dueDate": "2027-04-15",
+      "minimum": 0,
+      "state": "UT"
+    }
+  },
+  "derived": {
+    "activeEntityType": "sole_prop",
+    "directExpenses": 532333,
+    "excludedBeforeSeStart": {
+      "expense": 2,
+      "income": 2,
+      "mileage": 1
+    },
+    "gross1099": 625000,
+    "homeOfficeAreaRejected": 0,
+    "homeOfficeCarryover": 0,
+    "homeOfficeDeduction": 37500,
+    "homeOfficeLost": 0,
+    "mileageDeduction": 9424,
+    "seStartDate": "2026-07-01",
+    "selfEmployedHealthInsurance": 0,
+    "startupCosts": {
+      "deductedThisYear": 507333,
+      "total": 720000
+    },
+    "totalDeductibleExpenses": 579257
+  },
+  "even": {
+    "estimate": {
+      "agi": 4542511,
+      "federal": {
+        "federalIncomeTax": 131401,
+        "qbiDeduction": 8502,
+        "taxableIncome": 1314009
+      },
+      "federalLiability": 137864,
+      "federalWithholding": 450000,
+      "netProfit": 45743,
+      "remainingOwed": 0,
+      "se": {
+        "additionalMedicareTax": 0,
+        "halfSeTaxDeduction": 3232,
+        "medicareTax": 1225,
+        "netSeEarnings": 42244,
+        "regularSeTax": 6463,
+        "socialSecurityTax": 5238,
+        "totalSeTax": 6463
+      },
+      "selfEmployedHealthInsurance": 0,
+      "spouseWithholding": 630000,
+      "state": {
+        "rate": 0.0445,
+        "stateIncomeTax": 19385,
+        "taxableIncome": 4542511,
+        "taxpayerCredit": 182757
+      },
+      "stateWithholding": 180000,
+      "totalLiability": 157249,
+      "year": 2026
+    },
+    "quarterly": {
+      "method": "even",
+      "noInstallmentsRequired": true,
+      "payments": [
+        {
+          "amount": 0,
+          "dueDate": "2026-04-15",
+          "periodEnd": "2026-03-31",
+          "periodStart": "2026-01-01",
+          "quarter": 1,
+          "requiredInstallment": 0
+        },
+        {
+          "amount": 0,
+          "dueDate": "2026-06-15",
+          "periodEnd": "2026-05-31",
+          "periodStart": "2026-04-01",
+          "quarter": 2,
+          "requiredInstallment": 0
+        },
+        {
+          "amount": 0,
+          "dueDate": "2026-09-15",
+          "periodEnd": "2026-08-31",
+          "periodStart": "2026-06-01",
+          "quarter": 3,
+          "requiredInstallment": 0
+        },
+        {
+          "amount": 0,
+          "dueDate": "2027-01-15",
+          "periodEnd": "2026-12-31",
+          "periodStart": "2026-09-01",
+          "quarter": 4,
+          "requiredInstallment": 0
+        }
+      ]
+    },
+    "safeHarbor": {
+      "currentYearTarget": 124078,
+      "firstYear": true,
+      "floor": 124078
+    },
+    "statePrepayment": {
+      "basis": "currentYear90",
+      "dueDate": "2027-04-15",
+      "minimum": 0,
+      "state": "UT"
+    }
+  }
+}

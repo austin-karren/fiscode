@@ -22,6 +22,11 @@ describe("expenseTotalsByCategory", () => {
     });
   });
 
+  it("leaves a §195 startup cost out of the categories (it has its own line)", () => {
+    const startup = { ...expense("2025-12-15", "software_subs", 900_00), startupExpense: true };
+    expect(expenseTotalsByCategory([startup], 2026, "2026-02-01")).toEqual({});
+  });
+
   it("leaves out an expense dated before the SE start date, as Direct expenses does", () => {
     const rows = [
       expense("2026-02-10", "software_subs", 4000),

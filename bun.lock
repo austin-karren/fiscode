@@ -143,6 +143,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@fiscode/core": "workspace:*",
+        "@fiscode/csv": "workspace:*",
         "zod": "catalog:",
       },
       "devDependencies": {

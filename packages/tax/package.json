@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@fiscode/core": "workspace:*",
+    "@fiscode/csv": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

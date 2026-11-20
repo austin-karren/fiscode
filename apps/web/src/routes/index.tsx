@@ -2,7 +2,13 @@ import { createFileRoute, Link, redirect, useLoaderData } from "@tanstack/react-
 import { Card, CardContent, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
 import { buildBundle, profileRepo } from "@fiscode/db";
-import { estimateYear, getYearConfig, nextDueQuarter, recommendedPrepDate } from "@fiscode/tax";
+import {
+  estimateBundleYear,
+  type DerivedYear,
+  getYearConfig,
+  nextDueQuarter,
+  recommendedPrepDate,
+} from "@fiscode/tax";
 import {
   FILING_STATUS_LABELS,
   formatUSD,
@@ -14,7 +20,7 @@ import {
 import { Badge } from "@fiscode/ui/components/badge";
 import { CircleAlert } from "lucide-react";
 
-import { buildAnnualizedInput, buildTaxInput, deriveYear } from "../lib/tax-input";
+import { EntityUnsupportedAlert } from "../components/entity-unsupported-alert";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { Page } from "../components/page";
 import { ExportCard } from "../components/export-card";
@@ -54,20 +60,13 @@ export const Route = createFileRoute("/")({
     const bundle = await buildBundle();
     const profile = bundle.profile!;
     const year = yearOf(todayIso());
-    const annInput = buildAnnualizedInput(bundle, year);
-    const taxInput = buildTaxInput(bundle, year);
-    const method = profile.quarterlyMethod === "annualized" ? "annualized" : "even";
-    const result = estimateYear({
-      entity: "sole_prop", // todo: resolve from active entity
-      method,
-      input: method === "annualized" ? annInput : taxInput,
-    });
+    const { result, derived } = estimateBundleYear(bundle, year);
     return {
       bundle,
       profile,
       year,
       result,
-      derived: deriveYear(bundle, year),
+      derived,
       hasExact: getYearConfig(year).year === year,
     };
   },
@@ -99,6 +98,7 @@ function Dashboard() {
         </Alert>
       ) : null}
 
+      <EntityUnsupportedAlert derived={derived} />
       <ExcludedBeforeSeAlert derived={derived} />
       <OfficeAreaAlert rejected={derived.homeOfficeAreaRejected} />
 
@@ -369,7 +369,7 @@ function OfficeAreaAlert({ rejected }: { rejected: number }) {
   );
 }
 
-function ExcludedBeforeSeAlert({ derived }: { derived: ReturnType<typeof deriveYear> }) {
+function ExcludedBeforeSeAlert({ derived }: { derived: DerivedYear }) {
   const { income, expense, mileage } = derived.excludedBeforeSeStart;
   const total = income + expense + mileage;
   if (total === 0) return null;
