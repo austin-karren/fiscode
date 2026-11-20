@@ -239,7 +239,19 @@ function YearEndPage() {
                 <td className="py-1 text-right tabular-nums">{formatUSD(cents(total))}</td>
               </tr>
             ))}
-            {Object.keys(totalsByCategory).length === 0 ? (
+            {derived.startupCosts.total > 0 ? (
+              <tr className="break-inside-avoid border-b border-border/40 last:border-b-0">
+                <td className="py-1">
+                  Startup costs (Section 195): deducted this year, of{" "}
+                  {formatUSD(derived.startupCosts.total)} paid before the business began. The rest
+                  is amortized over 180 months.
+                </td>
+                <td className="py-1 text-right tabular-nums">
+                  {formatUSD(derived.startupCosts.deductedThisYear)}
+                </td>
+              </tr>
+            ) : null}
+            {Object.keys(totalsByCategory).length === 0 && derived.startupCosts.total === 0 ? (
               <tr>
                 <td className="py-1 text-muted-foreground" colSpan={2}>
                   No expenses for {year}.
