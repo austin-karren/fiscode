@@ -14,6 +14,7 @@ export function FieldCheckbox({
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
 } & FieldControlProps) {
   return (
     <Checkbox

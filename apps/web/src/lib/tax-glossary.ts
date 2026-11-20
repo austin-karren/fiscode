@@ -40,6 +40,8 @@ export const GLOSSARY = {
     "Non-W-2 self-employment income. Subject to SE tax and eligible for QBI; not subject to federal withholding.",
   section179:
     "Section 179 of the IRC: fully expense qualifying business equipment in the year of purchase instead of depreciating it over years. Flag now; pick the actual election with your accountant at year-end.",
+  placedInService:
+    "For equipment you owned before using it for the business, the basis is the lower of its value then or what you paid (Pub 946).",
   expenseCategory:
     "Category drives how the expense lands in the year-end packet. Some categories (meals, home office, vehicle) have IRS-specific treatment.",
 

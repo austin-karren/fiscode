@@ -16,6 +16,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   useRouter: () => ({ invalidate: vi.fn() }),
 }));
 
+import { GLOSSARY } from "../lib/tax-glossary";
 import { Route } from "./expenses";
 
 // What the loader returns; a test may give it rows.
@@ -136,5 +137,65 @@ describe("adding a run of expenses", () => {
     expect(card.getByLabelText("Date")).toHaveTextContent("Mar 5, 2026");
     expect(card.getByRole("combobox", { name: "Category" })).toHaveTextContent("Travel");
     await waitFor(() => expect(card.getByLabelText("Amount")).toHaveFocus());
+  });
+
+  it("links the basis hint (Pub 946) to Placed in service on the add form", () => {
+    // Demo: Duplicate an equipment row, so the add form shows the field.
+    loaded.expenses = [
+      { ...row, id: "ex_demo_eq", category: "equipment", placedInServiceDate: null },
+    ];
+    render(<ExpensesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    const field = within(addCard()).getByRole("button", { name: /Placed in service/ });
+    expect(field).toHaveAccessibleDescription(GLOSSARY.placedInService);
+  });
+
+  it("labels Placed in service as optional, and turns the startup box off for Equipment with the reason linked", () => {
+    loaded.expenses = [
+      { ...row, id: "ex_demo_eq", category: "equipment", placedInServiceDate: null },
+    ];
+    render(<ExpensesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    const card = within(addCard());
+    const field = card.getByRole("button", { name: /Placed in service/ });
+    expect(field.closest('[data-slot="form-item"]')).toHaveTextContent(
+      "Placed in service (optional)",
+    );
+    const box = card.getByRole("checkbox", { name: /Startup expense/ });
+    expect(box).toHaveAttribute("aria-disabled", "true");
+    expect(box).toHaveAccessibleDescription("Equipment uses its placed-in-service date instead.");
+  });
+
+  it("leaves the startup box on, with no reason, for other categories", () => {
+    render(<ExpensesPage />);
+    const box = within(addCard()).getByRole("checkbox", { name: /Startup expense/ });
+    expect(box).not.toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.queryByText("Equipment uses its placed-in-service date instead."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("clears a startup tick when Category becomes Equipment, so it is not saved disabled", async () => {
+    render(<ExpensesPage />);
+    const card = within(addCard());
+    const box = () => card.getByRole("checkbox", { name: /Startup expense/ });
+    fireEvent.click(box());
+    expect(box()).toBeChecked();
+
+    // A Base UI Select with a value takes the pick by keyboard in jsdom.
+    const category = card.getByRole("combobox", { name: "Category" });
+    category.focus();
+    fireEvent.keyDown(category, { key: "ArrowDown" });
+    const equipment = await screen.findByRole("option", { name: "Equipment" });
+    equipment.focus();
+    fireEvent.keyDown(equipment, { key: "Enter" });
+    await waitFor(() => expect(category).toHaveTextContent("Equipment"));
+
+    expect(box()).not.toBeChecked();
+    expect(box()).toHaveAttribute("aria-disabled", "true");
+    // The reason is the box's description, not part of its name.
+    expect(box()).toHaveAccessibleName(
+      "Startup expense (Section 195) Bought in anticipation of 1099 work — count it in the year even if dated before your SE start date.",
+    );
   });
 });
