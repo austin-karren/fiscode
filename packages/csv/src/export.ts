@@ -48,6 +48,7 @@ const bundleToRows = (bundle: Bundle): Record<string, string>[] => {
         prior_year_total_tax_cents: num(p.priorYearTotalTaxCents),
         prior_year_agi_cents: num(p.priorYearAgiCents),
         prior_year_state_tax_cents: num(p.priorYearStateTaxCents),
+        prior_year_figures_year: num(p.priorYearFiguresYear),
         created_at: p.createdAt,
         updated_at: p.updatedAt,
       }),

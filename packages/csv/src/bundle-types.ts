@@ -23,6 +23,8 @@ export type ProfileRow = {
   priorYearTotalTaxCents: number | null;
   priorYearAgiCents: number | null;
   priorYearStateTaxCents: number | null;
+  /** The tax year of those figures; they count only for the estimate of the year after. */
+  priorYearFiguresYear: number | null;
   createdAt: string;
   updatedAt: string;
 };

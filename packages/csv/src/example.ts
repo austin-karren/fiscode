@@ -32,6 +32,7 @@ export const exampleBundle = (): Bundle => ({
     priorYearTotalTaxCents: null,
     priorYearAgiCents: null,
     priorYearStateTaxCents: null,
+    priorYearFiguresYear: null,
     createdAt: EXAMPLE_FIXED_TIMESTAMP,
     updatedAt: EXAMPLE_FIXED_TIMESTAMP,
   },

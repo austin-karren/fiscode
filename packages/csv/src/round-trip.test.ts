@@ -19,6 +19,7 @@ const fullBundle = (): Bundle => ({
     priorYearTotalTaxCents: null,
     priorYearAgiCents: null,
     priorYearStateTaxCents: null,
+    priorYearFiguresYear: null,
     createdAt: FIXED_TIMESTAMP,
     updatedAt: FIXED_TIMESTAMP,
   },
@@ -294,16 +295,20 @@ describe("CSV round-trip", () => {
       priorYearTotalTaxCents: 1_234_56,
       priorYearAgiCents: 150_000_01,
       priorYearStateTaxCents: 0,
+      priorYearFiguresYear: 2025,
     };
     const csv = exportBundle(bundle, { scope: "full" });
-    expect(csv).toContain("prior_year_total_tax,prior_year_agi,prior_year_state_tax");
-    expect(csv).toContain("1234.56,150000.01,0.00");
+    expect(csv).toContain(
+      "prior_year_total_tax,prior_year_agi,prior_year_state_tax,prior_year_figures_year",
+    );
+    expect(csv).toContain("1234.56,150000.01,0.00,2025");
     const { bundle: round, validationErrors } = parseCsv(csv);
     expect(validationErrors).toEqual([]);
     expect(round.profile).toMatchObject({
       priorYearTotalTaxCents: 1_234_56,
       priorYearAgiCents: 150_000_01,
       priorYearStateTaxCents: 0,
+      priorYearFiguresYear: 2025,
     });
     expect(exportBundle(round, { scope: "full" })).toBe(csv);
   });
@@ -323,6 +328,7 @@ describe("CSV round-trip", () => {
       priorYearTotalTaxCents: null,
       priorYearAgiCents: null,
       priorYearStateTaxCents: null,
+      priorYearFiguresYear: null,
     });
   });
 

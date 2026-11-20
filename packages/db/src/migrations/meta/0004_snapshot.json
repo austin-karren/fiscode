@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4eea1bac-c638-4fa9-8337-a3f58a2e2a40",
+  "id": "881a7828-b227-4785-919c-8dfecb92dae7",
   "prevId": "b4a0b32a-9b25-4203-866f-79864079d68c",
   "tables": {
     "profile": {
@@ -91,6 +91,13 @@
         },
         "prior_year_state_tax_cents": {
           "name": "prior_year_state_tax_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "prior_year_figures_year": {
+          "name": "prior_year_figures_year",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,

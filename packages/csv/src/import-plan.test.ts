@@ -18,6 +18,7 @@ const profile = () => ({
   priorYearTotalTaxCents: null,
   priorYearAgiCents: null,
   priorYearStateTaxCents: null,
+  priorYearFiguresYear: null,
   createdAt: FIXED,
   updatedAt: FIXED,
 });

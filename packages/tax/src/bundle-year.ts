@@ -392,6 +392,13 @@ export type DerivedYear = {
   entityUnsupported: boolean;
   seStartDate: string;
   excludedBeforeSeStart: ExcludedBeforeSeStart;
+  /**
+   * Whether last year's return on the profile counts for this year: it does only when its
+   * figures are from `year - 1` (Pub 505: "the total tax shown on your 2025 return" for 2026).
+   * False when nothing is entered or the figures are from another year; the dashboard then asks
+   * for the `year - 1` return.
+   */
+  priorYearFiguresApplied: boolean;
 };
 
 const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
@@ -450,8 +457,12 @@ const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
     entityUnsupported: entityType === "s_corp",
     seStartDate,
     excludedBeforeSeStart: countExcludedBeforeSeStart(bundle, year, seStartDate),
+    priorYearFiguresApplied: priorYearFiguresApply(bundle.profile, year),
   };
 };
+
+const priorYearFiguresApply = (profile: Bundle["profile"], year: number): boolean =>
+  profile?.priorYearFiguresYear === year - 1;
 
 const centsOrUndefined = (v: number | null | undefined): Cents | undefined =>
   v === null || v === undefined ? undefined : cents(v);
@@ -473,11 +484,15 @@ const buildTaxInput = (bundle: Bundle, year: number): TaxInput => {
     spouseW2Wages: cents(spouse?.annualW2WagesCents ?? 0),
     spouseFederalWithholding: cents(spouse?.annualFederalWithholdingCents ?? 0),
     spouseStateWithholding: cents(spouse?.annualStateWithholdingCents ?? 0),
-    // Last year's return as entered on the profile; null means not entered (the
-    // first-year fallback). $0 is a real value.
-    priorYearTotalTax: centsOrUndefined(profile.priorYearTotalTaxCents),
-    priorYearAgi: centsOrUndefined(profile.priorYearAgiCents),
-    priorYearStateTax: centsOrUndefined(profile.priorYearStateTaxCents),
+    // Last year's return as entered on the profile, only when it is the return for
+    // `year - 1`; otherwise (or null) the first-year fallback. $0 is a real value.
+    ...(priorYearFiguresApply(profile, year)
+      ? {
+          priorYearTotalTax: centsOrUndefined(profile.priorYearTotalTaxCents),
+          priorYearAgi: centsOrUndefined(profile.priorYearAgiCents),
+          priorYearStateTax: centsOrUndefined(profile.priorYearStateTaxCents),
+        }
+      : { priorYearTotalTax: undefined, priorYearAgi: undefined, priorYearStateTax: undefined }),
   };
 };
 

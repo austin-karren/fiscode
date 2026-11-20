@@ -127,6 +127,7 @@ export const SECTIONS: readonly Section[] = [
       money("prior_year_total_tax_cents"),
       money("prior_year_agi_cents"),
       money("prior_year_state_tax_cents"),
+      int("prior_year_figures_year"),
       text("id"),
       text("created_at"),
       text("updated_at"),

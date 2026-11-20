@@ -182,6 +182,7 @@ describe("profileRepo — singleton semantics", () => {
       priorYearTotalTaxCents: null,
       priorYearAgiCents: null,
       priorYearStateTaxCents: null,
+      priorYearFiguresYear: null,
     });
     expect(inserted.filingStatus).toBe("mfj");
     expect(inserted.id).toBe("profile");
@@ -199,6 +200,7 @@ describe("profileRepo — singleton semantics", () => {
       priorYearTotalTaxCents: null,
       priorYearAgiCents: null,
       priorYearStateTaxCents: null,
+      priorYearFiguresYear: null,
     });
     expect(updated.filingStatus).toBe("single");
     expect(updated.state).toBe("CA");
@@ -222,6 +224,7 @@ describe("profileRepo.revertTo", () => {
     priorYearTotalTaxCents: null,
     priorYearAgiCents: null,
     priorYearStateTaxCents: null,
+    priorYearFiguresYear: null,
   } as const;
 
   it("restores the snapshot and writes one revert history entry", async () => {

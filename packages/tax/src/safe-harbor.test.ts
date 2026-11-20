@@ -60,9 +60,12 @@ describe("computeSafeHarbor", () => {
     expect(r.multiplierUsed).toBe(1.0);
   });
 
-  it("undefined priorAgi (but defined priorTax) defaults to 100% multiplier", () => {
+  it("undefined priorAgi (but defined priorTax) uses 110%: the AGI might be over the threshold", () => {
+    // Review #72 r1 ruling 2: conservative, and the reason says why.
     const r = computeSafeHarbor(fakeEstimate(30_000), dollars(20_000), undefined, cfg);
-    expect(r.multiplierUsed).toBe(1.0);
+    expect(r.multiplierUsed).toBe(1.1);
+    expect(r.multiplierReason).toBe("agi_not_entered");
+    expect(r.priorYearTarget).toBe(dollars(22_000));
   });
 
   it("floor picks the lower target (current-year wins when prior is huge)", () => {

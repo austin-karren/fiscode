@@ -68,6 +68,7 @@ export const csvRowSchema = z.object({
   prior_year_total_tax_cents: optInt,
   prior_year_agi_cents: optInt,
   prior_year_state_tax_cents: optInt,
+  prior_year_figures_year: optInt,
 
   // entity / spouse / home_office shared dated range
   start_date: optStr,
@@ -157,6 +158,7 @@ export const CSV_COLUMNS: ReadonlyArray<keyof CsvRow> = [
   "prior_year_total_tax_cents",
   "prior_year_agi_cents",
   "prior_year_state_tax_cents",
+  "prior_year_figures_year",
   "start_date",
   "end_date",
   "type",

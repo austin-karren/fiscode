@@ -16,6 +16,8 @@ import {
   EntityPeriodError,
   cents,
   formatUSD,
+  todayIso,
+  yearOf,
   EntityOverlapError,
   canMoveEntityStart,
   ENTITY_TYPE_LABELS,
@@ -149,6 +151,31 @@ function ProfileFormPanel({
   // Spouse income only enters a joint return. Read from the saved profile, so
   // the card follows what Save profile stored, not an unsaved pick.
   const filesJointly = profile.filingStatus === "mfj";
+  // Last year's return is the return for the year before the one being estimated (Pub 505:
+  // "the total tax shown on your 2025 return" for 2026). Saved figures carry that year, and
+  // the estimate uses them only for the year after it.
+  const priorYear = yearOf(todayIso()) - 1;
+  const figuresStale =
+    profile.priorYearFiguresYear !== null && profile.priorYearFiguresYear !== priorYear;
+  const priorYearFiguresToSave = (parsed: {
+    priorYearTotalTax: number | null;
+    priorYearAgi: number | null;
+    priorYearStateTax: number | null;
+  }) => {
+    const entered =
+      parsed.priorYearTotalTax !== null ||
+      parsed.priorYearAgi !== null ||
+      parsed.priorYearStateTax !== null;
+    // Left blank under a new year's labels: keep the older figures as they are (they no longer
+    // count, but they're the user's data).
+    if (!entered && figuresStale) return {};
+    return {
+      priorYearTotalTaxCents: parsed.priorYearTotalTax,
+      priorYearAgiCents: parsed.priorYearAgi,
+      priorYearStateTaxCents: parsed.priorYearStateTax,
+      priorYearFiguresYear: entered ? priorYear : null,
+    };
+  };
   // A stored amount as the form shows it: blank when not entered, so $0 stays distinct.
   const amountInput = (v: number | null) =>
     v === null ? "" : formatUSD(cents(v)).replace(/[$,]/g, "");
@@ -165,9 +192,10 @@ function ProfileFormPanel({
       prepLeadDays: String(profile.prepLeadDays),
       tracksRoth: profile.tracksRoth,
       usesRetirement: profile.usesRetirement,
-      priorYearTotalTax: amountInput(profile.priorYearTotalTaxCents),
-      priorYearAgi: amountInput(profile.priorYearAgiCents),
-      priorYearStateTax: amountInput(profile.priorYearStateTaxCents),
+      // Figures from another year's return don't belong under this year's labels: start blank.
+      priorYearTotalTax: figuresStale ? "" : amountInput(profile.priorYearTotalTaxCents),
+      priorYearAgi: figuresStale ? "" : amountInput(profile.priorYearAgiCents),
+      priorYearStateTax: figuresStale ? "" : amountInput(profile.priorYearStateTaxCents),
     },
     // Cast because zod's optional Date doesn't line up with TanStack Form's
     // exactOptional handling.
@@ -187,9 +215,7 @@ function ProfileFormPanel({
         usesRetirement: parsed.usesRetirement,
         quarterlyMethod: parsed.quarterlyMethod,
         prepLeadDays: parsed.prepLeadDays,
-        priorYearTotalTaxCents: parsed.priorYearTotalTax,
-        priorYearAgiCents: parsed.priorYearAgi,
-        priorYearStateTaxCents: parsed.priorYearStateTax,
+        ...priorYearFiguresToSave(parsed),
       });
       const newStart = dateToIso(value.seStartDate!);
       if (moveEntityStart && entityStartToMove(newStart) && !entityMoveBlocked(newStart)) {
@@ -503,7 +529,7 @@ function ProfileFormPanel({
             >
               {(field) => (
                 <FormItem>
-                  <FormLabel>Last year's total tax</FormLabel>
+                  <FormLabel>Your {priorYear} total tax</FormLabel>
                   <FormControl>
                     <Input
                       inputMode="decimal"
@@ -514,7 +540,8 @@ function ProfileFormPanel({
                     />
                   </FormControl>
                   <FormDescription>
-                    Form 1040 line 24. Leave blank in your first year.
+                    Your {priorYear} Form 1040 line 24, minus refundable credits (lines 27a–32).
+                    Leave blank if {priorYear} wasn't a full 12-month return, or if you didn't file.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -528,7 +555,7 @@ function ProfileFormPanel({
             >
               {(field) => (
                 <FormItem>
-                  <FormLabel>Last year's AGI</FormLabel>
+                  <FormLabel>Your {priorYear} AGI</FormLabel>
                   <FormControl>
                     <Input
                       inputMode="decimal"
@@ -538,7 +565,10 @@ function ProfileFormPanel({
                       placeholder="Not entered"
                     />
                   </FormControl>
-                  <FormDescription>Form 1040 line 11b.</FormDescription>
+                  <FormDescription>
+                    Your {priorYear} Form 1040 line 11b. Left blank, the estimate assumes it was
+                    over $150,000 ($75,000 if married filing separately) and uses 110%.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -551,7 +581,7 @@ function ProfileFormPanel({
             >
               {(field) => (
                 <FormItem>
-                  <FormLabel>Last year's Utah tax</FormLabel>
+                  <FormLabel>Your {priorYear} Utah tax</FormLabel>
                   <FormControl>
                     <Input
                       inputMode="decimal"
@@ -562,7 +592,7 @@ function ProfileFormPanel({
                     />
                   </FormControl>
                   <FormDescription>
-                    Your Utah tax liability last year (TC-546 line 4).
+                    Your Utah tax liability for {priorYear} (TC-546 line 4).
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

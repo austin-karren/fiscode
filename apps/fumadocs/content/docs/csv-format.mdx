@@ -214,7 +214,7 @@ v1 files also had an `# exported:` time line. It is read and ignored.
 The `schema:` marker is used for one thing: a file marked `v1` never carried the `'` formula
 guard, so its text is kept exactly as written.
 
-Exports are always written as v4. Schema v4 adds three profile columns, `prior_year_total_tax`, `prior_year_agi` and `prior_year_state_tax`; schema v3 added `placed_in_service_date` on expenses. v1, v2 and v3 files still import, with the newer columns empty. An app version older than v4 refuses a v4 file rather than read it wrongly.
+Exports are always written as v4. Schema v4 adds four profile columns, `prior_year_total_tax`, `prior_year_agi`, `prior_year_state_tax` and `prior_year_figures_year`; schema v3 added `placed_in_service_date` on expenses. v1, v2 and v3 files still import, with the newer columns empty. An app version older than v4 refuses a v4 file rather than read it wrongly.
 
 ## Columns by record type
 
@@ -276,6 +276,11 @@ Single row. Drives the tax engine's filing status, state, and feature flags.
     prior_year_state_tax: {
       description: "Last year's Utah tax liability (TC-546 line 4). Added in schema v4.",
       type: "money",
+    },
+    prior_year_figures_year: {
+      description:
+        "The tax year the three prior_year_ figures are from; they count only for the estimate of the next year. Empty = not entered (figures without a year are ignored). Added in schema v4.",
+      type: "whole number",
     },
   }}
 />

@@ -365,8 +365,9 @@ describe("layout a person can read", () => {
       "updated_at",
       "deleted_at",
     ]);
-    // No table drags along another record type's columns.
-    expect(Math.max(...header.map((h) => h.length))).toBeLessThanOrEqual(17);
+    // No table drags along another record type's columns. The widest is the profile (18 since
+    // v4 added last year's return and its year).
+    expect(Math.max(...header.map((h) => h.length))).toBeLessThanOrEqual(18);
   });
 
   it("omits a section that has no rows", () => {
@@ -793,6 +794,7 @@ describe("no stored field is left out", () => {
         priorYearTotalTaxCents: 9_876_54,
         priorYearAgiCents: 160_000_00,
         priorYearStateTaxCents: 2_345_67,
+        priorYearFiguresYear: 2025,
         createdAt: stamp(),
         updatedAt: stamp(),
       },

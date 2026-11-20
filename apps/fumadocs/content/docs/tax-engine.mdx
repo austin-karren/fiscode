@@ -248,15 +248,21 @@ The plan follows Form 2210. The lines used read the same in the
   so in one sentence.
 - The year target is the required annual payment (line 9): the smaller of 90% of this year's
   federal tax and the prior-year amount, which is the safe-harbor floor. The prior-year amount
-  comes from last year's total tax and AGI on the Profile.
+  comes from the Profile: the previous year's total tax and AGI, saved with the year they are
+  from. They count only for the year after it, so a 2025 return sets the 2026 floor and is
+  ignored in 2027; the dashboard then asks for the 2026 return.
   [Pub 505](https://www.irs.gov/publications/p505): "100% of the total tax shown on your 2025
   return. Your 2025 tax return must cover all 12 months." "If your AGI for 2025 was more than
   $150,000 ($75,000 if your filing status for 2026 is Married filing a separate return)",
-  "substitute 110% for 100%". The total tax "is the amount on Form 1040 or 1040–SR, line 24"
-  (less certain refundable credits) and AGI "is the amount shown on Form 1040 or 1040-SR, line
-  11b". Left blank (a first year, or a short prior year: "Your 2024 tax return must cover a
-  12-month period", [Form 2210 instructions](https://www.irs.gov/instructions/i2210)), the
-  target is 90% of this year's. $0 is a value: a year with no tax gives a $0 floor.
+  "substitute 110% for 100%". The total tax "is the amount on Form 1040 or 1040–SR, line 24
+  reduced by" refundable credits (lines 27a–32), and AGI "is the amount shown on Form 1040 or
+  1040-SR, line 11b". With the tax entered and the AGI blank, fiscode uses 110%, which is safe
+  either way, and says why. Left blank (a first year, no return filed, or a short prior year:
+  "If you didn't file a return for 2024 or your 2024 tax year was less than 12 months, don't
+  complete line 8", [Form 2210 instructions](https://www.irs.gov/instructions/i2210)), the target
+  is 90% of this year's. $0 is a value: a year with no tax gives a $0 floor.
+- Not modelled: a joint return last year and separate returns this year. The instructions say
+  "your 2024 tax is your share of the tax on the joint return"; enter your share yourself.
 - Regular method: each required installment is 25% of the target (line 10).
 - Annualized method (Schedule AI): each period's income, mileage, home office and other
   expenses through that period are annualized and the year's tax figured on them. Each
@@ -283,8 +289,8 @@ return's due date: the lesser of 90% of this year's Utah tax and last year's Uta
 withholding ("If less than zero, a payment is not due at this time"). Unpaid, it costs "2 percent
 of the unpaid tax for each month of the extension period". The return is due the same day as the
 federal one ([Utah Code 59-10-514](https://le.utah.gov/xcode/Title59/Chapter10/59-10-S514.html)),
-April 15. Last year's Utah tax comes from the Profile; left blank, fiscode uses 90% of this
-year's.
+April 15. Last year's Utah tax comes from the Profile, under the same year rule; left blank or
+from another year, fiscode uses 90% of this year's.
 
 Not modelled yet:
 

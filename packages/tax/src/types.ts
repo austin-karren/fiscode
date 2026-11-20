@@ -180,6 +180,11 @@ export type SafeHarborResult = {
   /** The lower of the two targets; meeting this avoids underpayment penalty. */
   floor: Cents;
   multiplierUsed: number | undefined;
+  /**
+   * Why that multiplier: last year's AGI over the threshold (110%), not over it (100%), or not
+   * entered (110%, since it might be over). Undefined in the first-year fallback.
+   */
+  multiplierReason?: "agi_over_threshold" | "agi_not_over_threshold" | "agi_not_entered";
   firstYear: boolean;
 };
 

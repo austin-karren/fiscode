@@ -33,6 +33,7 @@ const makeBundle = (overrides: Partial<Bundle> = {}): Bundle => ({
     priorYearTotalTaxCents: null,
     priorYearAgiCents: null,
     priorYearStateTaxCents: null,
+    priorYearFiguresYear: null,
     createdAt: FIXED,
     updatedAt: FIXED,
   },
@@ -981,13 +982,20 @@ describe("estimateBundleYear annualized input — cumulative periods", () => {
 });
 
 describe("prior-year safe harbor from the profile (Pub 505; Utah TC-546 line 4)", () => {
-  const withPrior = (prior: { tax: number | null; agi: number | null; state: number | null }) =>
+  // Figures from the 2025 return unless a test says otherwise (review #72 r1 ruling 1).
+  const withPrior = (prior: {
+    tax: number | null;
+    agi: number | null;
+    state: number | null;
+    year?: number | null;
+  }) =>
     makeBundle({
       profile: {
         ...makeBundle().profile!,
         priorYearTotalTaxCents: prior.tax,
         priorYearAgiCents: prior.agi,
         priorYearStateTaxCents: prior.state,
+        priorYearFiguresYear: prior.year === undefined ? 2025 : prior.year,
       },
     });
 
@@ -1037,5 +1045,59 @@ describe("prior-year safe harbor from the profile (Pub 505; Utah TC-546 line 4)"
     expect(result.safeHarbor.priorYearTarget).toBe(0);
     expect(result.safeHarbor.floor).toBe(0);
     expect(result.statePrepayment).toMatchObject({ minimum: 0, basis: "priorYear" });
+  });
+
+  it("2025 figures apply to the 2026 estimate, and say so", () => {
+    const { result, derived } = estimateBundleYear(
+      withPrior({ tax: 3_000_00, agi: 90_000_00, state: 500_00, year: 2025 }),
+      2026,
+    );
+    expect(result.safeHarbor.priorYearTarget).toBe(3_000_00);
+    expect(derived.priorYearFiguresApplied).toBe(true);
+  });
+
+  it("2025 figures are ignored for 2027 (federal and Utah): the first-year fallback, flagged", () => {
+    const b = withPrior({ tax: 3_000_00, agi: 90_000_00, state: 0, year: 2025 });
+    const { result, derived, input } = estimateBundleYear(b, 2027);
+    expect(input).toMatchObject({
+      priorYearTotalTax: undefined,
+      priorYearAgi: undefined,
+      priorYearStateTax: undefined,
+    });
+    expect(result.safeHarbor.firstYear).toBe(true);
+    expect(derived.priorYearFiguresApplied).toBe(false);
+  });
+
+  it("figures with no year (a v4 row without one) count as not entered", () => {
+    const { result, derived } = estimateBundleYear(
+      withPrior({ tax: 3_000_00, agi: 90_000_00, state: null, year: null }),
+      2026,
+    );
+    expect(result.safeHarbor.firstYear).toBe(true);
+    expect(derived.priorYearFiguresApplied).toBe(false);
+  });
+
+  it("tax entered, AGI blank: 110% (the conservative rate), with the reason", () => {
+    // Review #72 r1 ruling 2: an unknown AGI might be over $150,000.
+    const { result } = estimateBundleYear(
+      withPrior({ tax: 3_000_00, agi: null, state: null }),
+      2026,
+    );
+    expect(result.safeHarbor.multiplierUsed).toBe(1.1);
+    expect(result.safeHarbor.multiplierReason).toBe("agi_not_entered");
+    expect(result.safeHarbor.priorYearTarget).toBe(3_300_00);
+  });
+
+  it("AGI entered gives the reason too", () => {
+    const over = estimateBundleYear(
+      withPrior({ tax: 3_000_00, agi: 150_000_01, state: null }),
+      2026,
+    );
+    expect(over.result.safeHarbor.multiplierReason).toBe("agi_over_threshold");
+    const under = estimateBundleYear(
+      withPrior({ tax: 3_000_00, agi: 90_000_00, state: null }),
+      2026,
+    );
+    expect(under.result.safeHarbor.multiplierReason).toBe("agi_not_over_threshold");
   });
 });

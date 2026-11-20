@@ -43,7 +43,14 @@ export const computeSafeHarbor = (
     filingStatus === "mfs"
       ? cfg.safeHarbor.priorYearAgiThresholdMfs
       : cfg.safeHarbor.priorYearAgiThreshold;
-  const highIncome = priorYearAgi !== undefined && priorYearAgi > threshold;
+  // An AGI not entered might be over the threshold: use 110%, the rate that is safe either way.
+  const multiplierReason =
+    priorYearAgi === undefined
+      ? "agi_not_entered"
+      : priorYearAgi > threshold
+        ? "agi_over_threshold"
+        : "agi_not_over_threshold";
+  const highIncome = multiplierReason !== "agi_not_over_threshold";
   const multiplier = highIncome
     ? cfg.safeHarbor.priorYearHighIncome
     : cfg.safeHarbor.priorYearDefault;
@@ -54,6 +61,7 @@ export const computeSafeHarbor = (
     priorYearTarget,
     floor,
     multiplierUsed: multiplier,
+    multiplierReason,
     firstYear: false,
   };
 };
