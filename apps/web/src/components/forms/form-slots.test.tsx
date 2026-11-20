@@ -63,6 +63,18 @@ describe("form slots", () => {
     expect(screen.getByText("Demo").closest("label")).not.toHaveTextContent("(optional)");
   });
 
+  it("keeps '(optional)' with the label's last word when the label wraps", () => {
+    render(<Field requirement="optional" />);
+    const label = screen.getByText("(optional)").closest("label")!;
+    // One inline run (not separate flex items); the last word and the
+    // marker share a nowrap span, so they wrap as one.
+    expect(label.children).toHaveLength(1);
+    const unit = screen.getByText("(optional)").parentElement!;
+    expect(unit).toHaveClass("whitespace-nowrap");
+    expect(unit.textContent).toBe("Demo (optional)");
+    expect(screen.getByRole("textbox")).toHaveAccessibleName("Demo (optional)");
+  });
+
   it("says '(optional)' in the label of an optional field, and does not mark it required", () => {
     render(<Field requirement="optional" />);
     expect(screen.getByRole("textbox", { name: "Demo (optional)" })).not.toHaveAttribute(

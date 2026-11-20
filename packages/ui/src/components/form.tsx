@@ -114,14 +114,42 @@ export function FormLabel({ className, children, ...props }: React.ComponentProp
       htmlFor={formItemId}
       {...props}
     >
-      {children}
       {requirement === "optional" ? (
-        <>
-          {" "}
-          <span className="font-normal text-muted-foreground">(optional)</span>
-        </>
-      ) : null}
+        // One run of inline text, not separate flex items (label text and
+        // marker), so a long label wraps as words.
+        <span>
+          <WithOptionalMarker>{children}</WithOptionalMarker>
+        </span>
+      ) : (
+        children
+      )}
     </Label>
+  );
+}
+
+const optionalMarker = <span className="font-normal text-muted-foreground">(optional)</span>;
+
+// "(optional)" wraps as one unit with the label's last word ("Placed in /
+// service (optional)"): both sit in a nowrap span. The space between them is
+// mid-span, not leading, so the accessible name keeps it.
+function WithOptionalMarker({ children }: { children: React.ReactNode }) {
+  if (typeof children !== "string") {
+    return (
+      <>
+        {children} {optionalMarker}
+      </>
+    );
+  }
+  const cut = children.trimEnd().lastIndexOf(" ");
+  const head = children.slice(0, cut + 1);
+  const lastWord = children.slice(cut + 1).trimEnd();
+  return (
+    <>
+      {head}
+      <span className="whitespace-nowrap">
+        {lastWord} {optionalMarker}
+      </span>
+    </>
   );
 }
 
