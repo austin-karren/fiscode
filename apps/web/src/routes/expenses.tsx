@@ -105,7 +105,7 @@ function ExpensesPage() {
         reason: null,
         notes: null,
         flagForSection179: value.flagForSection179,
-        startupExpense: value.startupExpense,
+        startupExpense: value.category === "equipment" ? false : value.startupExpense,
         placedInServiceDate: placedInServiceFor(
           value.category,
           value.date ? dateToIso(value.date) : undefined,
@@ -228,7 +228,12 @@ function ExpensesPage() {
                     <SelectWithLabels
                       value={field.state.value}
                       onBlur={field.handleBlur}
-                      onValueChange={(v) => field.handleChange(v)}
+                      onValueChange={(v) => {
+                        field.handleChange(v);
+                        // §195 excludes equipment: a box ticked under another
+                        // category must not ride along, disabled and unclearable.
+                        if (v === "equipment") form.setFieldValue("startupExpense", false);
+                      }}
                       items={CATEGORIES.map(([c, l]) => ({
                         value: c,
                         label: l,
@@ -310,14 +315,16 @@ function ExpensesPage() {
                               Bought in anticipation of 1099 work — count it in the year even if
                               dated before your SE start date.
                             </FieldDescription>
-                            {isEquipment ? (
-                              <FormDescription className="text-xs">
-                                Equipment uses its placed-in-service date instead.
-                              </FormDescription>
-                            ) : null}
                           </FieldContent>
                         </Field>
                       </FieldLabel>
+                      {/* Outside the label: inside it, it would be read as
+                          part of the box's name as well as its description. */}
+                      {isEquipment ? (
+                        <FormDescription className="text-xs">
+                          Equipment uses its placed-in-service date instead.
+                        </FormDescription>
+                      ) : null}
                       <FormMessage />
                     </FormItem>
                   )}

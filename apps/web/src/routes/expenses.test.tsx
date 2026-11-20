@@ -174,4 +174,28 @@ describe("adding a run of expenses", () => {
       screen.queryByText("Equipment uses its placed-in-service date instead."),
     ).not.toBeInTheDocument();
   });
+
+  it("clears a startup tick when Category becomes Equipment, so it is not saved disabled", async () => {
+    render(<ExpensesPage />);
+    const card = within(addCard());
+    const box = () => card.getByRole("checkbox", { name: /Startup expense/ });
+    fireEvent.click(box());
+    expect(box()).toBeChecked();
+
+    // A Base UI Select with a value takes the pick by keyboard in jsdom.
+    const category = card.getByRole("combobox", { name: "Category" });
+    category.focus();
+    fireEvent.keyDown(category, { key: "ArrowDown" });
+    const equipment = await screen.findByRole("option", { name: "Equipment" });
+    equipment.focus();
+    fireEvent.keyDown(equipment, { key: "Enter" });
+    await waitFor(() => expect(category).toHaveTextContent("Equipment"));
+
+    expect(box()).not.toBeChecked();
+    expect(box()).toHaveAttribute("aria-disabled", "true");
+    // The reason is the box's description, not part of its name.
+    expect(box()).toHaveAccessibleName(
+      "Startup expense (Section 195) Bought in anticipation of 1099 work — count it in the year even if dated before your SE start date.",
+    );
+  });
 });

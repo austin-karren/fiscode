@@ -171,7 +171,12 @@ export function EditExpenseDialog({
                     <SelectWithLabels
                       value={field.state.value}
                       onBlur={field.handleBlur}
-                      onValueChange={(v) => field.handleChange(v)}
+                      onValueChange={(v) => {
+                        field.handleChange(v);
+                        // §195 excludes equipment: a box ticked under another
+                        // category must not ride along, disabled and unclearable.
+                        if (v === "equipment") form.setFieldValue("startupExpense", false);
+                      }}
                       items={categories.map(([c, l]) => ({ value: c, label: l }))}
                     />
                   </FormControl>

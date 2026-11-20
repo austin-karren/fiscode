@@ -114,4 +114,42 @@ describe("edit expense: equipment placed in service", () => {
       screen.queryByText("Equipment uses its placed-in-service date instead."),
     ).not.toBeInTheDocument();
   });
+
+  it("clears the startup tick when the category is changed to Equipment", async () => {
+    render(
+      <EditExpenseDialog
+        expense={{ ...laptop, category: "software_subs", startupExpense: true }}
+        categories={CATEGORIES}
+        onSaved={vi.fn()}
+        seStartDate="2026-02-01"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
+    await screen.findByRole("dialog");
+    const box = () => screen.getByRole("checkbox", { name: /Startup expense/ });
+    expect(box()).toBeChecked();
+
+    // A Base UI Select with a value takes the pick by keyboard in jsdom.
+    const category = screen.getByRole("combobox", { name: "Category" });
+    category.focus();
+    fireEvent.keyDown(category, { key: "ArrowDown" });
+    const equipment = await screen.findByRole("option", { name: "Equipment" });
+    equipment.focus();
+    fireEvent.keyDown(equipment, { key: "Enter" });
+    await waitFor(() => expect(category).toHaveTextContent("Equipment"));
+
+    expect(box()).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(expenseRepo.update).toHaveBeenCalledWith(
+        "ex_demo_laptop",
+        expect.objectContaining({ category: "equipment", startupExpense: false }),
+      ),
+    );
+  });
+
+  it("leaves a row already ticked as equipment and startup as it is (waits on d-data)", async () => {
+    await openAndSave({ ...laptop, startupExpense: true });
+    expect(screen.getByRole("checkbox", { name: /Startup expense/ })).toBeChecked();
+  });
 });
