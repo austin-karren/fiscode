@@ -351,6 +351,17 @@ describe("startupCosts.remainingAfterYear: the §195 amount still to deduct afte
     }
   });
 
+  it("pins exact cents for a $20,000 total from a Jul 1 2026 start", () => {
+    const b = bundleWith(20_000_00);
+    expect(remaining(b, 2026)).toBe(14_500_00);
+    expect(remaining(b, 2027)).toBe(13_500_00);
+    expect(remaining(b, 2040)).toBe(500_00);
+  });
+
+  it("over $50,000 the first-year amount shrinks: $52,000 leaves $47,366.67 after 2026", () => {
+    expect(remaining(bundleWith(52_000_00), 2026)).toBe(47_366_67);
+  });
+
   it("$5,000 or less is all deducted in the start year", () => {
     expect(remaining(bundleWith(5_000_00), 2026)).toBe(0);
   });
