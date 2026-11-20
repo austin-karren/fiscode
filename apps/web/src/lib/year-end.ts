@@ -3,9 +3,10 @@ import { countedInYear, expensesCountedForYear, type ExpenseForYear } from "@fis
 import { getYearConfig, mileageRateOn } from "@fiscode/tax";
 
 /**
- * The year-end packet's expense breakdown: totals in cents per category, over
- * the same expenses that make up its "Direct expenses" line
- * (`expensesCountedForYear`), so the two always agree.
+ * The year-end packet's Schedule C expense breakdown: totals in cents per
+ * category, over the same expenses that make up its "Direct expenses" line
+ * (`expensesCountedForYear`), so the two always agree. Self-employed health
+ * insurance is left out, as it is from Direct expenses.
  */
 export const expenseTotalsByCategory = (
   expenses: readonly (ExpenseForYear & { category: string; amountCents: number })[],
@@ -14,6 +15,8 @@ export const expenseTotalsByCategory = (
 ): Record<string, number> => {
   const totals: Record<string, number> = {};
   for (const e of expensesCountedForYear(expenses, year, seStartDate)) {
+    // Not Schedule C: a Schedule 1 line 17 adjustment, on its own line.
+    if (e.category === "health_insurance") continue;
     totals[e.category] = (totals[e.category] ?? 0) + e.amountCents;
   }
   return totals;
