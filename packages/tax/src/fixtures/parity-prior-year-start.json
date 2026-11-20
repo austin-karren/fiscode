@@ -103,7 +103,8 @@
       "total": 1800000,
       "remainingAfterYear": 1198889
     },
-    "totalDeductibleExpenses": 301498
+    "totalDeductibleExpenses": 301498,
+    "equipmentAssumedSection179": 0
   },
   "even": {
     "estimate": {

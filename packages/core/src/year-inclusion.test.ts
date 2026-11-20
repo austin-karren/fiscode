@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { countedInYear, isBeforeSeStart, yearExclusion } from "./year-inclusion.ts";
+import {
+  countedInYear,
+  expenseYearDate,
+  expenseYearExclusion,
+  isBeforeSeStart,
+  yearExclusion,
+} from "./year-inclusion.ts";
 
 const row = (date: string, deletedAt: string | null = null) => ({ date, deletedAt });
 
@@ -40,5 +46,28 @@ describe("isBeforeSeStart", () => {
   it("is true strictly before the start", () => {
     expect(isBeforeSeStart("2026-06-30", "2026-07-01")).toBe(true);
     expect(isBeforeSeStart("2026-07-01", "2026-07-01")).toBe(false);
+  });
+});
+
+describe("expenseYearExclusion (#66: equipment counts on its placed-in-service date)", () => {
+  const se = "2026-02-01";
+  const desk = { date: "2025-11-20", deletedAt: null, category: "equipment" };
+  it("pre-start equipment with no stored date counts in the SE start's year, not before it", () => {
+    expect(expenseYearDate(desk, se)).toBe(se);
+    expect(expenseYearExclusion(desk, 2026, se)).toBeNull();
+    expect(expenseYearExclusion(desk, 2025, se)).toBe("other_year");
+  });
+  it("a pre-start startup cost stays before the SE start (deducted under §195 instead)", () => {
+    const fee = {
+      date: "2026-01-10",
+      deletedAt: null,
+      category: "software_subs",
+      startupExpense: true,
+    };
+    expect(expenseYearExclusion(fee, 2026, se)).toBe("before_se_start");
+  });
+  it("software carrying a CSV-only placed-in-service date stays on its own date", () => {
+    const sub = { ...desk, category: "software_subs", placedInServiceDate: "2026-03-01" };
+    expect(expenseYearDate(sub, se)).toBe("2025-11-20");
   });
 });

@@ -101,6 +101,7 @@ function Dashboard() {
       <EntityUnsupportedAlert derived={derived} />
       <ExcludedBeforeSeAlert derived={derived} />
       <OfficeAreaAlert rejected={derived.homeOfficeAreaRejected} />
+      <Section179Notice count={derived.equipmentAssumedSection179} />
 
       {/* One primary figure, the year's total; the three taxes it adds up
           recede beside it. */}
@@ -369,6 +370,23 @@ function OfficeAreaAlert({ rejected }: { rejected: number }) {
   );
 }
 
+// fiscode deducts equipment in full. Above the de minimis safe harbor ("up to $2,500 per item or
+// invoice", Pub 334) that assumes a section 179 election; say so, without changing a number.
+function Section179Notice({ count }: { count: number }) {
+  if (!count) return null;
+  return (
+    <Alert>
+      <CircleAlert />
+      <AlertDescription>
+        {count === 1 ? "An equipment expense" : `${count} equipment expenses`} over $2,500{" "}
+        {count === 1 ? "is" : "are"} deducted in full this year, which assumes a Section 179
+        election. Tick §179 candidate in <Link to="/expenses">Expenses</Link> to confirm, and check
+        it with your accountant.
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 function ExcludedBeforeSeAlert({ derived }: { derived: DerivedYear }) {
   const { income, expense, mileage } = derived.excludedBeforeSeStart;
   const total = income + expense + mileage;
@@ -378,14 +396,15 @@ function ExcludedBeforeSeAlert({ derived }: { derived: DerivedYear }) {
   if (expense) parts.push(`${expense} expense${expense === 1 ? "" : "s"}`);
   if (mileage) parts.push(`${mileage} mileage trip${mileage === 1 ? "" : "s"}`);
   const summary = parts.join(", ");
+  const one = total === 1;
   return (
     <Alert variant="warning">
       <CircleAlert />
       <AlertTitle>Some rows are dated before your SE start date</AlertTitle>
       <AlertDescription>
-        {summary} dated before {formatDate(derived.seStartDate)} are not counted in this estimate.
-        They stay in your data — edit them or change your start date on{" "}
-        <Link to="/profile">your profile</Link>.
+        {summary} dated before {formatDate(derived.seStartDate)} {one ? "is" : "are"} not counted in
+        this estimate. {one ? "It stays" : "They stay"} in your data — edit {one ? "it" : "them"} or
+        change your start date on <Link to="/profile">your profile</Link>.
       </AlertDescription>
     </Alert>
   );

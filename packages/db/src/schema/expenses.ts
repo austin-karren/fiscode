@@ -20,6 +20,12 @@ export const expense = sqliteTable(
     // the user's SE start. Items purchased in anticipation of beginning 1099 work
     // (ordinary, necessary, used exclusively for the business once active).
     startupExpense: integer("startup_expense", { mode: "boolean" }).notNull().default(false),
+    // Equipment: the date it was placed in service (ISO YYYY-MM-DD), when that
+    // differs from the purchase date. Pub 946: "You begin to depreciate your
+    // property when you place it in service for use in your trade or business".
+    // Equipment bought before the business began is placed in service when it
+    // begins. Null means the purchase date.
+    placedInServiceDate: text("placed_in_service_date"),
     deletedAt: text("deleted_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),

@@ -113,8 +113,47 @@ or business begins."
   with the app.
 - Each year's amount is rounded on the running total, so the years add up to exactly what was paid.
 - A startup-ticked expense paid on or after the SE start is an ordinary expense of its own year.
+- Equipment and self-employed health insurance are never startup costs, even if ticked. Equipment
+  is placed in service (see Equipment), and health insurance is a Schedule 1 adjustment.
 
 Not modelled: organizational costs (§248), which have their own $5,000 deduction.
+
+### Equipment
+
+fiscode deducts equipment in full in the year it counts. Two rules decide which year, and when a
+note appears:
+
+- **Placed in service.** Equipment counts in the year it is placed in service, never before the
+  self-employment start. [Pub 946](https://www.irs.gov/publications/p946): "You begin to
+  depreciate your property when you place it in service for use in your trade or business"; and
+  property converted to business use is placed in service "on the date of the change".
+  - Equipment bought before the business began is placed in service on the SE start date.
+  - The expense form shows a "Placed in service" date for equipment, prefilled with the SE start
+    when the purchase date is before it.
+  - With no date stored, equipment counts on its purchase date, or on the SE start if bought before
+    it, the same date the form shows. So an imported row counts the same before and after it's
+    opened and saved.
+  - Equipment is never a Section 195 startup cost, even ticked "Startup expense". IRC
+    §195(c)(1)(B) limits start-up expenditures to amounts which "if paid or incurred in connection
+    with the operation of an existing active trade or business ... would be allowable as a deduction
+    for the taxable year in which paid or incurred". Equipment is capital property, so it's placed
+    in service instead.
+  - A placed-in-service date only applies to equipment; on any other row (possible only from a
+    CSV) it's ignored.
+- **Section 179.** Deducting equipment in full is fine up to the de minimis safe harbor: "up to
+  $2,500 per item or invoice" ([Pub 334](https://www.irs.gov/publications/p334)). Above that it
+  assumes a Section 179 election. The dashboard notes each equipment expense over $2,500 without the
+  "§179 candidate" tick. No number changes.
+
+**Equipment you owned for personal use before the business:** enter its basis, not what you paid.
+[Pub 946](https://www.irs.gov/pub/irs-pdf/p946.pdf), Property changed from personal use: "If you held
+property for personal use and later use it in your business or income-producing activity, your
+depreciable basis is the lesser of the following. 1. The FMV of the property on the date of the
+change in use. 2. Your original cost or other basis adjusted as follows". fiscode counts the amount
+entered, so enter the lower of the fair market value when you started using it for the business and
+what you paid. Equipment bought for the business just before it began is worth about what you paid.
+
+Not modelled: depreciation (MACRS) for equipment you don't expense, and the Section 179 limits.
 
 ### Utah income tax
 

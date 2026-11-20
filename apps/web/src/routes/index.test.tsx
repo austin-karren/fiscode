@@ -107,7 +107,7 @@ describe("dashboard text", () => {
     const q1 = screen.getByText(/^Q1 ·/).parentElement!.parentElement!;
     expect(q1).toHaveTextContent("Was due Apr 15, 2026");
     expect(q1).toHaveClass("text-muted-foreground");
-    expect(screen.getByText(/dated before Mar 2, 2026 are not counted/)).toBeInTheDocument();
+    expect(screen.getByText(/dated before Mar 2, 2026 is not counted/)).toBeInTheDocument();
     expectNoRawValues(document.body, ["SINGLE", "UT"]);
   });
 });
@@ -203,5 +203,72 @@ describe("dashboard home office warning", () => {
   it("says nothing when every config's area is fine", () => {
     render(<Dashboard />);
     expect(screen.queryByText(/office larger than the home/)).not.toBeInTheDocument();
+  });
+});
+
+describe("dashboard Section 179 notice (equipment over $2,500, unflagged)", () => {
+  const derived = loaderData.derived as { equipmentAssumedSection179?: number };
+
+  afterEach(() => {
+    delete derived.equipmentAssumedSection179;
+  });
+
+  it("says the full deduction assumes a §179 election, with a link to Expenses", () => {
+    derived.equipmentAssumedSection179 = 1;
+    render(<Dashboard />);
+    const line = screen.getByText(/assumes a Section 179/).closest("[data-slot=alert]")!;
+    expect(line).toHaveTextContent(
+      "An equipment expense over $2,500 is deducted in full this year, which assumes a Section 179 election.",
+    );
+    expect(within(line as HTMLElement).getByRole("link", { name: "Expenses" })).toHaveAttribute(
+      "href",
+      "/expenses",
+    );
+  });
+
+  it("says nothing when there is none", () => {
+    render(<Dashboard />);
+    expect(screen.queryByText(/assumes a Section 179/)).not.toBeInTheDocument();
+  });
+});
+
+describe("dashboard banner for rows before the SE start: the verb agrees with the count", () => {
+  const derived = loaderData.derived as {
+    excludedBeforeSeStart: { income: number; expense: number; mileage: number };
+  };
+  const original = { ...derived.excludedBeforeSeStart };
+
+  afterEach(() => {
+    derived.excludedBeforeSeStart = { ...original };
+  });
+
+  it("one row: '1 expense ... is not counted ... It stays'", () => {
+    derived.excludedBeforeSeStart = { income: 0, expense: 1, mileage: 0 };
+    render(<Dashboard />);
+    expect(
+      screen.getByText(
+        /^1 expense dated before Mar 2, 2026 is not counted in this estimate\. It stays/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("several rows: '2 expenses ... are not counted ... They stay'", () => {
+    derived.excludedBeforeSeStart = { income: 0, expense: 2, mileage: 0 };
+    render(<Dashboard />);
+    expect(
+      screen.getByText(
+        /^2 expenses dated before Mar 2, 2026 are not counted in this estimate\. They stay/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("one of each kind is three rows: 'are'", () => {
+    derived.excludedBeforeSeStart = { income: 1, expense: 1, mileage: 1 };
+    render(<Dashboard />);
+    expect(
+      screen.getByText(
+        /^1 income entry, 1 expense, 1 mileage trip dated before .* are not counted/,
+      ),
+    ).toBeInTheDocument();
   });
 });

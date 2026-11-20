@@ -15,7 +15,7 @@ The layout lives in `packages/csv/src/sections.ts`. The stored fields live in
 ## What the file looks like
 
 ```
-# fiscode export (schema: v2; scope: full)
+# fiscode export (schema: v3; scope: full)
 # Money is in dollars. Dates are YYYY-MM-DD. Import this file at https://fiscode.app to restore it.
 
 # Income
@@ -23,8 +23,8 @@ record_type,date,client_name,amount,source_type,source_type_label,income_kind,in
 income,2026-01-15,Stable Commission Co,10000.00,1099,1099 self-employment,recurring,Recurring,January retainer,,in_01…,cl_01…,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 
 # Expenses
-record_type,date,category,category_label,description,amount,client_name,reason,flag_for_section_179,startup_expense,notes,id,client_id,created_at,updated_at,deleted_at
-expense,2026-01-20,equipment,Equipment,Standing desk,899.99,,Home-office setup stipend purchase.,yes,no,,ex_01…,,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
+record_type,date,category,category_label,description,amount,client_name,reason,flag_for_section_179,startup_expense,placed_in_service_date,notes,id,client_id,created_at,updated_at,deleted_at
+expense,2026-01-20,equipment,Equipment,Standing desk,899.99,,Home-office setup stipend purchase.,yes,no,,,ex_01…,,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 ```
 
 Each table has three parts:
@@ -175,7 +175,7 @@ or `yearly` plus the year). The second says how to read the file. A spreadsheet 
 text in column A. You can omit them in a hand-authored file.
 
 ```
-# fiscode export (schema: v2; scope: yearly; year: 2026)
+# fiscode export (schema: v3; scope: yearly; year: 2026)
 ```
 
 ## Old files (schema v1)
@@ -214,7 +214,7 @@ v1 files also had an `# exported:` time line. It is read and ignored.
 The `schema:` marker is used for one thing: a file marked `v1` never carried the `'` formula
 guard, so its text is kept exactly as written.
 
-Exports are always written as v2. An app version older than v2 cannot read a v2 file.
+Exports are always written as v3. Schema v3 adds one column, `placed_in_service_date` on expenses; v1 and v2 files still import (a v2 file gives it empty). An app version older than v3 refuses a v3 file rather than read it wrongly.
 
 ## Columns by record type
 
@@ -436,6 +436,11 @@ Categorized business expenses.
       description: "yes = startup expense (Section 195).",
       type: "yes / no",
     },
+    placed_in_service_date: {
+      description:
+        "Equipment: the date it was placed in service, when not the purchase date. Empty = the purchase date. Added in schema v3; a v2 file imports with it empty.",
+      type: "YYYY-MM-DD",
+    },
     notes: { description: "Long-form notes.", type: "string" },
     client_id: { description: "The client's id. Optional.", type: "string" },
   }}
@@ -518,7 +523,7 @@ Common rejections:
 - Two exports of the same data are the same bytes, whenever and wherever they are made.
 - `Full export → restore into an empty database → full export` gives back the same bytes: the
   same rows, deleted ones included, and the same history.
-- Old v1 files import to the same state and re-export as v2.
+- Old v1 and v2 files import to the same state and re-export as v3.
 
 These are enforced by vitest tests in `packages/csv/src/format.test.ts` (against a saved v1
 fixture) and `packages/db/src/repo/sync.test.ts` (through a real database).

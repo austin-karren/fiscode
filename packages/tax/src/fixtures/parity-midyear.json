@@ -1,35 +1,35 @@
 {
   "annualized": {
     "estimate": {
-      "agi": 4542511,
+      "agi": 4500000,
       "federal": {
-        "federalIncomeTax": 131401,
-        "qbiDeduction": 8502,
-        "taxableIncome": 1314009
+        "federalIncomeTax": 128000,
+        "qbiDeduction": 0,
+        "taxableIncome": 1280000
       },
-      "federalLiability": 137864,
+      "federalLiability": 128000,
       "federalWithholding": 450000,
-      "netProfit": 45743,
+      "netProfit": 0,
       "remainingOwed": 0,
       "se": {
         "additionalMedicareTax": 0,
-        "halfSeTaxDeduction": 3232,
-        "medicareTax": 1225,
-        "netSeEarnings": 42244,
-        "regularSeTax": 6463,
-        "socialSecurityTax": 5238,
-        "totalSeTax": 6463
+        "halfSeTaxDeduction": 0,
+        "medicareTax": 0,
+        "netSeEarnings": 0,
+        "regularSeTax": 0,
+        "socialSecurityTax": 0,
+        "totalSeTax": 0
       },
       "selfEmployedHealthInsurance": 0,
       "spouseWithholding": 630000,
       "state": {
         "rate": 0.0445,
-        "stateIncomeTax": 19385,
-        "taxableIncome": 4542511,
-        "taxpayerCredit": 182757
+        "stateIncomeTax": 16940,
+        "taxableIncome": 4500000,
+        "taxpayerCredit": 183310
       },
       "stateWithholding": 180000,
-      "totalLiability": 157249,
+      "totalLiability": 144940,
       "year": 2026
     },
     "quarterly": {
@@ -71,9 +71,9 @@
       ]
     },
     "safeHarbor": {
-      "currentYearTarget": 124078,
+      "currentYearTarget": 115200,
       "firstYear": true,
-      "floor": 124078
+      "floor": 115200
     },
     "statePrepayment": {
       "basis": "currentYear90",
@@ -84,17 +84,17 @@
   },
   "derived": {
     "activeEntityType": "sole_prop",
-    "directExpenses": 532333,
+    "directExpenses": 622332,
     "excludedBeforeSeStart": {
-      "expense": 2,
+      "expense": 1,
       "income": 2,
       "mileage": 1
     },
     "gross1099": 625000,
     "homeOfficeAreaRejected": 0,
     "homeOfficeCarryover": 0,
-    "homeOfficeDeduction": 37500,
-    "homeOfficeLost": 0,
+    "homeOfficeDeduction": 0,
+    "homeOfficeLost": 37500,
     "mileageDeduction": 9424,
     "seStartDate": "2026-07-01",
     "selfEmployedHealthInsurance": 0,
@@ -103,39 +103,40 @@
       "total": 720000,
       "remainingAfterYear": 212667
     },
-    "totalDeductibleExpenses": 579257
+    "totalDeductibleExpenses": 631756,
+    "equipmentAssumedSection179": 0
   },
   "even": {
     "estimate": {
-      "agi": 4542511,
+      "agi": 4500000,
       "federal": {
-        "federalIncomeTax": 131401,
-        "qbiDeduction": 8502,
-        "taxableIncome": 1314009
+        "federalIncomeTax": 128000,
+        "qbiDeduction": 0,
+        "taxableIncome": 1280000
       },
-      "federalLiability": 137864,
+      "federalLiability": 128000,
       "federalWithholding": 450000,
-      "netProfit": 45743,
+      "netProfit": 0,
       "remainingOwed": 0,
       "se": {
         "additionalMedicareTax": 0,
-        "halfSeTaxDeduction": 3232,
-        "medicareTax": 1225,
-        "netSeEarnings": 42244,
-        "regularSeTax": 6463,
-        "socialSecurityTax": 5238,
-        "totalSeTax": 6463
+        "halfSeTaxDeduction": 0,
+        "medicareTax": 0,
+        "netSeEarnings": 0,
+        "regularSeTax": 0,
+        "socialSecurityTax": 0,
+        "totalSeTax": 0
       },
       "selfEmployedHealthInsurance": 0,
       "spouseWithholding": 630000,
       "state": {
         "rate": 0.0445,
-        "stateIncomeTax": 19385,
-        "taxableIncome": 4542511,
-        "taxpayerCredit": 182757
+        "stateIncomeTax": 16940,
+        "taxableIncome": 4500000,
+        "taxpayerCredit": 183310
       },
       "stateWithholding": 180000,
-      "totalLiability": 157249,
+      "totalLiability": 144940,
       "year": 2026
     },
     "quarterly": {
@@ -177,9 +178,9 @@
       ]
     },
     "safeHarbor": {
-      "currentYearTarget": 124078,
+      "currentYearTarget": 115200,
       "firstYear": true,
-      "floor": 124078
+      "floor": 115200
     },
     "statePrepayment": {
       "basis": "currentYear90",

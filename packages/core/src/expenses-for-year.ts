@@ -1,36 +1,23 @@
-import { countedInYear, isBeforeSeStart } from "./year-inclusion.ts";
-
-/** The fields of an expense that decide whether it counts toward a tax year. */
-export type ExpenseForYear = {
-  date: string;
-  deletedAt: string | null;
-  startupExpense?: boolean | null;
-};
+import { expenseYearExclusion, isBeforeSeStart, type ExpenseForYear } from "./year-inclusion.ts";
 
 /**
- * The date an expense counts on. A startup expense (Section 195) paid before
- * the SE start counts on the SE start date: IRC §195(b)(1)(A) allows the
- * deduction "for the taxable year in which the active trade or business begins"
- * (https://www.govinfo.gov/link/uscode/26/195). Every other expense counts on
- * its own date. With no SE start, every expense counts on its own date.
- *
- * The yearly CSV uses this to put a startup cost in the year it counts.
+ * A startup cost under §195: ticked as startup and paid before the SE start.
+ * Self-employed health insurance never is one: it is a Schedule 1 line 17
+ * adjustment (Form 7206), and a premium paid before the business began covers no
+ * month of self-employment, so it counts nowhere. Equipment never is one either:
+ * §195(c)(1)(B) covers an amount which "if paid or incurred in connection with the
+ * operation of an existing active trade or business ... would be allowable as a
+ * deduction for the taxable year in which paid or incurred", and equipment is
+ * capital property, placed in service instead (`countedExpenseDate`).
  */
-export const countedExpenseDate = (
-  expense: Pick<ExpenseForYear, "date" | "startupExpense">,
-  seStartDate: string | null | undefined,
-): string =>
-  expense.startupExpense === true && seStartDate && expense.date < seStartDate
-    ? seStartDate
-    : expense.date;
-
-/** A startup cost under §195: ticked as startup and paid before the SE start. */
 export const isPreStartStartupCost = (
-  expense: Pick<ExpenseForYear, "date" | "startupExpense" | "deletedAt">,
+  expense: Pick<ExpenseForYear, "date" | "startupExpense" | "deletedAt" | "category">,
   seStartDate: string | null | undefined,
 ): boolean =>
   expense.deletedAt === null &&
   expense.startupExpense === true &&
+  expense.category !== "health_insurance" &&
+  expense.category !== "equipment" &&
   isBeforeSeStart(expense.date, seStartDate);
 
 const isoFirstOfMonth = (monthIndex: number): string => {
@@ -93,9 +80,10 @@ const dayBeforeIso = (iso: string): string => {
  * The expenses that count toward `year`'s Schedule C one by one, in their given
  * order. An expense counts when all of these hold:
  * - it is not deleted (`deletedAt` is null);
- * - it is dated in `year` (by the `YYYY` of its ISO date);
- * - it is dated on or after the SE start date;
- * - it is not a startup cost paid before the SE start. Those are deducted as a
+ * - the date it counts toward a year on (`expenseYearDate`: its own date, or
+ *   for equipment its placed-in-service date) is in `year`, on or after the SE
+ *   start date (`expenseYearExclusion`);
+ * - so a startup cost paid before the SE start does not count here. Those are deducted as a
  *   group under §195(b) (`startupDeductionBetween`): at most $5,000 in the year
  *   the business begins, the rest over 180 months.
  *
@@ -110,4 +98,4 @@ export const expensesCountedForYear = <T extends ExpenseForYear>(
   expenses: readonly T[],
   year: number,
   seStartDate: string | null | undefined,
-): T[] => countedInYear(expenses, year, seStartDate);
+): T[] => expenses.filter((e) => expenseYearExclusion(e, year, seStartDate) === null);
