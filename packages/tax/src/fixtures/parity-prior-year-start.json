@@ -1,35 +1,35 @@
 {
   "annualized": {
     "estimate": {
-      "agi": 6055273,
+      "agi": 6135817,
       "federal": {
-        "federalIncomeTax": 253306,
-        "qbiDeduction": 311055,
-        "taxableIncome": 2524218
+        "federalIncomeTax": 261038,
+        "qbiDeduction": 327163,
+        "taxableIncome": 2588654
       },
-      "federalLiability": 489764,
+      "federalLiability": 509742,
       "federalWithholding": 450000,
-      "netProfit": 1673502,
+      "netProfit": 1760169,
       "remainingOwed": 0,
       "se": {
         "additionalMedicareTax": 0,
-        "halfSeTaxDeduction": 118229,
-        "medicareTax": 44819,
-        "netSeEarnings": 1545479,
-        "regularSeTax": 236458,
-        "socialSecurityTax": 191639,
-        "totalSeTax": 236458
+        "halfSeTaxDeduction": 124352,
+        "medicareTax": 47140,
+        "netSeEarnings": 1625516,
+        "regularSeTax": 248704,
+        "socialSecurityTax": 201564,
+        "totalSeTax": 248704
       },
       "selfEmployedHealthInsurance": 0,
       "spouseWithholding": 630000,
       "state": {
         "rate": 0.0445,
-        "stateIncomeTax": 106369,
-        "taxableIncome": 6055273,
-        "taxpayerCredit": 163091
+        "stateIncomeTax": 111000,
+        "taxableIncome": 6135817,
+        "taxpayerCredit": 162044
       },
       "stateWithholding": 180000,
-      "totalLiability": 596133,
+      "totalLiability": 620742,
       "year": 2026
     },
     "quarterly": {
@@ -71,9 +71,9 @@
       ]
     },
     "safeHarbor": {
-      "currentYearTarget": 440788,
+      "currentYearTarget": 458768,
       "firstYear": true,
-      "floor": 440788
+      "floor": 458768
     },
     "statePrepayment": {
       "basis": "currentYear90",
@@ -84,7 +84,7 @@
   },
   "derived": {
     "activeEntityType": "sole_prop",
-    "directExpenses": 213666,
+    "directExpenses": 126999,
     "excludedBeforeSeStart": {
       "expense": 0,
       "income": 0,
@@ -99,42 +99,43 @@
     "seStartDate": "2025-11-20",
     "selfEmployedHealthInsurance": 0,
     "startupCosts": {
-      "deductedThisYear": 86667,
-      "total": 1800000
+      "deductedThisYear": 0,
+      "total": 0
     },
-    "totalDeductibleExpenses": 301498
+    "totalDeductibleExpenses": 214831,
+    "equipmentAssumedSection179": 0
   },
   "even": {
     "estimate": {
-      "agi": 6055273,
+      "agi": 6135817,
       "federal": {
-        "federalIncomeTax": 253306,
-        "qbiDeduction": 311055,
-        "taxableIncome": 2524218
+        "federalIncomeTax": 261038,
+        "qbiDeduction": 327163,
+        "taxableIncome": 2588654
       },
-      "federalLiability": 489764,
+      "federalLiability": 509742,
       "federalWithholding": 450000,
-      "netProfit": 1673502,
+      "netProfit": 1760169,
       "remainingOwed": 0,
       "se": {
         "additionalMedicareTax": 0,
-        "halfSeTaxDeduction": 118229,
-        "medicareTax": 44819,
-        "netSeEarnings": 1545479,
-        "regularSeTax": 236458,
-        "socialSecurityTax": 191639,
-        "totalSeTax": 236458
+        "halfSeTaxDeduction": 124352,
+        "medicareTax": 47140,
+        "netSeEarnings": 1625516,
+        "regularSeTax": 248704,
+        "socialSecurityTax": 201564,
+        "totalSeTax": 248704
       },
       "selfEmployedHealthInsurance": 0,
       "spouseWithholding": 630000,
       "state": {
         "rate": 0.0445,
-        "stateIncomeTax": 106369,
-        "taxableIncome": 6055273,
-        "taxpayerCredit": 163091
+        "stateIncomeTax": 111000,
+        "taxableIncome": 6135817,
+        "taxpayerCredit": 162044
       },
       "stateWithholding": 180000,
-      "totalLiability": 596133,
+      "totalLiability": 620742,
       "year": 2026
     },
     "quarterly": {
@@ -176,9 +177,9 @@
       ]
     },
     "safeHarbor": {
-      "currentYearTarget": 440788,
+      "currentYearTarget": 458768,
       "firstYear": true,
-      "floor": 440788
+      "floor": 458768
     },
     "statePrepayment": {
       "basis": "currentYear90",
