@@ -104,7 +104,8 @@
       "remainingAfterYear": 212667
     },
     "totalDeductibleExpenses": 631756,
-    "equipmentAssumedSection179": 0
+    "equipmentAssumedSection179": 0,
+    "startupIgnoredForEquipment": 0
   },
   "even": {
     "estimate": {
