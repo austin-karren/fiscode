@@ -17,14 +17,14 @@ import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { hoursWorked } from "../lib/field-schemas";
+import { hoursField, hoursWorked } from "../lib/field-schemas";
 import { TSFormField } from "./forms/ts-form-field";
 import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { SelectWithLabels } from "./forms/select-with-labels";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { archivedSuffix, pickableParents } from "./parent-name";
 import { useToday } from "../lib/use-today";
-import { useEditDialog } from "../hooks/use-edit-dialog";
+import { noChangesToSave, useEditDialog } from "../hooks/use-edit-dialog";
 import { recordLabel } from "../lib/record-label";
 
 const editSchema = z.object({
@@ -47,12 +47,13 @@ export function EditTimeDialog({
   const form = useForm({
     defaultValues: {
       date: isoToDate(entry.date) ?? today,
-      hours: String(entry.minutes / 60),
+      hours: hoursField(entry.minutes),
       clientId: entry.clientId ?? "",
       description: entry.description ?? "",
     },
     validators: { onSubmit: editSchema },
-    onSubmit: async ({ value }) => {
+    onSubmit: async ({ value, formApi }) => {
+      if (noChangesToSave(formApi)) return setOpen(false);
       const parsed = editSchema.parse(value);
       await timeRepo.update(entry.id, {
         date: dateToIso(value.date!),

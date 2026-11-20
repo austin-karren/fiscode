@@ -27,7 +27,7 @@ import { LabelWithTooltip } from "./forms/labeled";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { useToday } from "../lib/use-today";
-import { useEditDialog } from "../hooks/use-edit-dialog";
+import { noChangesToSave, useEditDialog } from "../hooks/use-edit-dialog";
 import { recordLabel } from "../lib/record-label";
 
 const editSchema = z.object({
@@ -59,7 +59,8 @@ export function EditExpenseDialog({
       startupExpense: expense.startupExpense ?? false,
     },
     validators: { onSubmit: editSchema },
-    onSubmit: async ({ value }) => {
+    onSubmit: async ({ value, formApi }) => {
+      if (noChangesToSave(formApi)) return setOpen(false);
       const parsed = moneyAmount.parse(value.amount);
       await expenseRepo.update(expense.id, {
         date: dateToIso(value.date!),

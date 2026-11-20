@@ -1,4 +1,12 @@
-import { addCents, cents, expensesCountedForYear, type Cents, yearOf } from "@fiscode/core";
+import {
+  addCents,
+  cents,
+  expensesCountedForYear,
+  isPreStartStartupCost,
+  startupDeductionBetween,
+  type Cents,
+  yearOf,
+} from "@fiscode/core";
 import type { Bundle } from "@fiscode/csv";
 import type { AnnualizedInput, TaxInput } from "@fiscode/tax";
 import {
@@ -193,9 +201,12 @@ const tentativeProfitBetween = (
   )
     .filter((r) => within(r.date))
     .reduce((sum, r) => sum + r.amountCents, 0);
-  const expenses = scheduleCExpenses(expensesCountedForYear(bundle.expenses, year, seStartDate))
-    .filter((r) => within(r.date))
-    .reduce((sum, r) => sum + r.amountCents, 0);
+  const expenses =
+    scheduleCExpenses(expensesCountedForYear(bundle.expenses, year, seStartDate))
+      .filter((r) => within(r.date))
+      .reduce((sum, r) => sum + r.amountCents, 0) +
+    // §195 startup costs: the start-year amount on the SE start date, amortization by month.
+    startupDeductionBetween(bundle.expenses, seStartDate, from, to);
   const mileage = mileageDeduction(
     countedInYear(bundle.mileage, year, seStartDate).filter((m) => within(m.date)),
     getYearConfig(year),
@@ -354,11 +365,20 @@ const countExcludedBeforeSeStart = (
     income: bundle.income.filter(
       (i) => i.deletedAt === null && i.sourceType === "1099" && isExcluded(i.date),
     ).length,
-    // Every live expense in the year that the core rule leaves out, so the
-    // banner always matches what "Direct expenses" counts.
-    expense:
-      bundle.expenses.filter((e) => e.deletedAt === null && inYear(e.date)).length -
-      expensesCountedForYear(bundle.expenses, year, seStartDate).length,
+    // Every live expense dated in the year that the core rule leaves out of it, so the
+    // banner always matches what "Direct expenses" counts. (A startup cost paid in an
+    // earlier year can count in this one; it is not "excluded" here.)
+    expense: (() => {
+      const counted = new Set(expensesCountedForYear(bundle.expenses, year, seStartDate));
+      return bundle.expenses.filter(
+        (e) =>
+          e.deletedAt === null &&
+          inYear(e.date) &&
+          !counted.has(e) &&
+          // Startup costs paid before the start are deducted under §195, not excluded.
+          !isPreStartStartupCost(e, seStartDate),
+      ).length;
+    })(),
     mileage: bundle.mileage.filter((m) => m.deletedAt === null && isExcluded(m.date)).length,
   };
 };
@@ -380,6 +400,11 @@ export type DerivedYear = {
   homeOfficeCarryover: Cents;
   /** Actual-method configs skipped because the office is larger than the home. */
   homeOfficeAreaRejected: number;
+  /**
+   * §195 startup costs (paid before the SE start): the year's deduction (included in
+   * `directExpenses`) and the total paid. The rest is amortized over 180 months.
+   */
+  startupCosts: { deductedThisYear: Cents; total: Cents };
   totalDeductibleExpenses: Cents;
   activeEntityType: string;
   seStartDate: string;
@@ -396,10 +421,17 @@ export const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
     year,
     seStartDate,
   );
-  const directExpenses = sumExpensesWithinYear(
-    scheduleCExpenses(bundle.expenses),
-    year,
-    seStartDate,
+  const startupThisYear = cents(
+    startupDeductionBetween(bundle.expenses, seStartDate, `${year}-01-01`, `${year}-12-31`),
+  );
+  const startupTotal = cents(
+    bundle.expenses
+      .filter((e) => isPreStartStartupCost(e, seStartDate))
+      .reduce((sum, e) => sum + e.amountCents, 0),
+  );
+  const directExpenses = addCents(
+    sumExpensesWithinYear(scheduleCExpenses(bundle.expenses), year, seStartDate),
+    startupThisYear,
   );
   const selfEmployedHealthInsurance = sumExpensesWithinYear(
     bundle.expenses.filter(isHealthInsurance),
@@ -425,6 +457,7 @@ export const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
     homeOfficeLost: limited.lost,
     homeOfficeCarryover: limited.carryover,
     homeOfficeAreaRejected: limited.areaRejected,
+    startupCosts: { deductedThisYear: startupThisYear, total: startupTotal },
     totalDeductibleExpenses: total,
     activeEntityType: activeEntityFor(bundle, year)?.type ?? "sole_prop",
     seStartDate,
@@ -472,8 +505,7 @@ export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedIn
     const incomeRows = bundle.income.filter(
       (r) => r.deletedAt === null && r.sourceType === "1099" && r.date >= lower && r.date <= cutoff,
     );
-    // The year's counted expenses (startup ones included), up to the cutoff.
-    // Startup rows land in the first cumulative window that contains their date.
+    // The year's counted expenses up to the cutoff.
     const counted = expensesCountedForYear(bundle.expenses, year, seStartDate).filter(
       (r) => r.date <= cutoff,
     );
@@ -487,6 +519,9 @@ export const buildAnnualizedInput = (bundle: Bundle, year: number): AnnualizedIn
     // period's AGI, so every deduction counts by its date).
     const otherExp = addCents(
       expRows.reduce((acc, r) => addCents(acc, cents(r.amountCents)), cents(0)),
+      // §195 startup costs through the cutoff: the start-year amount in the period that
+      // holds the SE start, amortization by month.
+      cents(startupDeductionBetween(bundle.expenses, seStartDate, `${year}-01-01`, cutoff)),
       sumMileageDeductionWithinYear(bundle, year, seStartDate, cutoff),
     );
     // The period's home office, limited by the period's own tentative profit.

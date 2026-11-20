@@ -20,6 +20,7 @@ import {
 import { formatDate } from "../lib/format-date";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { noChangesToSave } from "../hooks/use-edit-dialog";
 import { z } from "zod";
 
 import { dependentsCount, leadDays, optionalMoneyAmountOrZero } from "../lib/field-schemas";
@@ -154,7 +155,8 @@ function ProfileFormPanel({
     // Cast because zod's optional Date doesn't line up with TanStack Form's
     // exactOptional handling.
     validators: { onSubmit: profileSchema as never },
-    onSubmit: async ({ value }) => {
+    onSubmit: async ({ value, formApi }) => {
+      if (noChangesToSave(formApi)) return;
       // Re-parse through profileSchema to get typed numerics
       // (dependents: number, prepLeadDays: number). Validation already ran
       // via the form-level onSubmit validator; this is just the type narrow.

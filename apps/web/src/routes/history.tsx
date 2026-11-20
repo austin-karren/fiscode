@@ -111,11 +111,13 @@ function HistoryPage() {
             </p>
           ) : (
             // Focus lands here after a restore: its newest entry is the restore.
+            // The ring is muted-foreground, not ring: --ring is 2.6:1 on the
+            // light background, below the 3:1 a focus indicator needs.
             <ul
               id={LIST_ID}
               tabIndex={-1}
               aria-label="History"
-              className="rounded-md border border-border text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="rounded-md border border-border text-sm outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
             >
               {visible.map(({ entry, row }) => (
                 <HistoryItem
@@ -208,7 +210,7 @@ function HistoryItem({
         ) : null}
       </div>
       <details className="col-span-2 row-start-3 text-xs text-muted-foreground md:col-span-1 md:col-start-2 md:row-start-2">
-        <summary className="w-fit cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+        <summary className="w-fit cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground">
           Details
         </summary>
         <p className="mt-1 break-all">

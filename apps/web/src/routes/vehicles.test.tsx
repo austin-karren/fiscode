@@ -77,7 +77,8 @@ afterEach(() => {
 describe("archiving a vehicle", () => {
   it("asks first with the mileage count, then archives and offers Undo", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    // The button names the vehicle, as Edit and Delete do.
+    fireEvent.click(screen.getByRole("button", { name: "Archive vehicle 2022 Demo Wagon" }));
 
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText("Archive Demo Wagon?")).toBeInTheDocument();
@@ -137,5 +138,19 @@ describe("vehicle year", () => {
     await waitFor(() =>
       expect(create).toHaveBeenCalledWith(expect.objectContaining({ year: 2023 })),
     );
+  });
+});
+
+describe("the Method hint on a phone", () => {
+  it("is in each row's Method cell for stacked rows, and the header's copy is hidden there", () => {
+    renderPage();
+    const cell = screen
+      .getAllByRole("cell")
+      .find((c) => c.getAttribute("data-label") === "Method")!;
+    const hint = within(cell).getByRole("button", { name: "More info about Method" });
+    // Only stacked rows show it (container query); wider, the header has it.
+    expect(hint.parentElement).toHaveClass("hidden", "@max-2xl:inline-flex");
+    const headerHint = within(screen.getAllByRole("columnheader")[4]!).getByRole("button");
+    expect(headerHint.parentElement).toHaveClass("@max-2xl:hidden");
   });
 });

@@ -88,13 +88,30 @@ describe("profile form, west of UTC", () => {
     );
   });
 
-  it("saves an untouched profile without the scope confirm and keeps the stored date", async () => {
+  it("saves a non-scope change without the scope confirm and keeps the stored date", async () => {
     render(<ProfilePage />);
+    // Prep lead days is not scope-shifting; the SE start date is left as stored.
+    fireEvent.change(screen.getByLabelText("Prep lead days"), { target: { value: "9" } });
     fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
 
     await waitFor(() => expect(upsert).toHaveBeenCalledTimes(1));
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ seStartDate: "2026-03-02" }));
     expect(screen.queryByText("Save changes to scope-shifting fields?")).not.toBeInTheDocument();
+  });
+});
+
+describe("saving an untouched profile", () => {
+  it("says there is nothing to save and writes nothing", async () => {
+    render(
+      <>
+        <ProfilePage />
+        <Toaster />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+    expect(await screen.findByText("No changes to save.")).toBeInTheDocument();
+    expect(upsert).not.toHaveBeenCalled();
+    expect(screen.queryByText("Profile updated.")).not.toBeInTheDocument();
   });
 });
 
