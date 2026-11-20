@@ -4,13 +4,7 @@ import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { FieldCheckbox } from "../components/forms/field-checkbox";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
-import {
-  FormControl,
-  FormDescription,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@fiscode/ui/components/form";
+import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
 import {
   EntityPeriodError,
@@ -529,7 +523,11 @@ function ProfileFormPanel({
             >
               {(field) => (
                 <FormItem>
-                  <FormLabel>Your {priorYear} total tax</FormLabel>
+                  <LabelWithTooltip
+                    tooltip={`Your ${priorYear} Form 1040 line 24, minus refundable credits (lines 27a–32). Leave blank if ${priorYear} wasn't a full 12-month return, or if you didn't file.`}
+                  >
+                    Your {priorYear} total tax
+                  </LabelWithTooltip>
                   <FormControl>
                     <Input
                       inputMode="decimal"
@@ -539,10 +537,6 @@ function ProfileFormPanel({
                       placeholder="Not entered"
                     />
                   </FormControl>
-                  <FormDescription>
-                    Your {priorYear} Form 1040 line 24, minus refundable credits (lines 27a–32).
-                    Leave blank if {priorYear} wasn't a full 12-month return, or if you didn't file.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -555,7 +549,11 @@ function ProfileFormPanel({
             >
               {(field) => (
                 <FormItem>
-                  <FormLabel>Your {priorYear} AGI</FormLabel>
+                  <LabelWithTooltip
+                    tooltip={`Your ${priorYear} Form 1040 line 11b. Left blank, the estimate assumes it was over $150,000 ($75,000 if married filing separately) and uses 110%.`}
+                  >
+                    Your {priorYear} AGI
+                  </LabelWithTooltip>
                   <FormControl>
                     <Input
                       inputMode="decimal"
@@ -565,39 +563,43 @@ function ProfileFormPanel({
                       placeholder="Not entered"
                     />
                   </FormControl>
-                  <FormDescription>
-                    Your {priorYear} Form 1040 line 11b. Left blank, the estimate assumes it was
-                    over $150,000 ($75,000 if married filing separately) and uses 110%.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField
-              form={profileForm}
-              name="priorYearStateTax"
-              requirement="optional"
-              validators={{ onBlur: profileSchema.shape.priorYearStateTax }}
-            >
-              {(field) => (
-                <FormItem>
-                  <FormLabel>Your {priorYear} Utah tax</FormLabel>
-                  <FormControl>
-                    <Input
-                      inputMode="decimal"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      placeholder="Not entered"
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Your Utah tax liability for {priorYear} (TC-546 line 4).
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
+            {/* fiscode's state engine is Utah only: the field shows for Utah. */}
+            <profileForm.Subscribe selector={(st) => st.values.state === "UT"}>
+              {(isUtah) =>
+                isUtah ? (
+                  <TSFormField
+                    form={profileForm}
+                    name="priorYearStateTax"
+                    requirement="optional"
+                    validators={{ onBlur: profileSchema.shape.priorYearStateTax }}
+                  >
+                    {(field) => (
+                      <FormItem>
+                        <LabelWithTooltip
+                          tooltip={`Your Utah tax liability for ${priorYear} (TC-546 line 4).`}
+                        >
+                          Your {priorYear} Utah tax
+                        </LabelWithTooltip>
+                        <FormControl>
+                          <Input
+                            inputMode="decimal"
+                            value={field.state.value}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                            onBlur={field.handleBlur}
+                            placeholder="Not entered"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  </TSFormField>
+                ) : null
+              }
+            </profileForm.Subscribe>
             {figuresStale ? (
               <p className="text-sm text-muted-foreground @md:col-span-2">
                 Your {profile.priorYearFiguresYear} return is on file

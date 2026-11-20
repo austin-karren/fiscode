@@ -77,6 +77,9 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ),
 }));
 
+import { exampleBundle } from "@fiscode/csv";
+import { estimateBundleYear } from "@fiscode/tax";
+
 import { Route } from "./index";
 
 const Dashboard = Route.options.component!;
@@ -298,5 +301,49 @@ describe("dashboard: asks for last year's return when the prior-year safe harbor
     derived.priorYearFiguresApplied = true;
     render(<Dashboard />);
     expect(screen.queryByText(/Enter your 2025 return/)).not.toBeInTheDocument();
+  });
+});
+
+describe("why 110% of the prior year", () => {
+  // Demo data plus a 2025 return: $1,500 total tax, AGI per the case.
+  const harborFor = (agiCents: number | null) => {
+    const b = exampleBundle();
+    b.profile = {
+      ...b.profile!,
+      priorYearTotalTaxCents: 150_000,
+      priorYearAgiCents: agiCents,
+      priorYearStateTaxCents: null,
+      priorYearFiguresYear: 2025,
+    };
+    return estimateBundleYear(b, 2026).result.safeHarbor;
+  };
+  const withHarbor = (harbor: unknown, run: () => void) => {
+    const saved = loaderData.result.safeHarbor;
+    (loaderData.result as { safeHarbor: unknown }).safeHarbor = harbor;
+    try {
+      run();
+    } finally {
+      loaderData.result.safeHarbor = saved;
+    }
+  };
+
+  it("says AGI was not entered when it is blank, from engine output", () => {
+    const harbor = harborFor(null);
+    expect(harbor.multiplierReason).toBe("agi_not_entered");
+    withHarbor(harbor, () => {
+      render(<Dashboard />);
+      expect(screen.getByText("110% of prior year")).toBeInTheDocument();
+      expect(screen.getByText("AGI not entered, so 110%.")).toBeInTheDocument();
+    });
+  });
+
+  it("adds no reason when AGI is entered", () => {
+    const harbor = harborFor(5_000_000);
+    expect(harbor.multiplierReason).toBe("agi_not_over_threshold");
+    withHarbor(harbor, () => {
+      render(<Dashboard />);
+      expect(screen.getByText("100% of prior year")).toBeInTheDocument();
+      expect(screen.queryByText(/AGI not entered/)).not.toBeInTheDocument();
+    });
   });
 });

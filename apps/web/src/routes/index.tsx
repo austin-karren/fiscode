@@ -213,6 +213,11 @@ function Dashboard() {
                   : `${(result.safeHarbor.multiplierUsed! * 100).toFixed(0)}% of prior year`
               }
               tooltip={GLOSSARY.safeHarborPrior}
+              note={
+                result.safeHarbor.multiplierReason === "agi_not_entered"
+                  ? "AGI not entered, so 110%."
+                  : undefined
+              }
             >
               {result.safeHarbor.firstYear
                 ? "n/a (first year)"
@@ -317,10 +322,13 @@ function Field({
   label,
   children,
   tooltip,
+  note,
 }: {
   label: string;
   children: React.ReactNode;
   tooltip?: string;
+  /** One short line under the value: why it is what it is. */
+  note?: string;
 }) {
   return (
     <div>
@@ -329,6 +337,7 @@ function Field({
         {tooltip ? <InfoTooltip text={tooltip} /> : null}
       </p>
       <p className="text-lg font-semibold tabular-nums">{children}</p>
+      {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
     </div>
   );
 }
