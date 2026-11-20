@@ -78,6 +78,7 @@ const expense = (over: Partial<ExpenseRow>): ExpenseRow => ({
   notes: null,
   flagForSection179: false,
   startupExpense: false,
+  placedInServiceDate: null,
   createdAt: TS,
   updatedAt: TS,
   deletedAt: null,
@@ -300,14 +301,14 @@ describe("layout a person can read", () => {
   it("opens with two comment lines: what the file is, and how to read it", () => {
     const lines = stripBom(csv).split("\r\n");
     expect(lines.slice(0, 3)).toEqual([
-      "# fiscode export (schema: v2; scope: full)",
+      "# fiscode export (schema: v3; scope: full)",
       "# Money is in dollars. Dates are YYYY-MM-DD. Import this file at https://fiscode.app to restore it.",
       "",
     ]);
     const yearly = exportBundle(exampleBundle(), { scope: "yearly", year: 2026 });
-    expect(yearly).toContain("# fiscode export (schema: v2; scope: yearly; year: 2026)");
-    expect(parseCsv(yearly).provenance).toEqual({ schema: "v2", scope: "yearly", year: 2026 });
-    expect(parseCsv(csv).provenance).toEqual({ schema: "v2", scope: "full" });
+    expect(yearly).toContain("# fiscode export (schema: v3; scope: yearly; year: 2026)");
+    expect(parseCsv(yearly).provenance).toEqual({ schema: "v3", scope: "yearly", year: 2026 });
+    expect(parseCsv(csv).provenance).toEqual({ schema: "v3", scope: "full" });
   });
 
   it("gives ambiguous stored names a table-specific header", () => {
@@ -522,7 +523,7 @@ describe("UTF-8 BOM", () => {
   it("imports a file with a BOM", () => {
     const { bundle, provenance, validationErrors } = parseCsv(exportFull(exampleBundle()));
     expect(validationErrors).toEqual([]);
-    expect(provenance.schema).toBe("v2");
+    expect(provenance.schema).toBe("v3");
     expect(bundle.profile?.id).toBe("profile");
   });
 
@@ -590,7 +591,7 @@ describe("import of files a person or a spreadsheet has touched", () => {
     expect(validationErrors).toEqual([]);
     expect(bundle).toEqual(exampleBundle());
     expect(provenance.scope).toBe("full");
-    expect(provenance.schema).toBe("v2");
+    expect(provenance.schema).toBe("v3");
   });
 
   it("reads LF line endings and ignores the label columns", () => {
@@ -739,7 +740,7 @@ describe("import errors a person can act on", () => {
   });
 
   it("refuses a file marked with a schema this build does not know", () => {
-    const csv = exportFull(exampleBundle()).replace("schema: v2", "schema: v9");
+    const csv = exportFull(exampleBundle()).replace("schema: v3", "schema: v9");
     const { bundle, validationErrors } = parseCsv(csv);
     expect(bundle).toEqual(emptyBundle());
     expect(validationErrors).toHaveLength(1);
@@ -901,6 +902,7 @@ describe("no stored field is left out", () => {
           notes: s("expense notes"),
           flagForSection179: true,
           startupExpense: true,
+          placedInServiceDate: "2026-02-01",
           ...tail(),
         },
       ],

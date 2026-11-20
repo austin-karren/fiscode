@@ -1,4 +1,4 @@
-﻿# fiscode export (schema: v2; scope: full)
+﻿# fiscode export (schema: v3; scope: full)
 # Money is in dollars. Dates are YYYY-MM-DD. Import this file at https://fiscode.app to restore it.
 
 # Profile
@@ -42,10 +42,10 @@ record_type,start_date,end_date,deduction_method,deduction_method_label,office_s
 home_office,2024-01-01,,simplified,Simplified,150,2000,,,,yes,,ho_01HXSP00HOMEOFFICE001,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 
 # Expenses
-record_type,date,category,category_label,description,amount,client_name,reason,flag_for_section_179,startup_expense,notes,id,client_id,created_at,updated_at,deleted_at
-expense,2026-01-20,equipment,Equipment,Standing desk,899.99,,Home-office setup stipend purchase.,yes,no,,ex_01HXSP00EXPENSE000001,,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
-expense,2026-03-05,software_subs,Software & subscriptions,Linear annual subscription,120.00,,PM tooling,no,no,,ex_01HXSP00EXPENSE000002,,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
-expense,2026-07-09,travel,Travel,Conference hotel + airfare,250.00,Ad-hoc Consulting,,no,no,,ex_01HXSP00EXPENSE000003,cl_01HXSP00CLIENT0000002,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
+record_type,date,category,category_label,description,amount,client_name,reason,flag_for_section_179,startup_expense,placed_in_service_date,notes,id,client_id,created_at,updated_at,deleted_at
+expense,2026-01-20,equipment,Equipment,Standing desk,899.99,,Home-office setup stipend purchase.,yes,no,,,ex_01HXSP00EXPENSE000001,,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
+expense,2026-03-05,software_subs,Software & subscriptions,Linear annual subscription,120.00,,PM tooling,no,no,,,ex_01HXSP00EXPENSE000002,,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
+expense,2026-07-09,travel,Travel,Conference hotel + airfare,250.00,Ad-hoc Consulting,,no,no,,,ex_01HXSP00EXPENSE000003,cl_01HXSP00CLIENT0000002,2026-06-04T12:00:00.000Z,2026-06-04T12:00:00.000Z,
 
 # Retirement contributions
 record_type,date,account,account_label,amount,notes,id,created_at,updated_at,deleted_at

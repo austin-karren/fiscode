@@ -129,6 +129,7 @@ const bundle: DbBundle = {
       notes: null,
       flagForSection179: true,
       startupExpense: false,
+      placedInServiceDate: null,
       createdAt: FIXED,
       updatedAt: FIXED,
       deletedAt: null,
@@ -386,6 +387,7 @@ describe("the export is the whole state, and the same bytes every time", () => {
       notes: null,
       flagForSection179: false,
       startupExpense: false,
+      placedInServiceDate: null,
       deletedAt: null,
     });
     await expenseRepo.softDelete("ex_1");

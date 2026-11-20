@@ -1,0 +1,75 @@
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// SQLite over OPFS does not exist in jsdom; the repo is replaced at the
+// package boundary.
+vi.mock("@fiscode/db", () => ({ expenseRepo: { update: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
+
+import { expenseRepo } from "@fiscode/db";
+
+import { EditExpenseDialog } from "./edit-expense-dialog";
+
+const FIXED = "2026-06-04T12:00:00.000Z";
+const CATEGORIES = [
+  ["equipment", "Equipment"],
+  ["software_subs", "Software & subscriptions"],
+] as const;
+
+// Demo: a $3,000 laptop bought before a Feb 1, 2026 start.
+const laptop = {
+  id: "ex_demo_laptop",
+  date: "2025-11-20",
+  amountCents: 300_000,
+  category: "equipment",
+  clientId: null,
+  description: "Demo laptop",
+  reason: null,
+  notes: null,
+  flagForSection179: false,
+  startupExpense: false,
+  placedInServiceDate: null as string | null,
+  createdAt: FIXED,
+  updatedAt: FIXED,
+  deletedAt: null,
+};
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+const openAndSave = async (expense: typeof laptop) => {
+  render(
+    <EditExpenseDialog
+      expense={expense}
+      categories={CATEGORIES}
+      onSaved={vi.fn()}
+      seStartDate="2026-02-01"
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: /^Edit\b/ }));
+  await screen.findByRole("dialog");
+  return screen.getByRole("button", { name: /Placed in service/ });
+};
+
+describe("edit expense: equipment placed in service", () => {
+  it("shows the SE start for equipment bought before it, and saves it untouched", async () => {
+    const field = await openAndSave(laptop);
+    expect(field).toHaveAccessibleName(expect.stringContaining("Feb 1, 2026"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(expenseRepo.update).toHaveBeenCalledWith(
+        "ex_demo_laptop",
+        expect.objectContaining({ placedInServiceDate: "2026-02-01" }),
+      ),
+    );
+  });
+
+  it("an untouched row that already has its date writes nothing", async () => {
+    await openAndSave({ ...laptop, placedInServiceDate: "2026-02-01" });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(expenseRepo.update).not.toHaveBeenCalled();
+  });
+});

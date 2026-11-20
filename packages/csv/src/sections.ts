@@ -277,6 +277,7 @@ export const SECTIONS: readonly Section[] = [
       text("reason"),
       bool("flag_for_section_179"),
       bool("startup_expense"),
+      date("placed_in_service_date"),
       text("notes"),
       text("id"),
       text("client_id"),

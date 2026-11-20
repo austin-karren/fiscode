@@ -83,6 +83,7 @@ const expense = (id: string, date: string, amount: number) => ({
   notes: null,
   flagForSection179: false,
   startupExpense: false,
+  placedInServiceDate: null,
   createdAt: FIXED,
   updatedAt: FIXED,
   deletedAt: null,
@@ -306,6 +307,75 @@ describe("bug A: a startup cost counts in the year the business begins (IRC §19
     });
     expect(deriveYear(b, 2026).directExpenses).toBe(5_388_89);
     expect(deriveYear(b, 2027).directExpenses).toBe(466_67);
+  });
+});
+
+describe("equipment: placed-in-service date (Pub 946) and the §179 notice", () => {
+  const equipment = (id: string, date: string, amount: number, extra = {}) => ({
+    ...expense(id, date, amount),
+    category: "equipment",
+    ...extra,
+  });
+  const profile = { ...makeBundle().profile!, seStartDate: "2026-02-01" };
+
+  it("bought before the start, placed in service on it: counted in 2026, at the start", () => {
+    const b = makeBundle({
+      profile,
+      income: [income("i1", "2026-07-01", 10_000_00)],
+      expenses: [equipment("e1", "2025-11-20", 1_200_00, { placedInServiceDate: "2026-02-01" })],
+    });
+    expect(deriveYear(b, 2025).directExpenses).toBe(0);
+    expect(deriveYear(b, 2026).directExpenses).toBe(1_200_00);
+    // Annualized: in Q1 (through Mar 31), on the placed-in-service date.
+    const annualized = {
+      ...b,
+      profile: { ...b.profile!, quarterlyMethod: "annualized" as const },
+    };
+    const input = estimateBundleYear(annualized, 2026).input as AnnualizedInput;
+    expect(input.periods[0].cumulativeDeductibleExpenses).toBe(1_200_00);
+  });
+
+  it("pre-start equipment is counted, so the dashboard does not call it excluded", () => {
+    const b = makeBundle({ profile, expenses: [equipment("e1", "2026-01-20", 899_99)] });
+    expect(deriveYear(b, 2026).directExpenses).toBe(899_99);
+    expect(deriveYear(b, 2026).excludedBeforeSeStart.expense).toBe(0);
+  });
+
+  it("no placed-in-service date, bought before the start: counts on the SE start, as the form shows", () => {
+    // Review #66 r1 ruling 3: the same rule as the prefill, applied in counting (no data write),
+    // so a v2 import counts the same as after an untouched Save.
+    const b = makeBundle({ profile, expenses: [equipment("e1", "2025-11-20", 1_200_00)] });
+    expect(deriveYear(b, 2025).directExpenses).toBe(0);
+    expect(deriveYear(b, 2026).directExpenses).toBe(1_200_00);
+  });
+
+  it("$8,000 of pre-start equipment ticked Startup: placed in service, $8,000 counts, §179 notice", () => {
+    // Equipment is never a §195 start-up cost (review #66 r1 ruling 1): no $5,000 limit.
+    const b = makeBundle({
+      profile,
+      income: [income("i1", "2026-07-01", 20_000_00)],
+      expenses: [equipment("e1", "2025-12-15", 8_000_00, { startupExpense: true })],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.directExpenses).toBe(8_000_00);
+    expect(d.startupCosts.total).toBe(0);
+    expect(d.equipmentAssumedSection179).toBe(1);
+  });
+
+  it("notice: counted equipment over $2,500 without the §179 flag; no number change", () => {
+    const b = makeBundle({
+      profile,
+      income: [income("i1", "2026-07-01", 10_000_00)],
+      expenses: [
+        equipment("big", "2026-03-01", 3_000_00), // counted, over $2,500, not flagged: notice
+        equipment("flagged", "2026-03-01", 3_000_00, { flagForSection179: true }),
+        equipment("small", "2026-03-01", 2_500_00), // at the de minimis limit: no notice
+        expense("supplies", "2026-03-01", 4_000_00), // not equipment
+      ],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.equipmentAssumedSection179).toBe(1);
+    expect(d.directExpenses).toBe(3_000_00 + 3_000_00 + 2_500_00 + 4_000_00);
   });
 });
 
