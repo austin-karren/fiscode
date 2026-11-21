@@ -328,29 +328,27 @@ export const countBundleRows = (bundle: Snapshot | undefined): number => {
 
 const rows = (n: number): string => `${n} ${n === 1 ? "row" : "rows"}`;
 
+/** Same values in every field, whatever the key order (rows from a CSV and from the database differ in it). */
+const sameValues = (x: Snapshot, y: Snapshot): boolean => {
+  const keys = new Set([...Object.keys(x), ...Object.keys(y)]);
+  for (const k of keys) if ((x[k] ?? null) !== (y[k] ?? null)) return false;
+  return true;
+};
+
 /** Rows in `after` whose id is in `before` with different values (an Update rows import). */
 const countChangedRows = (before: Snapshot | undefined, after: Snapshot | undefined): number => {
   if (!before || !after) return 0;
+  const list = (b: Snapshot, key: string) => (Array.isArray(b[key]) ? (b[key] as Snapshot[]) : []);
   let changed = 0;
   for (const key of DATA_TABLES) {
-    const was = new Map(
-      (Array.isArray(before[key]) ? (before[key] as Snapshot[]) : []).map((r) => [
-        r.id,
-        JSON.stringify(r),
-      ]),
-    );
-    for (const r of Array.isArray(after[key]) ? (after[key] as Snapshot[]) : []) {
+    const was = new Map(list(before, key).map((r) => [r.id, r]));
+    for (const r of list(after, key)) {
       const prior = was.get(r.id);
-      if (prior !== undefined && prior !== JSON.stringify(r)) changed++;
+      if (prior && !sameValues(prior, r)) changed++;
     }
   }
-  if (
-    before.profile &&
-    after.profile &&
-    JSON.stringify(before.profile) !== JSON.stringify(after.profile)
-  ) {
-    changed++;
-  }
+  const [p, q] = [before.profile, after.profile];
+  if (p && q && !sameValues(p as Snapshot, q as Snapshot)) changed++;
   return changed;
 };
 

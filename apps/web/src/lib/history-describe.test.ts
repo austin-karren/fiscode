@@ -272,7 +272,7 @@ describe("describeHistoryRow", () => {
         bundle([expense, { ...expense, id: "expense_2" }]),
         bundle([
           { ...expense, amountCents: 99_00 },
-          { ...expense, id: "expense_2" },
+          Object.fromEntries(Object.entries({ ...expense, id: "expense_2" }).reverse()),
           { ...expense, id: "expense_3" },
         ]),
         "import-update",
