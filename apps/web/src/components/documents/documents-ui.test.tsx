@@ -1,7 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { dropBytesForStub, documentRepo, folderRepo } from "../../lib/documents-stub";
+import {
+  dropBytesForStub,
+  documentRepo,
+  folderRepo,
+  validDocumentName,
+} from "../../lib/documents-stub";
 import { DocumentSheet } from "./document-sheet";
 import { MoveDialog } from "./move-dialog";
 import { NameDialog } from "./name-dialog";
@@ -52,6 +57,32 @@ describe("name dialog opens fresh each time (REVIEW #83 r2 F2)", () => {
     rerender(<NameDialog {...props} open={false} initial="Demo receipts" />);
     rerender(<NameDialog {...props} open initial="Demo receipts" />);
     expect(screen.getByLabelText("Folder name")).toHaveValue("Demo receipts");
+  });
+});
+
+describe("document rename checks the name on blur and on submit (#84)", () => {
+  it("shows why, on one line linked to the field, and doesn't save", async () => {
+    const onSubmit = vi.fn(async () => {});
+    render(
+      <NameDialog
+        open
+        onOpenChange={() => {}}
+        title="Rename document"
+        label="Name"
+        initial="demo.pdf"
+        submitLabel="Rename"
+        onSubmit={onSubmit}
+        validate={validDocumentName}
+      />,
+    );
+    const field = screen.getByLabelText("Name");
+    fireEvent.change(field, { target: { value: "  " } });
+    fireEvent.blur(field);
+    expect(field).toHaveAccessibleDescription("Enter a name.");
+    fireEvent.change(field, { target: { value: "a/b.pdf" } });
+    fireEvent.submit(field.closest("form")!);
+    expect(await screen.findByRole("alert")).toHaveTextContent("A name can't contain /.");
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });
 

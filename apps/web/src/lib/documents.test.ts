@@ -6,11 +6,14 @@ import {
   folderRepo,
   FolderCycleError,
   FolderNameInvalidError,
+  validDocumentName,
+  YEAR_ROOT_KEY,
   FolderNameTakenError,
   FolderTooDeepError,
   DocumentBytesMissingError,
 } from "./documents-stub";
 import { uploadFiles } from "./documents-upload";
+import { landedLine } from "./documents-restore";
 import { formatBytes, subtreeOf } from "./documents-view";
 
 // Demo files only: made here, never real documents.
@@ -166,5 +169,56 @@ describe("documents view helpers", () => {
     expect([...subtreeOf(await folderRepo.list(), a.id)].toSorted()).toEqual(
       [a.id, b.id, c.id].toSorted(),
     );
+  });
+});
+
+describe("#84 r2: default folders by key, document names, restores that never refuse", () => {
+  it("keeps a renamed default folder as the default, and makes no second one", async () => {
+    await folderRepo.ensureYearDefaults(2032);
+    const year = (await folderRepo.list()).find(
+      (f) => f.defaultKey === YEAR_ROOT_KEY && f.taxYear === 2032,
+    )!;
+    await folderRepo.rename(year.id, "Taxes 2032");
+    const expenses = (await folderRepo.list()).find(
+      (f) => f.parentId === year.id && f.defaultKey === "expenses",
+    )!;
+    await folderRepo.rename(expenses.id, "Receipts");
+    await folderRepo.ensureYearDefaults(2032);
+    const all = await folderRepo.list();
+    expect(all.filter((f) => f.defaultKey === YEAR_ROOT_KEY && f.taxYear === 2032)).toHaveLength(1);
+    expect(
+      all.filter((f) => f.parentId === year.id && f.defaultKey === "expenses").map((f) => f.name),
+    ).toEqual(["Receipts"]);
+  });
+
+  it("says why a document name can't be used", () => {
+    expect(validDocumentName("  ")).toBe("Enter a name.");
+    expect(validDocumentName("a/b.pdf")).toBe("A name can't contain /.");
+    expect(validDocumentName("x".repeat(121))).toBe("Names are 120 characters at most.");
+    expect(validDocumentName("demo.pdf")).toBeUndefined();
+  });
+
+  it("restores a folder whose name was taken as 'Name (2)', and says so", async () => {
+    const parent = await folderRepo.create({ name: "Demo restore" });
+    const first = await folderRepo.create({ name: "Receipts", parentId: parent.id });
+    await folderRepo.softDelete(first.id);
+    await folderRepo.create({ name: "Receipts", parentId: parent.id });
+    await folderRepo.revertTo(first.id, { ...first, deletedAt: null });
+    expect((await folderRepo.get(first.id))?.name).toBe("Receipts (2)");
+    expect(await landedLine(first)).toBe("Restored Receipts as Receipts (2) in Demo restore.");
+  });
+
+  it("restores a folder whose parent is gone under the year's root, and says so", async () => {
+    await folderRepo.ensureYearDefaults(2033);
+    const year = (await folderRepo.list()).find(
+      (f) => f.defaultKey === YEAR_ROOT_KEY && f.taxYear === 2033,
+    )!;
+    const box = await folderRepo.create({ name: "Demo box", parentId: year.id });
+    const inner = await folderRepo.create({ name: "Demo inner", parentId: box.id });
+    await folderRepo.softDelete(inner.id);
+    await folderRepo.softDeleteTree(box.id);
+    await folderRepo.revertTo(inner.id, { ...inner, deletedAt: null });
+    expect((await folderRepo.get(inner.id))?.parentId).toBe(year.id);
+    expect(await landedLine(inner)).toBe("Restored Demo inner in 2033: its folder is gone.");
   });
 });

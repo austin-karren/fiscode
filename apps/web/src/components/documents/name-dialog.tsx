@@ -24,6 +24,8 @@ export function NameDialog(props: {
   initial?: string;
   submitLabel: string;
   onSubmit: (name: string) => Promise<void>;
+  /** Why a name can't be used, checked on blur and on submit (documents: validDocumentName). */
+  validate?: (name: string) => string | undefined;
 }) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -45,12 +47,14 @@ function NameForm({
   initial = "",
   submitLabel,
   onSubmit,
+  validate,
 }: {
   onOpenChange: (open: boolean) => void;
   label: string;
   initial?: string;
   submitLabel: string;
   onSubmit: (name: string) => Promise<void>;
+  validate?: (name: string) => string | undefined;
 }) {
   const [name, setName] = useState(initial);
   const [error, setError] = useState<string>();
@@ -60,6 +64,8 @@ function NameForm({
     <EnterToSubmitForm
       onSubmit={async (e) => {
         e.preventDefault();
+        const problem = validate?.(name);
+        if (problem) return setError(problem);
         setBusy(true);
         try {
           await onSubmit(name);
@@ -83,6 +89,7 @@ function NameForm({
             setName(e.target.value);
             setError(undefined);
           }}
+          onBlur={() => setError(validate?.(name))}
         />
         {error ? (
           <p id={`${id}-error`} role="alert" className="text-sm text-destructive">

@@ -27,6 +27,7 @@ const folder = (id: string, name: string, parentId: string | null = null) => ({
   parentId,
   taxYear: 2026,
   sortOrder: 0,
+  defaultKey: null,
   createdAt: FIXED,
   updatedAt: FIXED,
   deletedAt: null,

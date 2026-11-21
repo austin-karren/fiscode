@@ -17,6 +17,8 @@ import { DocumentSheet } from "../components/documents/document-sheet";
 import { FolderTree } from "../components/documents/folder-tree";
 import {
   ALLOWED_DOCUMENT_MIMES,
+  YEAR_ROOT_KEY,
+  validDocumentName,
   documentLinkRepo,
   documentRepo,
   folderRepo,
@@ -26,6 +28,7 @@ import {
 import { fileKind, folderPath, formatBytes, subtreeOf } from "../lib/documents-view";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { uploadFiles, type UploadResult } from "../lib/documents-upload";
+import { landedLine } from "../lib/documents-restore";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { formatDate } from "../lib/format-date";
 
@@ -50,7 +53,8 @@ export const Route = createFileRoute("/documents")({
       documentRepo.listIncludingDeleted(),
       documentLinkRepo.countsByDocument(),
     ]);
-    const yearFolder = folders.find((f) => f.parentId === null && f.name === String(year));
+    // By default_key, so a renamed year folder is still the year's.
+    const yearFolder = folders.find((f) => f.defaultKey === YEAR_ROOT_KEY && f.taxYear === year);
     const folderId = deps.folder ?? yearFolder?.id ?? null;
     const docs = deps.q
       ? await documentRepo.search(deps.q)
@@ -119,7 +123,7 @@ function DocumentsPage() {
         label: "Undo",
         onClick: async () => {
           await folderRepo.restoreTree(deleted);
-          toast(`Restored ${folder.name}.`);
+          toast(await landedLine(folder));
           await refresh();
         },
       },
@@ -377,6 +381,7 @@ function DocumentsPage() {
         onOpenChange={(o) => !o && setDialog(null)}
         title="Rename document"
         label="Name"
+        validate={validDocumentName}
         initial={dialog?.kind === "rename-doc" ? dialog.doc.name : ""}
         submitLabel="Rename"
         onSubmit={async (name) => {
@@ -451,8 +456,8 @@ function TrashView({
   onRestored: () => Promise<void>;
 }) {
   const restoreFolder = async (f: DocumentFolderRow) => {
-    await folderRepo.restoreTree({ folderIds: [f.id], documentIds: [] });
-    toast(`Restored ${f.name}.`);
+    await folderRepo.revertTo(f.id, { ...f, deletedAt: null });
+    toast(await landedLine(f));
     await onRestored();
   };
   const restoreDoc = async (d: DocumentRow) => {

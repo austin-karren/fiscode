@@ -19,6 +19,26 @@ export const ALLOWED_DOCUMENT_MIMES = [
 ] as const;
 const MAX_FOLDER_DEPTH = 8;
 
+/** document_folder.default_key of the year's folders: found by key, so a rename keeps them. */
+export const YEAR_ROOT_KEY = "year-root";
+export const YEAR_DEFAULT_FOLDER_KEYS = {
+  expenses: "Expenses",
+  income: "Income",
+  mileage: "Mileage",
+  "health-insurance": "Health insurance",
+  "tax-forms": "Tax forms",
+  other: "Other",
+} as const;
+
+/** Why a document name can't be used, or undefined when it can (core's validDocumentName). */
+export const validDocumentName = (name: string): string | undefined => {
+  const trimmed = name.trim();
+  if (!trimmed) return "Enter a name.";
+  if (trimmed.includes("/")) return "A name can't contain /.";
+  if (trimmed.length > 120) return "Names are 120 characters at most.";
+  return undefined;
+};
+
 /** Every documents error; its `message` can be shown as is. */
 export class DocumentError extends Error {
   constructor(message: string) {
@@ -29,6 +49,7 @@ export class DocumentError extends Error {
 export class FolderNameTakenError extends DocumentError {}
 export class FolderNameInvalidError extends DocumentError {}
 export class DocumentNotFoundError extends DocumentError {}
+export class DocumentNameInvalidError extends DocumentError {}
 export class FolderNotFoundError extends DocumentError {}
 export class FolderTooDeepError extends DocumentError {}
 export class FolderCycleError extends DocumentError {}
@@ -47,6 +68,8 @@ export type DocumentFolderRow = Dated & {
   name: string;
   taxYear: number | null;
   sortOrder: number;
+  /** YEAR_ROOT_KEY or a YEAR_DEFAULT_FOLDER_KEYS key for the year's folders; null for the user's. */
+  defaultKey: string | null;
 };
 export type DocumentRow = Dated & {
   folderId: string | null;
@@ -158,10 +181,12 @@ export const folderRepo = {
     name,
     parentId = null,
     taxYear = null,
+    defaultKey = null,
   }: {
     name: string;
     parentId?: string | null;
     taxYear?: number | null;
+    defaultKey?: string | null;
   }): Promise<DocumentFolderRow> {
     const clean = cleanName(name);
     if (parentId && !folders.get(parentId)) throw new FolderNotFoundError("That folder is gone.");
@@ -176,6 +201,7 @@ export const folderRepo = {
       name: clean,
       taxYear: taxYear ?? (parentId ? (folders.get(parentId)?.taxYear ?? null) : null),
       sortOrder: 0,
+      defaultKey,
       createdAt: t,
       updatedAt: t,
       deletedAt: null,
@@ -213,9 +239,29 @@ export const folderRepo = {
     folders.set(id, { ...row, deletedAt: now() });
     return true;
   },
+  /** Never refuses (#84): a taken name comes back as "Name (2)", a gone parent as the year root's
+   * child, or the top. */
   async revertTo(id: string, snapshot: DocumentFolderRow) {
-    folders.set(id, snapshot);
-    return snapshot;
+    const row = { ...snapshot };
+    const parentLive = (pid: string | null) => !pid || folders.get(pid)?.deletedAt === null;
+    if (!parentLive(row.parentId)) {
+      const root = live(folders.values()).find(
+        (f) => f.defaultKey === YEAR_ROOT_KEY && f.taxYear === row.taxYear && f.id !== id,
+      );
+      row.parentId = root?.id ?? null;
+    }
+    if (row.deletedAt === null) {
+      const taken = (name: string) =>
+        live(folders.values()).some(
+          (f) =>
+            f.id !== id &&
+            f.parentId === row.parentId &&
+            f.name.toLowerCase() === name.toLowerCase(),
+        );
+      for (let n = 2, base = row.name; taken(row.name); n++) row.name = `${base} (${n})`;
+    }
+    folders.set(id, row);
+    return row;
   },
   async countTree(id: string) {
     const ids = subtreeIds(id);
@@ -236,7 +282,9 @@ export const folderRepo = {
     return { folderIds, documentIds };
   },
   async restoreTree({ folderIds, documentIds }: { folderIds: string[]; documentIds: string[] }) {
-    for (const f of folderIds) folders.set(f, { ...folders.get(f)!, deletedAt: null });
+    const [top, ...rest] = folderIds;
+    if (top) await folderRepo.revertTo(top, { ...folders.get(top)!, deletedAt: null });
+    for (const f of rest) folders.set(f, { ...folders.get(f)!, deletedAt: null });
     for (const d of documentIds) documents.set(d, { ...documents.get(d)!, deletedAt: null });
   },
   async tree(): Promise<FolderNode[]> {
@@ -254,25 +302,22 @@ export const folderRepo = {
     return build(null);
   },
   async ensureYearDefaults(taxYear: number): Promise<DocumentFolderRow[]> {
-    const named = (parentId: string | null, name: string) =>
+    // By default_key, so a renamed default folder is still the default; a deleted one stays
+    // deleted (the contract tracks this through history).
+    const byKey = (parentId: string | null, key: string) =>
       [...folders.values()].find(
-        (f) => f.parentId === parentId && f.name.toLowerCase() === name.toLowerCase(),
+        (f) => f.parentId === parentId && f.defaultKey === key && f.taxYear === taxYear,
       );
-    // A folder the user deleted stays deleted (the contract tracks this through history).
-    const existing = named(null, String(taxYear));
+    const existing = byKey(null, YEAR_ROOT_KEY);
     if (existing?.deletedAt) return [];
-    const year = existing ?? (await folderRepo.create({ name: String(taxYear), taxYear }));
+    const year =
+      existing ??
+      (await folderRepo.create({ name: String(taxYear), taxYear, defaultKey: YEAR_ROOT_KEY }));
     const made = [year];
-    for (const name of [
-      "Expenses",
-      "Income",
-      "Mileage",
-      "Health insurance",
-      "Tax forms",
-      "Other",
-    ]) {
-      const child = named(year.id, name);
-      if (!child) made.push(await folderRepo.create({ name, parentId: year.id, taxYear }));
+    for (const [key, name] of Object.entries(YEAR_DEFAULT_FOLDER_KEYS)) {
+      if (!byKey(year.id, key)) {
+        made.push(await folderRepo.create({ name, parentId: year.id, taxYear, defaultKey: key }));
+      }
     }
     return made;
   },
@@ -343,9 +388,9 @@ export const documentRepo = {
     return { ok, failed };
   },
   async rename(id: string, name: string) {
-    const clean = name.trim();
-    if (!clean) throw new FolderNameInvalidError("Enter a name.");
-    return documentRepo.update(id, { name: clean });
+    const problem = validDocumentName(name);
+    if (problem) throw new DocumentNameInvalidError(problem);
+    return documentRepo.update(id, { name: name.trim() });
   },
   async move(id: string, folderId: string | null) {
     const row = documents.get(id);
