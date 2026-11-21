@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@fiscode/ui/components
 import { toast } from "sonner";
 
 import { ALLOWED_DOCUMENT_MIMES } from "@fiscode/core";
-import { documentLinkRepo, documentRepo, folderRepo } from "@fiscode/db";
+import { documentLinkRepo, documentRepo, folderRepo, sha256Hex } from "@fiscode/db";
 import type { DocumentFolderRow, DocumentRow } from "@fiscode/csv";
 import { errorLine, fileKind, folderPath } from "../../lib/documents-view";
 import { uploadFiles } from "../../lib/documents-upload";
@@ -153,27 +153,54 @@ function AttachBody({
     setBusy(true);
     try {
       const all = await documentRepo.list();
-      const results = await uploadFiles(files, target.id, all, (f) =>
-        f === target.id ? target.path : folderPath(folders, f),
-      );
+      // Live documents by their bytes: a file already stored is linked, not added again.
+      const stored = new Map(all.filter((d) => d.deletedAt === null).map((d) => [d.sha256, d]));
+      const pathOf = (f: string | null) => (f === target.id ? target.path : folderPath(folders, f));
       const out: { ok: boolean; line: string }[] = [];
-      for (const r of results) {
-        if (!r.ok || !r.doc) {
-          out.push({ ok: false, line: r.line });
+      // This row's links, kept up to date through the batch (state updates land after it).
+      const attached = new Set(linked);
+      let changed = false;
+      for (const file of files) {
+        const same = stored.get(await sha256Hex(file));
+        if (same) {
+          const as = same.name === file.name ? "" : ` as ${same.name}`;
+          if (attached.has(same.id)) {
+            out.push({ ok: true, line: `${file.name}: already attached to this row${as}.` });
+            continue;
+          }
+          const problem = await link(same);
+          if (problem) out.push({ ok: false, line: `${file.name} isn't attached. ${problem}` });
+          else {
+            changed = true;
+            attached.add(same.id);
+            out.push({
+              ok: true,
+              line: `${file.name}: Already in Documents, linked${as} (${pathOf(same.folderId)}).`,
+            });
+          }
           continue;
         }
+        // One file at a time, so each keeps its own line and a later copy in the same batch
+        // finds this one.
+        const [r] = await uploadFiles([file], target.id, all, pathOf);
+        if (!r || !r.ok || !r.doc) {
+          out.push({ ok: false, line: r?.line ?? `${file.name} wasn't added.` });
+          continue;
+        }
+        stored.set(r.doc.sha256, r.doc);
         const problem = await link(r.doc);
-        out.push(
-          problem
-            ? { ok: false, line: `${r.line} It isn't attached. ${problem}` }
-            : { ok: true, line: `${r.line.replace(/\.$/, "")} and attached it.` },
-        );
+        if (problem) out.push({ ok: false, line: `${r.line} It isn't attached. ${problem}` });
+        else {
+          changed = true;
+          attached.add(r.doc.id);
+          out.push({ ok: true, line: `${r.line.replace(/\.$/, "")} and attached it.` });
+        }
       }
       setLines(out);
       // A refused link may mean the row is gone: then refreshing unmounts this dialog and its
       // lines, so the refusals also go to a toast, and only a real attach refreshes.
       for (const l of out) if (!l.ok) toast.error(l.line);
-      if (out.some((l) => l.ok)) onChanged();
+      if (changed) onChanged();
     } finally {
       setBusy(false);
     }
