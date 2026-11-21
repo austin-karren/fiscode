@@ -325,6 +325,18 @@ describe("review #84 r1", () => {
     expect((await folderRepo.revertTo(loose.id, looseSnap))!.parentId).toBeNull();
   });
 
+  it("r2 (1) restoreTree brings a folder back as 'Name (2)' when its name is taken (walk step 11)", async () => {
+    const tree = await folderRepo.create({ name: "Tree" });
+    const leaf = await folderRepo.create({ name: "Leaf", parentId: tree.id });
+    const deleted = await folderRepo.softDeleteTree(tree.id);
+    await folderRepo.create({ name: "tree" });
+    await folderRepo.restoreTree(deleted);
+    const roots = (await folderRepo.tree()).map((n) => n.folder.name);
+    expect(roots.toSorted()).toEqual(["tree", "Tree (2)"].toSorted());
+    // Its children come back with it, under it, unchanged.
+    expect((await folderRepo.get(leaf.id))!.parentId).toBe(tree.id);
+  });
+
   it("(6) document rename rejects empty and over-long names, and trims", async () => {
     const d = await documentRepo.upload(file("a.pdf", "a"));
     await expect(documentRepo.rename(d.id, "   ")).rejects.toBeInstanceOf(DocumentNameInvalidError);

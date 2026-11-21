@@ -212,13 +212,23 @@ export const folderRepo = {
           .where(inArray(document.id, result.documentIds))) as DocumentRow[])
       : [];
     const at = nowIso();
+    // The folders whose parent isn't coming back with them get a place like revertTo's: a name
+    // now taken comes back as "Name (2)". The rest come back under their parent, as they were.
+    const coming = new Set(folders.map((f) => f.id));
+    const live = await liveFolders();
     await runAtomic([
-      ...rowsWrite(
-        documentFolder,
-        "document_folder",
-        folders,
-        { deletedAt: null, updatedAt: at },
-        "revert",
+      ...folders.flatMap((f) =>
+        rowsWrite(
+          documentFolder,
+          "document_folder",
+          [f],
+          {
+            deletedAt: null,
+            updatedAt: at,
+            ...(f.parentId !== null && coming.has(f.parentId) ? {} : placeFor(f, live)),
+          },
+          "revert",
+        ),
       ),
       ...rowsWrite(document, "document", docs, { deletedAt: null, updatedAt: at }, "revert"),
     ]);
@@ -248,8 +258,15 @@ export const folderRepo = {
    * Tax forms and Other. Idempotent, and safe to call twice at once (one in flight per year).
    * Each is known by its `default_key`: a key that has ever existed for the year, under any name,
    * live or deleted, is never made again (a renamed, moved or deleted default stays as the user
-   * left it). A folder the user made with the same name (any case) in that place is adopted. The
-   * check and every write run in one transaction. Returns the live ones, root first, in order.
+   * left it). A folder the user made with the same name (any case) in that place is adopted.
+   * Every write runs in one transaction (all or nothing). Returns the live ones, root first.
+   *
+   * Concurrency (review #84 r2): the in-flight guard is per tab. Within a tab, calls at once share
+   * one run. Across two tabs it does not hold: the check (which keys exist) is a read before the
+   * transaction, so two tabs opening a new year at the same moment could each read "none" and each
+   * write a full set, leaving two "<year>" roots. runAtomic makes each set all or nothing; it does
+   * not stop the second. A partial unique index on (tax_year, default_key) would make the second
+   * set fail and roll back; not added here.
    */
   ensureYearDefaults(taxYear: number): Promise<DocumentFolderRow[]> {
     const running = ensuring.get(taxYear);
@@ -266,27 +283,33 @@ export const folderRepo = {
    */
   async revertTo(id: string, snapshot: DocumentFolderRow): Promise<DocumentFolderRow | undefined> {
     if (snapshot.deletedAt !== null) return folderCrud.revertTo(id, snapshot);
-    const folders = (await liveFolders()).filter((f) => f.id !== id);
-    let parentId = snapshot.parentId ?? null;
-    if (parentId !== null && !folders.some((f) => f.id === parentId)) {
-      const root = folders.find(
-        (f) =>
-          f.defaultKey === YEAR_ROOT_KEY &&
-          snapshot.taxYear !== null &&
-          f.taxYear === snapshot.taxYear,
-      );
-      parentId = root?.id ?? null;
-    }
-    const taken = (name: string) =>
-      folders.some(
-        (f) =>
-          (f.parentId ?? null) === parentId &&
-          f.name.localeCompare(name, "en", { sensitivity: "base" }) === 0,
-      );
-    let name = snapshot.name;
-    for (let n = 2; taken(name); n++) name = `${snapshot.name} (${n})`;
-    return folderCrud.revertTo(id, { ...snapshot, parentId, name });
+    const live = (await liveFolders()).filter((f) => f.id !== id);
+    return folderCrud.revertTo(id, { ...snapshot, ...placeFor(snapshot, live) });
   },
+};
+
+/**
+ * Where a folder coming back to life goes, so a restore never refuses: under its old parent if
+ * that is live, else under its tax year's root, else at the top; and under its old name, or
+ * "Name (2)" (the next free number) when a live sibling has it, matched without case.
+ */
+const placeFor = (
+  folder: Pick<DocumentFolderRow, "name" | "parentId" | "taxYear">,
+  live: readonly DocumentFolderRow[],
+): { parentId: string | null; name: string } => {
+  let parentId = folder.parentId ?? null;
+  if (parentId !== null && !live.some((f) => f.id === parentId)) {
+    const root = live.find(
+      (f) =>
+        f.defaultKey === YEAR_ROOT_KEY && folder.taxYear !== null && f.taxYear === folder.taxYear,
+    );
+    parentId = root?.id ?? null;
+  }
+  const taken = (name: string) =>
+    live.some((f) => (f.parentId ?? null) === parentId && sameName(f.name, name));
+  let name = folder.name;
+  for (let n = 2; taken(name); n++) name = `${folder.name} (${n})`;
+  return { parentId, name };
 };
 
 const ensuring = new Map<number, Promise<DocumentFolderRow[]>>();
