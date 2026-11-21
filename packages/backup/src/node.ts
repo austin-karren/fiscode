@@ -77,31 +77,57 @@ export const openProfileDir = (dir: string): (() => void) => {
 
 const zipFile = (path: string) => new Blob([readFileSync(path)]);
 
-/** Every check a restore makes, without writing. Throws a BackupError, or returns the manifest. */
-export const verifyBackup = async (path: string): Promise<BackupManifest> => {
+/** A refused CSV as one message: the headline, then each row and why. */
+const refusal = (file: {
+  headline: string;
+  detail?: string;
+  errors: { line: number; message: string }[];
+}) =>
+  [file.headline, file.detail, ...file.errors.map((e) => `Row ${e.line}: ${e.message}`)]
+    .filter(Boolean)
+    .join("\n");
+
+export type MissingFile = { sha256: string; documentIds: string[]; names: string[] };
+
+/** "N files listed as missing (the device that made the backup didn't have them): a, b". */
+export const describeMissing = (missing: readonly MissingFile[]): string | undefined => {
+  if (missing.length === 0) return undefined;
+  const names = [
+    ...new Set(
+      missing.flatMap((m) =>
+        m.names.length ? m.names : [`an older version (${m.sha256.slice(0, 12)})`],
+      ),
+    ),
+  ];
+  return `${missing.length} ${missing.length === 1 ? "file" : "files"} listed as missing (the device that made the backup didn't have ${missing.length === 1 ? "it" : "them"}): ${names.join(", ")}`;
+};
+
+/** Every check a restore makes, without writing. Throws a BackupError or the CSV's refusal. */
+export const verifyBackup = async (
+  path: string,
+): Promise<{ manifest: BackupManifest; missing: MissingFile[] }> => {
   const file = await readBackup(zipFile(path));
-  if (!file.ok) {
-    throw new Error(
-      `${file.headline}${file.detail ? ` ${file.detail}` : ""} ${file.errors.map((e) => `Row ${e.line}: ${e.message}`).join("; ")}`.trim(),
-    );
-  }
-  return file.manifest;
+  if (!file.ok) throw new Error(refusal(file));
+  return { manifest: file.manifest, missing: file.missing };
 };
 
 /** Restore a backup into a new, empty profile directory. Refuses a directory with files in it. */
-export const restoreBackupToDir = async (path: string, dir: string): Promise<BackupManifest> => {
+export const restoreBackupToDir = async (
+  path: string,
+  dir: string,
+): Promise<{ manifest: BackupManifest; missing: MissingFile[] }> => {
   if (existsSync(dir) && (await readdir(dir)).length > 0) {
     throw new Error(`${dir} isn't empty. Restore into a new directory.`);
   }
   const file = await readBackup(zipFile(path));
-  if (!file.ok) throw new Error(file.headline);
+  if (!file.ok) throw new Error(refusal(file));
   const close = openProfileDir(dir);
   try {
     await restoreBackupInto(file, fsBlobStore(dir));
   } finally {
     close();
   }
-  return file.manifest;
+  return { manifest: file.manifest, missing: file.missing };
 };
 
 /** A backup zip of a profile directory. */
@@ -128,7 +154,7 @@ export const checkRoundtrip = async (
 ): Promise<{ identical: boolean; manifest: BackupManifest }> => {
   const dir = await mkdtemp(join(tmpdir(), "fiscode-backup-"));
   try {
-    const manifest = await restoreBackupToDir(path, join(dir, "profile"));
+    const { manifest } = await restoreBackupToDir(path, join(dir, "profile"));
     const again = await backupDir(join(dir, "profile"), {
       createdAt: manifest.createdAt,
       build: manifest.app.build,
@@ -142,20 +168,27 @@ export const checkRoundtrip = async (
   }
 };
 
-/** Counts, dates, schema and the folder tree, for a README or a CI log. */
+/**
+ * Counts, dates, schema and the live documents' paths, for a README or a CI log. Which files are
+ * live is read from the manifest and the rows (a live document's current bytes), not from the
+ * path (review #85 r1).
+ */
 export const summarizeBackup = async (path: string) => {
   const file = await readBackup(zipFile(path));
-  if (!file.ok) throw new Error(file.headline);
+  if (!file.ok) throw new Error(refusal(file));
   const m = file.manifest;
+  const liveShas = new Set(
+    file.bundle.documents.filter((d) => d.deletedAt === null).map((d) => d.sha256),
+  );
+  const live = m.documents.filter((d) => liveShas.has(d.sha256));
   return {
     createdAt: m.createdAt,
     formatVersion: m.formatVersion,
     csvSchema: m.app.csvSchema,
     build: m.app.build,
     counts: m.counts,
-    missingBlobs: m.missing.length,
-    documents: m.documents
-      .filter((d) => !d.path.startsWith("documents/.versions/"))
-      .map((d) => d.path),
+    documents: live.map((d) => d.path),
+    versions: m.documents.length - live.length,
+    missing: file.missing.map((x) => ({ sha256: x.sha256, names: x.names })),
   };
 };

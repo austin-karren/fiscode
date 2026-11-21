@@ -4,6 +4,7 @@ import {
   BackupManifestError,
   BackupNotAZipError,
   BackupTooNewError,
+  BackupUnexpectedFileError,
 } from "@fiscode/core";
 import {
   CSV_SCHEMA_VERSION,
@@ -297,13 +298,69 @@ export type BackupFile =
       /** The bytes to write, by sha256. */
       blobs: Map<string, Uint8Array>;
       documents: { files: number; bytes: number };
+      /**
+       * Files the backup lists as missing (the device that made it didn't have them), with the
+       * names of the documents that use them, for the dialog. Their rows restore without bytes.
+       */
+      missing: { sha256: string; documentIds: string[]; names: string[] }[];
     }
   | Extract<ImportFile, { ok: false }>;
 
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+const isFileEntry = (v: unknown): boolean =>
+  isRecord(v) &&
+  typeof v.path === "string" &&
+  typeof v.sha256 === "string" &&
+  typeof v.sizeBytes === "number" &&
+  Array.isArray(v.documentIds);
+
+/** The manifest's shape, or a BackupManifestError saying what is wrong with it. */
+const validManifest = (raw: unknown): BackupManifest => {
+  const bad = (reason: string): never => {
+    throw new BackupManifestError(reason);
+  };
+  if (!isRecord(raw)) return bad("manifest.json isn't an object");
+  if (raw.format !== BACKUP_FORMAT) bad("manifest.json isn't a fiscode backup's");
+  const v = raw.formatVersion;
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 1) {
+    bad("its format version isn't a whole number of 1 or more");
+  }
+  if ((v as number) > BACKUP_FORMAT_VERSION) throw new BackupTooNewError(v as number);
+  if (typeof raw.createdAt !== "string") bad("it has no creation time");
+  const csv = raw.csv;
+  if (
+    !isRecord(csv) ||
+    typeof csv.path !== "string" ||
+    typeof csv.sha256 !== "string" ||
+    typeof csv.sizeBytes !== "number"
+  ) {
+    bad("it doesn't say which file is the CSV");
+  }
+  if (!Array.isArray(raw.documents) || !raw.documents.every(isFileEntry)) {
+    bad("its list of files is damaged");
+  }
+  const missing = raw.missing ?? [];
+  if (
+    !Array.isArray(missing) ||
+    !missing.every(
+      (m) => isRecord(m) && typeof m.sha256 === "string" && Array.isArray(m.documentIds),
+    )
+  ) {
+    bad("its list of missing files is damaged");
+  }
+  const counts = raw.counts;
+  if (!isRecord(counts) || counts.blobs !== (raw.documents as unknown[]).length) {
+    bad("its file count doesn't match its list of files");
+  }
+  if (!isRecord(raw.app)) bad("it doesn't say which app made it");
+  return { ...(raw as BackupManifest), missing: missing as BackupManifest["missing"] };
+};
+
 /**
- * Read and check a backup. Throws a BackupError when it isn't a backup, is from a newer app, or
- * any file is damaged or missing. A CSV the importer refuses comes back as `ok: false`, as for an
- * import. Writes nothing.
+ * Read and check a backup. Throws a BackupError when it isn't a backup, is from a newer app, has
+ * a damaged manifest or file, a file the manifest doesn't list, or lacks bytes it doesn't declare
+ * missing. A CSV the importer refuses comes back as `ok: false`, as for an import. Writes nothing.
  */
 export const readBackup = async (
   file: Blob,
@@ -319,18 +376,23 @@ export const readBackup = async (
   }
   const manifestBytes = entries["manifest.json"];
   if (!manifestBytes) throw new BackupManifestError("it has no manifest.json");
-  let manifest: BackupManifest;
+  let parsed: unknown;
   try {
-    manifest = JSON.parse(strFromU8(manifestBytes)) as BackupManifest;
+    parsed = JSON.parse(strFromU8(manifestBytes));
   } catch {
     throw new BackupManifestError("manifest.json isn't valid JSON");
   }
-  if (manifest.format !== BACKUP_FORMAT)
-    throw new BackupManifestError("manifest.json isn't a fiscode backup's");
-  if (typeof manifest.formatVersion !== "number")
-    throw new BackupManifestError("it has no format version");
-  if (manifest.formatVersion > BACKUP_FORMAT_VERSION)
-    throw new BackupTooNewError(manifest.formatVersion);
+  const manifest = validManifest(parsed);
+
+  // Every file in the zip is one the manifest lists (directory entries aside).
+  const listed = new Set([
+    "manifest.json",
+    manifest.csv.path,
+    ...manifest.documents.map((d) => d.path),
+  ]);
+  for (const path of Object.keys(entries)) {
+    if (!path.endsWith("/") && !listed.has(path)) throw new BackupUnexpectedFileError(path);
+  }
 
   const check = async (path: string, sha: string, size: number): Promise<Uint8Array> => {
     const bytes = entries[path];
@@ -352,10 +414,14 @@ export const readBackup = async (
 
   const read = readImportFile(strFromU8(csvBytes));
   if (!read.ok) return read;
-  const expectedMissing = new Set((manifest.missing ?? []).map((m) => m.sha256));
-  for (const d of read.bundle.documents) {
-    if (!blobs.has(d.sha256) && !expectedMissing.has(d.sha256))
-      throw new BackupBytesMissingError(d.name);
+  // Every blob the data references (rows, document history, import snapshots) is in the zip or
+  // declared missing (review #85 r1).
+  const declared = new Set(manifest.missing.map((m) => m.sha256));
+  const names = new Map(read.bundle.documents.map((d) => [d.id, d.name]));
+  for (const [sha, ids] of referencedBlobs(read.bundle)) {
+    if (blobs.has(sha) || declared.has(sha)) continue;
+    const name = [...ids].map((id) => names.get(id)).find(Boolean);
+    throw new BackupBytesMissingError(name ?? `an older version (${sha.slice(0, 12)})`);
   }
   return {
     ok: true,
@@ -364,6 +430,10 @@ export const readBackup = async (
     file: read,
     blobs,
     documents: { files: blobs.size, bytes: [...blobs.values()].reduce((s, b) => s + b.length, 0) },
+    missing: manifest.missing.map((m) => ({
+      ...m,
+      names: [...new Set(m.documentIds.map((id) => names.get(id)).filter((n): n is string => !!n))],
+    })),
   };
 };
 

@@ -40,3 +40,9 @@ export class BackupBytesMissingError extends BackupError {
     super(`The file for "${documentName}" isn't in this backup. Nothing was changed.`);
   }
 }
+export class BackupUnexpectedFileError extends BackupError {
+  override readonly name = "BackupUnexpectedFileError";
+  constructor(path: string) {
+    super(`This backup has a file its record doesn't list: "${path}". Nothing was changed.`);
+  }
+}

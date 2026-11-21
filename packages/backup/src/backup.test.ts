@@ -12,6 +12,7 @@ import {
   BackupManifestError,
   BackupNotAZipError,
   BackupTooNewError,
+  BackupUnexpectedFileError,
 } from "@fiscode/core";
 import { exampleBundle, exportBundle } from "@fiscode/csv";
 import {
@@ -232,6 +233,7 @@ describe("backup: refusals (nothing written)", () => {
       ...backup.manifest,
       documents: backup.manifest.documents.filter((d) => d.path !== dropped.path),
     };
+    m.counts = { ...m.counts, blobs: m.documents.length };
     const { [dropped.path]: _gone, ...rest } = entries;
     await expect(
       readBackup(rezip({ ...rest, "manifest.json": strToU8(JSON.stringify(m)) })),
@@ -288,7 +290,7 @@ describe("backup: headless (node.ts, the script's functions)", () => {
     // The test's own database must not be the one the script opens.
     teardownTestDb(sqlite);
 
-    expect((await verifyBackup(zip)).counts.rows).toBe(backup.manifest.counts.rows);
+    expect((await verifyBackup(zip)).manifest.counts.rows).toBe(backup.manifest.counts.rows);
     await restoreBackupToDir(zip, join(dir, "profile"));
     expect(await checkRoundtrip(zip)).toMatchObject({ identical: true });
     const summary = await summarizeBackup(zip);
@@ -323,6 +325,120 @@ describe("backup: headless (node.ts, the script's functions)", () => {
     writeFileSync(join(dir, "busy", "x"), "x");
     teardownTestDb(sqlite);
     await expect(restoreBackupToDir(zip, join(dir, "busy"))).rejects.toThrow(/isn't empty/);
+    sqlite = setupTestDb();
+  });
+});
+
+describe("review #85 r1", () => {
+  const withManifest = (entries: Record<string, Uint8Array>, m: unknown) =>
+    rezip({ ...entries, "manifest.json": strToU8(JSON.stringify(m)) });
+
+  it("(1) a blob only history references (an older version) dropped from the zip is refused", async () => {
+    await seed();
+    const backup = await createBackup({ createdAt: CREATED });
+    const entries = await zipEntries(backup.blob);
+    const version = backup.manifest.documents.find((d) => d.path.includes("/.versions/"))!;
+    const { [version.path]: _gone, ...rest } = entries;
+    const m = {
+      ...backup.manifest,
+      documents: backup.manifest.documents.filter((d) => d !== version),
+    };
+    m.counts = { ...m.counts, blobs: m.documents.length };
+    await expect(readBackup(withManifest(rest, m))).rejects.toBeInstanceOf(BackupBytesMissingError);
+  });
+
+  it("(2) missing files are reported with the documents' names; counts.blobs is cross-checked", async () => {
+    await seed();
+    __setBlobStoreForTests(memoryBlobStore());
+    const backup = await createBackup({ createdAt: CREATED });
+    const read = await readBackup(backup.blob);
+    if (!read.ok) throw new Error(read.headline);
+    expect(read.missing.length).toBeGreaterThan(0);
+    expect(read.missing.flatMap((m) => m.names)).toContain("Demo receipt.pdf");
+
+    const entries = await zipEntries(backup.blob);
+    await expect(
+      readBackup(
+        withManifest(entries, {
+          ...backup.manifest,
+          counts: { ...backup.manifest.counts, blobs: 99 },
+        }),
+      ),
+    ).rejects.toBeInstanceOf(BackupManifestError);
+  });
+
+  it("(3) a manifest of the wrong shape is a BackupManifestError, never a TypeError", async () => {
+    await seed();
+    const backup = await createBackup({ createdAt: CREATED });
+    const entries = await zipEntries(backup.blob);
+    for (const bad of [
+      null,
+      { ...backup.manifest, documents: null },
+      { ...backup.manifest, csv: undefined },
+      { ...backup.manifest, missing: "none" },
+      { ...backup.manifest, documents: [{ path: 3 }] },
+    ]) {
+      await expect(readBackup(withManifest(entries, bad))).rejects.toBeInstanceOf(
+        BackupManifestError,
+      );
+    }
+  });
+
+  it("(4) formatVersion must be a whole number of 1 or more; a file the manifest doesn't list is refused by name", async () => {
+    await seed();
+    const backup = await createBackup({ createdAt: CREATED });
+    const entries = await zipEntries(backup.blob);
+    for (const v of [0, 1.5, "1"]) {
+      await expect(
+        readBackup(withManifest(entries, { ...backup.manifest, formatVersion: v })),
+      ).rejects.toBeInstanceOf(BackupManifestError);
+    }
+    const extra = rezip({ ...entries, "documents/sneaky.pdf": strToU8("x") });
+    await expect(readBackup(extra)).rejects.toBeInstanceOf(BackupUnexpectedFileError);
+    await expect(readBackup(extra)).rejects.toThrow("documents/sneaky.pdf");
+  });
+});
+
+describe("review #85 r1: the script reports missing files", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "fiscode-backup-test-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("(2) verify exits 3 and names them, unless --allow-missing; summary and restore print them", async () => {
+    await seed();
+    __setBlobStoreForTests(memoryBlobStore());
+    const backup = await createBackup({ createdAt: CREATED });
+    const zip = join(dir, backup.fileName);
+    writeFileSync(zip, new Uint8Array(await backup.blob.arrayBuffer()));
+    const bin = fileURLToPath(new URL("../bin/fiscode-backup.ts", import.meta.url));
+    const run = (...args: string[]) => spawnSync("bun", [bin, ...args], { encoding: "utf8" });
+    const verify = run("verify", zip);
+    expect(verify.status).toBe(3);
+    expect(verify.stdout).toMatch(/files? listed as missing/);
+    expect(verify.stdout).toContain("Demo receipt.pdf");
+    expect(run("verify", zip, "--allow-missing").status).toBe(0);
+    expect(run("summary", zip).stdout).toContain("Demo receipt.pdf");
+    const restore = run("restore", zip, "--to", join(dir, "p"));
+    expect(restore.status).toBe(0);
+    expect(restore.stdout).toMatch(/files? listed as missing/);
+  }, 30_000);
+
+  it("(6) summary tells live files from versions by the manifest, not by the path", async () => {
+    await seed();
+    const backup = await createBackup({ createdAt: CREATED });
+    const zip = join(dir, backup.fileName);
+    writeFileSync(zip, new Uint8Array(await backup.blob.arrayBuffer()));
+    teardownTestDb(sqlite);
+    const summary = await summarizeBackup(zip);
+    expect(summary.documents.toSorted()).toEqual(
+      [
+        "documents/2026/Expenses/Demo receipt (2).pdf",
+        "documents/2026/Expenses/Demo receipt.pdf",
+      ].toSorted(),
+    );
+    expect(summary.versions).toBe(2);
     sqlite = setupTestDb();
   });
 });
