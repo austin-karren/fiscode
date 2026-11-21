@@ -113,13 +113,38 @@ export const FORM_RULES: Record<string, Rules> = {
     ],
   },
   expense: { money: [{ column: "amount", key: "amountCents", floor: "positive" }], whole: [] },
-  // Retirement contributions have no form yet, so nothing to match.
-  retirement_contribution: { money: [], whole: [] },
+  // No form yet; a contribution is an amount paid, so more than $0, like an expense (review #78 r1).
+  retirement_contribution: {
+    money: [{ column: "amount", key: "amountCents", floor: "positive" }],
+    whole: [],
+  },
+  // DF-07 (contract): W-2 boxes are $0 or more; a payment made is more than $0.
+  w2_job: {
+    money: [
+      { column: "wages", key: "wagesCents", floor: "nonNegative" },
+      { column: "federal_withholding", key: "federalWithholdingCents", floor: "nonNegative" },
+      { column: "ss_wages", key: "ssWagesCents", floor: "nonNegative" },
+      { column: "ss_tax_withheld", key: "ssTaxWithheldCents", floor: "nonNegative" },
+      { column: "medicare_wages", key: "medicareWagesCents", floor: "nonNegative" },
+      { column: "ss_tips", key: "ssTipsCents", floor: "nonNegative" },
+      { column: "state_wages", key: "stateWagesCents", floor: "nonNegative" },
+      { column: "state_withholding", key: "stateWithholdingCents", floor: "nonNegative" },
+    ],
+    whole: [],
+  },
+  estimated_payment: {
+    money: [{ column: "amount", key: "amountCents", floor: "positive" }],
+    whole: [],
+  },
   entity: { money: [], whole: [] },
 };
 
-const range = ({ min, max }: WholeRange) =>
-  `${min.toLocaleString("en-US")} to ${max.toLocaleString("en-US")}`;
+// Years read as years ("1900 to 2027"); other whole numbers get separators ("1 to 9,999").
+const YEAR_COLUMNS = new Set(["model_year"]);
+const range = ({ min, max }: WholeRange, column: string) => {
+  const show = (n: number) => (YEAR_COLUMNS.has(column) ? String(n) : n.toLocaleString("en-US"));
+  return `${show(min)} to ${show(max)}`;
+};
 
 /**
  * What is wrong with one row by the forms' rules, one sentence per field ("amount -$45.00 is
@@ -153,8 +178,8 @@ export const formRangeProblems = (recordType: string, row: object): string[] => 
     const n = v as number;
     const r = rule.range();
     if (inWholeRange(n, r)) continue;
-    const what = n < 0 ? "is negative" : `is outside ${range(r)}`;
-    problems.push(`${rule.column} ${n} ${what}. The form needs ${range(r)}.`);
+    const what = n < 0 ? "is negative" : `is outside ${range(r, rule.column)}`;
+    problems.push(`${rule.column} ${n} ${what}. The form needs ${range(r, rule.column)}.`);
   }
   return problems;
 };
@@ -171,4 +196,6 @@ export const TABLE_RECORD_TYPES = {
   homeOffice: "home_office",
   expenses: "expense",
   retirementContributions: "retirement_contribution",
+  w2Jobs: "w2_job",
+  estimatedPayments: "estimated_payment",
 } as const satisfies Partial<Record<keyof Bundle, string>>;

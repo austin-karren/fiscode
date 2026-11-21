@@ -111,6 +111,8 @@ const DATA_TABLES = [
   "homeOffice",
   "expenses",
   "retirementContributions",
+  "w2Jobs",
+  "estimatedPayments",
 ] as const satisfies readonly (keyof Bundle)[];
 
 /**

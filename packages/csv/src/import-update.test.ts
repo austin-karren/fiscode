@@ -254,7 +254,43 @@ describe("Update rows takes only the columns the file's format has (review #78 r
       priorYearAgiCents: 100_000_00,
       priorYearStateTaxCents: 500_00,
       priorYearFiguresYear: 2025,
+      priorYearNotFiled: false,
     };
+    b.w2Jobs = [
+      {
+        id: "w2_kept",
+        taxYear: 2026,
+        employer: "Demo Employer Inc",
+        startDate: null,
+        endDate: null,
+        wagesCents: 18_000_00,
+        federalWithholdingCents: 500_00,
+        ssWagesCents: 18_000_00,
+        ssTaxWithheldCents: 1_116_00,
+        medicareWagesCents: 18_000_00,
+        ssTipsCents: 0,
+        stateWagesCents: 18_000_00,
+        stateWithholdingCents: 300_00,
+        notes: null,
+        createdAt: FIXED,
+        updatedAt: FIXED,
+        deletedAt: null,
+      },
+    ];
+    b.estimatedPayments = [
+      {
+        id: "ep_kept",
+        date: "2026-04-15",
+        amountCents: 400_00,
+        jurisdiction: "federal",
+        taxYear: 2026,
+        appliedQuarter: null,
+        notes: null,
+        createdAt: FIXED,
+        updatedAt: FIXED,
+        deletedAt: null,
+      },
+    ];
     const i = b.expenses.findIndex((e) => e.category === "equipment");
     b.expenses[i] = { ...b.expenses[i]!, placedInServiceDate: "2026-02-01" };
     return b;
@@ -281,7 +317,15 @@ describe("Update rows takes only the columns the file's format has (review #78 r
       })
       .join("\r\n");
   };
+  const V5 = ["prior_year_not_filed"];
+  // A v4 file has no w2_job or estimated_payment sections at all.
+  const withoutV5Sections = (csv: string): string =>
+    csv
+      .split("\r\n")
+      .filter((l) => !/^(w2_job|estimated_payment),/.test(l))
+      .join("\r\n");
   const PRIOR = [
+    ...V5,
     "prior_year_total_tax",
     "prior_year_agi",
     "prior_year_state_tax",
@@ -289,11 +333,16 @@ describe("Update rows takes only the columns the file's format has (review #78 r
   ];
 
   it.each([
+    ["v4", V5],
     ["v3", PRIOR],
     ["v2", [...PRIOR, "placed_in_service_date"]],
   ])("an unedited %s yearly file changes nothing and keeps the newer fields", (version, drop) => {
     const existing = withNewerFields();
-    const csv = asOlder(exportBundle(existing, { scope: "yearly", year: 2026 }), version, drop);
+    const csv = asOlder(
+      withoutV5Sections(exportBundle(existing, { scope: "yearly", year: 2026 })),
+      version,
+      drop,
+    );
     const read = readImportFile(csv);
     if (!read.ok) throw new Error(`expected a readable file: ${read.headline}`);
     const plan = planImport(existing, read.bundle, "update", read);
@@ -301,6 +350,8 @@ describe("Update rows takes only the columns the file's format has (review #78 r
     const { next } = applyImport(existing, read.bundle, "update", read);
     expect(next.profile).toEqual(existing.profile);
     expect(next.expenses).toEqual(existing.expenses);
+    expect(next.w2Jobs).toEqual(existing.w2Jobs);
+    expect(next.estimatedPayments).toEqual(existing.estimatedPayments);
   });
 
   it("an edit in an older file still applies; the columns it lacks stay as they are here", () => {
@@ -313,5 +364,65 @@ describe("Update rows takes only the columns the file's format has (review #78 r
     expect(planImport(existing, read.bundle, "update", read).changed).toBe(1);
     const { next } = applyImport(existing, read.bundle, "update", read);
     expect(next.profile).toEqual({ ...existing.profile!, dependents: 2 });
+  });
+});
+
+describe("review #78 r1 nits: years without separators; retirement and DF-07 amounts checked", () => {
+  it("a model year out of range prints as 1900 to <next year>, not 1,900", () => {
+    const existing = app();
+    const file = clone(existing);
+    file.vehicles[0] = { ...file.vehicles[0]!, year: 1800 };
+    const rows = planImport(existing, file, "update").warnings.outOfRange.rows.join("\n");
+    expect(rows).toMatch(
+      /model_year 1800 is outside 1900 to \d{4}\. The form needs 1900 to \d{4}\./,
+    );
+  });
+  it("a negative retirement contribution, a negative W-2 box and a $0 payment warn", () => {
+    const existing = app();
+    const file = clone(existing);
+    file.retirementContributions[0] = { ...file.retirementContributions[0]!, amountCents: -1_00 };
+    file.w2Jobs = [
+      {
+        id: "w2_new",
+        taxYear: 2026,
+        employer: "Demo Employer Inc",
+        startDate: null,
+        endDate: null,
+        wagesCents: -5_00,
+        federalWithholdingCents: 0,
+        ssWagesCents: 0,
+        ssTaxWithheldCents: 0,
+        medicareWagesCents: 0,
+        ssTipsCents: 0,
+        stateWagesCents: 0,
+        stateWithholdingCents: 0,
+        notes: null,
+        createdAt: FIXED,
+        updatedAt: FIXED,
+        deletedAt: null,
+      },
+    ];
+    file.estimatedPayments = [
+      {
+        id: "ep_new",
+        date: "2026-04-15",
+        amountCents: 0,
+        jurisdiction: "federal",
+        taxYear: 2026,
+        appliedQuarter: null,
+        notes: null,
+        createdAt: FIXED,
+        updatedAt: FIXED,
+        deletedAt: null,
+      },
+    ];
+    const rows = planImport(existing, file, "update").warnings.outOfRange.rows.join("\n");
+    expect(rows).toMatch(
+      /\(retirement_contribution\): amount -\$1\.00 is negative\. The form needs more than \$0\./,
+    );
+    expect(rows).toMatch(/\(w2_job\): wages -\$5\.00 is negative\. The form needs \$0 or more\./);
+    expect(rows).toMatch(
+      /\(estimated_payment\): amount \$0\.00 is \$0\. The form needs more than \$0\./,
+    );
   });
 });
