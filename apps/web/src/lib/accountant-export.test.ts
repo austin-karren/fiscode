@@ -246,8 +246,17 @@ describe("review #82 r1", () => {
       "federal_withholding",
       "state_withholding",
       "counted_wages",
+      "counted_federal_withholding",
+      "counted_state_withholding",
     ]);
-    expect(sp[1]!.slice(3)).toEqual(["45000.00", "4500.00", "1800.00", "45000.00"]);
+    expect(sp[1]!.slice(3)).toEqual([
+      "45000.00",
+      "4500.00",
+      "1800.00",
+      "45000.00",
+      "4500.00",
+      "1800.00",
+    ]);
     const s = t.get("Estimate summary")!;
     const line = (label: string) => Number(s.find((r) => r[1] === label)![2]);
     expect(line("Spouse W-2 wages")).toBe(45_000);
@@ -271,7 +280,7 @@ describe("review #82 r1", () => {
     const b = withW2AndPayments();
     b.profile = { ...b.profile!, filingStatus: "single" };
     const sp = tables(accountantExport(b, 2026, "2026-11-21")).get("Spouse W-2")!;
-    expect(sp[1]![6]).toBe("0.00");
+    expect(sp[1]!.slice(6)).toEqual(["0.00", "0.00", "0.00"]);
   });
 
   it("R2 section 195: each pre-start start-up row is listed above the summary lines", () => {
@@ -325,5 +334,44 @@ describe("review #82 r1", () => {
     expect(about.find((r) => r[1] === "Leading apostrophe")?.[2]).toMatch(
       /A text cell that starts with = \+ - or @ is written with a leading ' so it can't run as a formula\./,
     );
+  });
+});
+
+describe("review #82 r2", () => {
+  it("R5 overlapping spouse blocks: only the one the estimate uses counts, all three amounts", () => {
+    const b = withW2AndPayments();
+    const first = b.spouses[0]!;
+    b.spouses = [
+      { ...first, id: "sp_early" as never, startDate: "2025-06-01", endDate: "2026-03-31" },
+      {
+        ...first,
+        id: "sp_late" as never,
+        startDate: "2026-04-01",
+        endDate: null,
+        annualW2WagesCents: 60_000_00,
+        annualFederalWithholdingCents: 6_000_00,
+        annualStateWithholdingCents: 2_400_00,
+      },
+    ];
+    const sp = tables(accountantExport(b, 2026, "2026-11-21")).get("Spouse W-2")!;
+    expect(sp.slice(1).map((r) => r.slice(6))).toEqual([
+      ["0.00", "0.00", "0.00"],
+      ["60000.00", "6000.00", "2400.00"],
+    ]);
+  });
+
+  it("R6 an empty start-up description falls back to the category label", () => {
+    const b = exampleBundle();
+    b.profile = { ...b.profile!, seStartDate: "2026-02-01" };
+    b.expenses.push({
+      ...b.expenses.find((e) => e.category === "software_subs")!,
+      id: "ex_startup_blank" as never,
+      date: "2026-01-05",
+      description: "",
+      amountCents: 100_00,
+      startupExpense: true,
+    });
+    const s = tables(accountantExport(b, 2026, "2026-11-21")).get("Start-up costs (section 195)")!;
+    expect(s[1]![1]).toBe("Software & subscriptions");
   });
 });

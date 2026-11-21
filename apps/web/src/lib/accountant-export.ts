@@ -268,7 +268,8 @@ export const accountantExport = (bundle: Bundle, year: number, today: string): s
     header: ["item", "date", "category", "amount"],
     rows: [
       ...startupRows.map((x) => [
-        x.description ?? labelFor(EXPENSE_CATEGORY_LABELS, x.category),
+        // A blank description falls back to the category too (review #82 r2).
+        x.description || labelFor(EXPENSE_CATEGORY_LABELS, x.category),
         x.date,
         labelFor(EXPENSE_CATEGORY_LABELS, x.category),
         usd(x.amountCents),
@@ -322,6 +323,8 @@ export const accountantExport = (bundle: Bundle, year: number, today: string): s
       "federal_withholding",
       "state_withholding",
       "counted_wages",
+      "counted_federal_withholding",
+      "counted_state_withholding",
     ],
     rows: spouseBlocks.map((sp) => [
       sp.startDate,
@@ -329,9 +332,19 @@ export const accountantExport = (bundle: Bundle, year: number, today: string): s
       usd(sp.annualW2WagesCents),
       usd(sp.annualFederalWithholdingCents),
       usd(sp.annualStateWithholdingCents),
-      usd(joint && sp === activeSpouse ? sp.annualW2WagesCents : 0),
+      ...(joint && sp === activeSpouse
+        ? [sp.annualW2WagesCents, sp.annualFederalWithholdingCents, sp.annualStateWithholdingCents]
+        : [0, 0, 0]
+      ).map(usd),
     ]),
-    numeric: new Set(["annual_wages", "federal_withholding", "state_withholding", "counted_wages"]),
+    numeric: new Set([
+      "annual_wages",
+      "federal_withholding",
+      "state_withholding",
+      "counted_wages",
+      "counted_federal_withholding",
+      "counted_state_withholding",
+    ]),
   });
 
   const payments = bundle.estimatedPayments
