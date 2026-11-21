@@ -395,6 +395,33 @@ describe("last year's return (prior-year safe harbor)", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 10, 19, 9, 0));
   });
+
+  it("puts each field's help behind its info button and links it to the field (#52)", () => {
+    render(<ProfilePage />);
+    expect(screen.getByLabelText(/^Your 2025 total tax/)).toHaveAccessibleDescription(
+      "Your 2025 Form 1040 line 24, minus refundable credits (lines 27a–32). Leave blank if 2025 wasn't a full 12-month return, or if you didn't file.",
+    );
+    expect(screen.getByLabelText(/^Your 2025 AGI/)).toHaveAccessibleDescription(
+      "Your 2025 Form 1040 line 11b. Left blank, the estimate assumes it was over $150,000 ($75,000 if married filing separately) and uses 110%.",
+    );
+    expect(screen.getByLabelText(/^Your 2025 Utah tax/)).toHaveAccessibleDescription(
+      "Your Utah tax liability for 2025 (TC-546 line 4).",
+    );
+    // Each is optional, and says so.
+    expect(screen.getByLabelText("Your 2025 AGI (optional)")).toBeInTheDocument();
+  });
+
+  it("shows the Utah field only when the state is Utah", () => {
+    const saved = profile.state;
+    profile.state = "CO";
+    try {
+      render(<ProfilePage />);
+      expect(screen.getByLabelText(/^Your 2025 total tax/)).toBeInTheDocument();
+      expect(screen.queryByLabelText(/^Your 2025 Utah tax/)).not.toBeInTheDocument();
+    } finally {
+      profile.state = saved;
+    }
+  });
   afterEach(() => {
     vi.useRealTimers();
     Object.assign(profile, {

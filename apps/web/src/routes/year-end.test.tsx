@@ -411,4 +411,38 @@ describe("year-end loader", () => {
       Object.assign(loaderData, saved);
     }
   });
+
+  it("notes equipment ticked Startup, from engine output, and prints it", async () => {
+    const example = exampleBundle();
+    const base = example.expenses[0]!;
+    db.bundle = {
+      ...example,
+      profile: { ...example.profile!, seStartDate: "2026-02-01" },
+      expenses: [
+        ...example.expenses,
+        {
+          ...base,
+          id: "ex_demo_laptop",
+          date: "2026-01-10",
+          category: "equipment",
+          amountCents: 120_000,
+          startupExpense: true,
+        },
+      ],
+    };
+    const loader = Route.options.loader as unknown as () => Promise<typeof loaderData>;
+    const data = await loader();
+    const saved = { ...loaderData };
+    Object.assign(loaderData, data);
+    try {
+      render(<YearEndPage />);
+      const notice = screen
+        .getByText(/1 equipment expense is ticked Startup/)
+        .closest("[data-slot=alert]");
+      expect(notice).toHaveClass("print:break-inside-avoid");
+      expect(notice).not.toHaveClass("print:hidden");
+    } finally {
+      Object.assign(loaderData, saved);
+    }
+  });
 });

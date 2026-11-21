@@ -77,6 +77,9 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ),
 }));
 
+import { exampleBundle } from "@fiscode/csv";
+import { estimateBundleYear } from "@fiscode/tax";
+
 import { Route } from "./index";
 
 const Dashboard = Route.options.component!;
@@ -298,5 +301,124 @@ describe("dashboard: asks for last year's return when the prior-year safe harbor
     derived.priorYearFiguresApplied = true;
     render(<Dashboard />);
     expect(screen.queryByText(/Enter your 2025 return/)).not.toBeInTheDocument();
+  });
+});
+
+describe("why 110% of the prior year", () => {
+  // Demo data plus a 2025 return: $1,500 total tax, AGI per the case.
+  const harborFor = (agiCents: number | null) => {
+    const b = exampleBundle();
+    b.profile = {
+      ...b.profile!,
+      priorYearTotalTaxCents: 150_000,
+      priorYearAgiCents: agiCents,
+      priorYearStateTaxCents: null,
+      priorYearFiguresYear: 2025,
+    };
+    return estimateBundleYear(b, 2026).result.safeHarbor;
+  };
+  const withHarbor = (harbor: unknown, run: () => void) => {
+    const saved = loaderData.result.safeHarbor;
+    (loaderData.result as { safeHarbor: unknown }).safeHarbor = harbor;
+    try {
+      run();
+    } finally {
+      loaderData.result.safeHarbor = saved;
+    }
+  };
+
+  it("says AGI was not entered when it is blank, from engine output", () => {
+    const harbor = harborFor(null);
+    expect(harbor.multiplierReason).toBe("agi_not_entered");
+    withHarbor(harbor, () => {
+      render(<Dashboard />);
+      expect(screen.getByText("110% of prior year")).toBeInTheDocument();
+      expect(screen.getByText("AGI not entered, so 110%.")).toBeInTheDocument();
+    });
+  });
+
+  it("adds no reason when AGI is entered", () => {
+    const harbor = harborFor(5_000_000);
+    expect(harbor.multiplierReason).toBe("agi_not_over_threshold");
+    withHarbor(harbor, () => {
+      render(<Dashboard />);
+      expect(screen.getByText("100% of prior year")).toBeInTheDocument();
+      expect(screen.queryByText(/AGI not entered/)).not.toBeInTheDocument();
+    });
+  });
+});
+
+describe("safe harbor without last year's return", () => {
+  // Engine output for demo data with no prior-year figures, SE start per the case.
+  const run = (seStartDate: string) => {
+    const b = exampleBundle();
+    b.profile = { ...b.profile!, seStartDate };
+    const { result, derived } = estimateBundleYear(b, 2026);
+    const saved = { harbor: loaderData.result.safeHarbor, se: loaderData.derived.seStartDate };
+    (loaderData.result as { safeHarbor: unknown }).safeHarbor = result.safeHarbor;
+    loaderData.derived.seStartDate = derived.seStartDate;
+    return () => {
+      loaderData.result.safeHarbor = saved.harbor;
+      loaderData.derived.seStartDate = saved.se;
+    };
+  };
+
+  it("says 'not entered', with no first-year alert, for a business started years earlier", () => {
+    const restore = run("2024-01-01");
+    try {
+      render(<Dashboard />);
+      expect(screen.getByText("not entered")).toBeInTheDocument();
+      expect(screen.queryByText("n/a (first year)")).not.toBeInTheDocument();
+      expect(screen.queryByText("First-year filing")).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+
+  it("says 'n/a (first year)' with the first-year alert when self-employment began this year", () => {
+    const restore = run("2026-03-02");
+    try {
+      render(<Dashboard />);
+      expect(screen.getByText("n/a (first year)")).toBeInTheDocument();
+      expect(screen.getByText("First-year filing")).toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+});
+
+describe("equipment ticked Startup", () => {
+  it("shows a one-line notice from engine output (demo laptop ticked Startup before the SE start)", () => {
+    const b = exampleBundle();
+    b.profile = { ...b.profile!, seStartDate: "2026-02-01" };
+    const base = b.expenses[0]!;
+    b.expenses = [
+      ...b.expenses,
+      {
+        ...base,
+        id: "ex_demo_laptop",
+        date: "2026-01-10",
+        category: "equipment",
+        amountCents: 120_000,
+        startupExpense: true,
+      },
+    ];
+    const { derived } = estimateBundleYear(b, 2026);
+    expect(derived.startupIgnoredForEquipment).toBe(1);
+    const d = loaderData.derived as { startupIgnoredForEquipment?: number };
+    d.startupIgnoredForEquipment = derived.startupIgnoredForEquipment;
+    try {
+      render(<Dashboard />);
+      expect(
+        screen.getByText(/1 equipment expense is ticked Startup\. Equipment isn't a startup cost/),
+      ).toBeInTheDocument();
+    } finally {
+      delete d.startupIgnoredForEquipment;
+    }
+  });
+
+  it("shows nothing when no equipment is ticked Startup", () => {
+    render(<Dashboard />);
+    expect(screen.queryByText(/ticked Startup/)).not.toBeInTheDocument();
   });
 });

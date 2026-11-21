@@ -20,7 +20,7 @@ import { GLOSSARY } from "../lib/tax-glossary";
 import { Route } from "./expenses";
 
 // What the loader returns; a test may give it rows.
-const loaded: { expenses: unknown[]; profile: null } = { expenses: [], profile: null };
+const loaded: { expenses: unknown[]; profile: unknown } = { expenses: [], profile: null };
 
 const ExpensesPage = Route.options.component!;
 
@@ -197,5 +197,27 @@ describe("adding a run of expenses", () => {
     expect(box()).toHaveAccessibleName(
       "Startup expense (Section 195) Bought in anticipation of 1099 work — count it in the year even if dated before your SE start date.",
     );
+  });
+
+  it("says why on a row already ticked as both Startup and Equipment", () => {
+    loaded.expenses = [
+      {
+        ...row,
+        id: "ex_demo_both",
+        date: "2025-12-15",
+        category: "equipment",
+        startupExpense: true,
+        placedInServiceDate: null,
+      },
+    ];
+    // Demo profile: SE start Feb 1, 2026, so the Dec 2025 laptop is before it.
+    loaded.profile = { seStartDate: "2026-02-01" };
+    render(<ExpensesPage />);
+    const cell = screen
+      .getByText("Equipment uses its placed-in-service date instead.")
+      .closest("td")!;
+    expect(cell).toHaveAttribute("data-label", "Category");
+    expect(screen.queryByText("Startup §195")).not.toBeInTheDocument();
+    loaded.profile = null;
   });
 });
