@@ -80,7 +80,8 @@ export const endsBeforeStart = (period: Pick<EntityPeriod, "startDate" | "endDat
 export const entityDatesMessage = (period: Pick<EntityPeriod, "startDate" | "endDate">): string =>
   `The end date (${formatDisplayDate(period.endDate ?? "")}) is before the start date (${formatDisplayDate(period.startDate)}). Pick an end date on or after the start date, or leave it empty for a period that is still open.`;
 
-const describePeriod = (period: EntityPeriod): string => {
+/** A period the way the user knows it: type label and dates. */
+export const describeEntityPeriod = (period: EntityPeriod): string => {
   const label = labelFor(ENTITY_TYPE_LABELS, period.type);
   const start = formatDisplayDate(period.startDate);
   return period.endDate === null
@@ -101,7 +102,7 @@ export const entityOverlapMessage = (
   conflict: EntityPeriod,
   options: { preexisting?: boolean } = {},
 ): string => {
-  const other = describePeriod(conflict);
+  const other = describeEntityPeriod(conflict);
   if (options.preexisting) {
     return `This period already overlaps your ${other}, and these dates would not separate them. End one of the two on or before the day the other one starts. Ending either of them is always allowed.`;
   }

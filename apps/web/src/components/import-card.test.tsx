@@ -248,7 +248,8 @@ describe("import card: an app that holds data", () => {
     expect(dialog).toHaveTextContent(
       "Restoring from it would remove 2 rows that are here and not in the file.",
     );
-    expect(within(dialog).getByRole("radio", { name: /Add rows/ })).toBeChecked();
+    // A yearly file over data is an accountant's amended file: Update rows is the mode for it.
+    expect(within(dialog).getByRole("radio", { name: /Update rows/ })).toBeChecked();
   });
 
   it("holds the button until the import commits", async () => {
@@ -298,37 +299,11 @@ describe("import card: an app that holds data", () => {
     choose(exportBundle(backup(), { scope: "yearly", year: 2026 }));
 
     const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Add rows/ }));
     expect(dialog).toHaveTextContent(
       "Nothing would be added: every row in the file is already here.",
     );
     expect(within(dialog).getByRole("button", { name: "Add rows" })).toBeDisabled();
-  });
-
-  it("says that an added entity period is not checked for overlap", async () => {
-    buildBundle.mockResolvedValue(appState());
-    const withEntity: Bundle = {
-      ...emptyBundle(),
-      entities: [
-        {
-          id: "ent_new",
-          type: "single_member_llc",
-          startDate: "2026-11-02",
-          endDate: null,
-          notes: null,
-          createdAt: FIXED,
-          updatedAt: FIXED,
-          deletedAt: null,
-        },
-      ],
-    };
-    render(<ImportCard />);
-    choose(exportBundle(withEntity, { scope: "full" }));
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("radio", { name: /Add rows/ }));
-
-    expect(dialog).toHaveTextContent(
-      "1 entity period will be added as the file has it, without the check for overlapping periods.",
-    );
   });
 
   it("says nothing changed when the import fails, and keeps the dialog open", async () => {
@@ -349,3 +324,210 @@ describe("import card: an app that holds data", () => {
     expect(within(dialog).getByRole("button", { name: "Add rows" })).toBeEnabled();
   });
 });
+
+describe("import card: Update rows", () => {
+  const amended = (): Bundle => {
+    const b = backup();
+    b.income[1] = { ...b.income[1]!, amountCents: 999_00 }; // in_2026: changed
+    b.income.push(income("in_new", "2026-08-01")); // added
+    return b;
+  };
+
+  it("says in numbers what changes, what is added, what stays, and that nothing is removed", async () => {
+    // Here: in_2025 deleted, in_2026 live, in_gone live. The file has in_gone deleted.
+    const here = backup();
+    here.income[0] = { ...here.income[0]!, deletedAt: FIXED };
+    here.income[2] = { ...here.income[2]!, deletedAt: null };
+    buildBundle.mockResolvedValue(here);
+    render(<ImportCard />);
+    choose(exportBundle(amended(), { scope: "full" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Update rows/ }));
+
+    expect(dialog).toHaveTextContent("1 row here will take the file's values.");
+    expect(dialog).toHaveTextContent("1 row will be added and show in the app.");
+    expect(dialog).toHaveTextContent("1 row in the file is the same as here and stays as it is.");
+    expect(dialog).toHaveTextContent("1 row deleted here is in the file. It stays deleted.");
+    expect(dialog).toHaveTextContent(
+      "1 row the file marks deleted is live here. It stays as it is: Update rows never removes a row.",
+    );
+    expect(dialog).toHaveTextContent("Nothing here is removed: 3 rows and 1 deleted row stay.");
+  });
+
+  it("writes with the import-update reason and names the counts in the toast", async () => {
+    buildBundle.mockResolvedValue(backup());
+    importBundle.mockResolvedValue(undefined);
+    render(<ImportCard />);
+    choose(exportBundle(amended(), { scope: "full" }), "amended.csv");
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Update rows/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Update rows" }));
+
+    await waitFor(() => expect(importBundle).toHaveBeenCalledTimes(1));
+    const [written, reason] = importBundle.mock.calls[0]!;
+    expect(reason).toBe("import-update");
+    expect((written as Bundle).income.find((i) => i.id === "in_2026")!.amountCents).toBe(999_00);
+    expect((written as Bundle).income).toHaveLength(4);
+  });
+
+  it("offers nothing to do when the file matches what is here", async () => {
+    buildBundle.mockResolvedValue(backup());
+    render(<ImportCard />);
+    choose(exportBundle(backup(), { scope: "full" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Update rows/ }));
+    expect(dialog).toHaveTextContent(
+      "Nothing would change: every row in the file is already here with the same values.",
+    );
+    expect(within(dialog).getByRole("button", { name: "Update rows" })).toBeDisabled();
+  });
+});
+
+describe("import card: warnings for Add rows and Update rows", () => {
+  const withBadRows = (): Bundle => {
+    const b = backup();
+    b.income[1] = { ...b.income[1]!, amountCents: -45_00 };
+    b.mileage = [
+      {
+        id: "mi_neg",
+        date: "2026-03-02",
+        vehicleId: null,
+        purpose: "Demo trip",
+        businessMiles: -12,
+        notes: null,
+        createdAt: FIXED,
+        updatedAt: FIXED,
+        deletedAt: null,
+      },
+    ];
+    b.entities = [
+      {
+        id: "ent_file",
+        type: "sole_prop",
+        startDate: "2026-06-01",
+        endDate: null,
+        notes: null,
+        createdAt: FIXED,
+        updatedAt: FIXED,
+        deletedAt: null,
+      },
+    ];
+    return b;
+  };
+  const hereWithPeriod = (): Bundle => ({
+    ...backup(),
+    entities: [
+      {
+        id: "ent_here",
+        type: "sole_prop",
+        startDate: "2026-01-01",
+        endDate: null,
+        notes: null,
+        createdAt: FIXED,
+        updatedAt: FIXED,
+        deletedAt: null,
+      },
+    ],
+  });
+
+  it("lists negative amounts and negative miles with their rows, and the overlapping periods", async () => {
+    buildBundle.mockResolvedValue(hereWithPeriod());
+    render(<ImportCard />);
+    const csv = exportBundle(withBadRows(), { scope: "full" });
+    choose(csv);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Update rows/ }));
+
+    const warning = within(dialog).getByRole("alert", { name: /forms would not accept/ });
+    expect(warning).toHaveTextContent(/negative amounts, negative miles/);
+    const incomeLine = csv.split("\r\n").findIndex((l) => l.includes(",-45.00,")) + 1;
+    expect(warning).toHaveTextContent(
+      `Row ${incomeLine} (income): amount -$45.00 is negative. The form needs more than $0.`,
+    );
+    expect(warning).toHaveTextContent(
+      /\(mileage\): business_miles -12 is negative\. The form needs 1 to 9,999\./,
+    );
+    expect(
+      within(dialog).getByRole("alert", { name: /Entity periods would overlap/ }),
+    ).toHaveTextContent(
+      "The file's Sole proprietor period that started Jun 1, 2026 and is still open overlaps your Sole proprietor period that started Jan 1, 2026 and is still open.",
+    );
+    // Warnings do not block.
+    expect(within(dialog).getByRole("button", { name: "Update rows" })).toBeEnabled();
+
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Add rows/ }));
+    expect(within(dialog).getByRole("alert", { name: /forms would not accept/ })).toHaveTextContent(
+      /\(mileage\): business_miles -12/,
+    );
+
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Restore/ }));
+    expect(within(dialog).queryByRole("alert", { name: /forms would not accept/ })).toBeNull();
+    expect(
+      within(dialog).queryByRole("alert", { name: /Entity periods would overlap/ }),
+    ).toBeNull();
+  });
+});
+
+describe("import card: Update rows with an older-format file (review #78 r1)", () => {
+  it("writes only the columns the file has: a v3 file keeps the prior-year figures here", async () => {
+    const here: Bundle = {
+      ...backup(),
+      profile: {
+        ...backup().profile!,
+        priorYearTotalTaxCents: 3_000_00,
+        priorYearAgiCents: 100_000_00,
+        priorYearStateTaxCents: 500_00,
+        priorYearFiguresYear: 2025,
+      },
+    };
+    buildBundle.mockResolvedValue(here);
+    importBundle.mockResolvedValue(undefined);
+    // The same data as a v3 file: no prior-year columns, and one amount changed.
+    const v3 = exportBundle(
+      {
+        ...here,
+        income: here.income.map((i) => (i.id === "in_2026" ? { ...i, amountCents: 999_00 } : i)),
+      },
+      { scope: "full" },
+    ).replace("schema: v5", "schema: v3");
+
+    const dropped = dropColumns(v3, [
+      "prior_year_total_tax",
+      "prior_year_agi",
+      "prior_year_state_tax",
+      "prior_year_figures_year",
+      "prior_year_not_filed",
+    ]);
+    render(<ImportCard />);
+    choose(dropped, "amended-v3.csv");
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Update rows/ }));
+    expect(dialog).toHaveTextContent("1 row here will take the file's values.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Update rows" }));
+
+    await waitFor(() => expect(importBundle).toHaveBeenCalledTimes(1));
+    const written = importBundle.mock.calls[0]![0] as Bundle;
+    expect(written.profile).toEqual(here.profile);
+    expect(written.income.find((i) => i.id === "in_2026")!.amountCents).toBe(999_00);
+  });
+});
+
+/** Remove columns by header name from every table of a CSV (cells here have no commas). */
+const dropColumns = (csv: string, names: string[]): string => {
+  let cut: number[] = [];
+  return csv
+    .split("\r\n")
+    .map((l) => {
+      if (l.startsWith("record_type,")) {
+        const cols = l.split(",");
+        cut = names.map((n) => cols.indexOf(n)).filter((i) => i >= 0);
+        return cols.filter((_, i) => !cut.includes(i)).join(",");
+      }
+      if (l === "" || l.startsWith("#") || l.startsWith("﻿#")) return l;
+      return l
+        .split(",")
+        .filter((_, i) => !cut.includes(i))
+        .join(",");
+    })
+    .join("\r\n");
+};

@@ -20,7 +20,7 @@ import {
 } from "../schema/index.ts";
 import { buildBundle } from "./index.ts";
 
-export type ImportReason = "import-restore" | "import-append" | "history-restore";
+export type ImportReason = "import-restore" | "import-append" | "import-update" | "history-restore";
 
 /**
  * Apply a Bundle to the DB, all or nothing.
@@ -30,6 +30,10 @@ export type ImportReason = "import-restore" | "import-append" | "history-restore
  *   back from the History screen, so the log can tell it from a file restore.
  * - `import-append`: nothing is removed. The caller (CSV's `applyImport`) has
  *   already resolved id collisions, so rows that are not here yet are inserted.
+ * - `import-update`: the bundle is CSV's `applyImport(…, "update")`, which holds
+ *   every row here (none removed) with the file's values for matching ids. It is
+ *   written like a restore: every data table emptied and reloaded from it, in the
+ *   same transaction, so the result is exactly that bundle.
  *
  * Every write runs in one transaction (`runAtomic`). If any of them fails, or
  * the page goes away before the commit, the database is exactly as it was.
@@ -76,7 +80,7 @@ export const importBundle = async (bundle: Bundle, reason: ImportReason): Promis
     queries.push(db.insert(historyTable).values(row).onConflictDoNothing());
   }
 
-  if (reason === "import-restore" || reason === "history-restore") {
+  if (reason === "import-restore" || reason === "history-restore" || reason === "import-update") {
     // Empty every data table. History is intact.
     queries.push(
       db.delete(profile),

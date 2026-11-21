@@ -1,6 +1,8 @@
-import type { ImportMode } from "./apply-import.ts";
+import { describeEntityPeriod, findEntityOverlap } from "@fiscode/core";
+import { fieldsOf, updateTakesFileRow, withFileFields, type ImportMode } from "./apply-import.ts";
 import type { Bundle } from "./bundle-types.ts";
-import { parseCsv, type ImportError } from "./import.ts";
+import { formRangeProblems, TABLE_RECORD_TYPES } from "./form-ranges.ts";
+import { parseCsv, rowLineKey, type ImportError } from "./import.ts";
 
 // What the import screen needs to know before anything is written: whether the
 // file can be imported at all, and what each mode would do, in numbers the
@@ -48,6 +50,10 @@ export type ImportFile =
       scope: "full" | "yearly" | undefined;
       year: number | undefined;
       counts: RowCounts;
+      /** The spreadsheet row of each row (see `ImportResult.rowLines`). */
+      rowLines: Map<string, number>;
+      /** The columns each record type's header had (see `ImportResult.columns`). */
+      columns: Map<string, Set<string>>;
     }
   | {
       ok: false;
@@ -66,7 +72,7 @@ export type ImportFile =
  * user's data with zero rows.
  */
 export const readImportFile = (raw: string): ImportFile => {
-  const { bundle, provenance, validationErrors, tables } = parseCsv(raw);
+  const { bundle, provenance, validationErrors, tables, rowLines, columns } = parseCsv(raw);
   // An error with no row number is about the whole file, e.g. a schema marker
   // from a newer fiscode. That message already says what to do.
   const wholeFile = validationErrors.find((e) => e.line === 0);
@@ -102,7 +108,15 @@ export const readImportFile = (raw: string): ImportFile => {
       errors: [],
     };
   }
-  return { ok: true, bundle, scope: provenance.scope, year: provenance.year, counts };
+  return {
+    ok: true,
+    bundle,
+    scope: provenance.scope,
+    year: provenance.year,
+    counts,
+    rowLines,
+    columns,
+  };
 };
 
 export type ImportPlan = {
@@ -124,6 +138,37 @@ export type ImportPlan = {
   snapshot: boolean;
   /** Set when this mode must not be offered for this file; says why. */
   refusal: string | undefined;
+  /** Update: rows here that take the file's different values (the profile counts as one). */
+  changed: number;
+  /** Update: rows in the file that are here with the same values. */
+  unchanged: number;
+  /** Update: rows deleted here that the file has. They stay deleted. */
+  keptDeleted: number;
+  /** Update: rows the file marks deleted that are live here. They stay as they are here. */
+  keptLive: number;
+  /** Add rows and Update rows: what the rows they write would trip. Restore never warns. */
+  warnings: ImportWarnings;
+};
+
+/** How many rows that break a form's range are listed before the rest become a count. */
+export const RANGE_WARNING_LIMIT = 5;
+
+export type ImportWarnings = {
+  outOfRange: {
+    /** Rows written with at least one value a form would refuse. */
+    count: number;
+    /** One sentence for the warning's heading, naming the kinds of value. */
+    summary: string;
+    /** The first `RANGE_WARNING_LIMIT` rows: "Row 12 (expense): amount -$45.00 is negative. …" */
+    rows: string[];
+  };
+  /** One sentence per pair of live entity periods that would overlap, naming both. */
+  overlaps: string[];
+};
+
+const NO_WARNINGS: ImportWarnings = {
+  outOfRange: { count: 0, summary: "", rows: [] },
+  overlaps: [],
 };
 
 /**
@@ -134,7 +179,12 @@ export const planImport = (
   existing: Bundle,
   incoming: Bundle,
   mode: ImportMode,
-  file: { scope?: "full" | "yearly"; year?: number } = {},
+  file: {
+    scope?: "full" | "yearly";
+    year?: number;
+    rowLines?: Map<string, number>;
+    columns?: Map<string, Set<string>>;
+  } = {},
 ): ImportPlan => {
   const current = countRows(existing);
   const existingHistory = new Set(existing.history.map((h) => h.id));
@@ -170,6 +220,70 @@ export const planImport = (
       removed: { live: 0, deleted: 0 },
       snapshot,
       refusal: undefined,
+      changed: 0,
+      unchanged: 0,
+      keptDeleted: 0,
+      keptLive: 0,
+      warnings: warningsFor(existing, incoming, mode, file.rowLines, file.columns),
+    };
+  }
+
+  if (mode === "update") {
+    const written: RowCounts = { live: 0, deleted: 0, history: newHistory };
+    let changed = 0;
+    let unchanged = 0;
+    let keptDeleted = 0;
+    let keptLive = 0;
+    let addedEntityPeriods = 0;
+    if (incoming.profile) {
+      if (!existing.profile) written.live++;
+      else if (
+        sameRow(
+          existing.profile,
+          withFileFields(
+            existing.profile,
+            incoming.profile,
+            fieldsOf(file.columns, "profile", incoming.profile.id),
+          ),
+        )
+      )
+        unchanged++;
+      else changed++;
+    }
+    for (const table of ROW_TABLES) {
+      const here = new Map(existing[table].map((r) => [r.id, r]));
+      for (const row of incoming[table]) {
+        const mine = here.get(row.id);
+        if (!mine) {
+          if (row.deletedAt === null) written.live++;
+          else written.deleted++;
+          if (table === "entities" && row.deletedAt === null) addedEntityPeriods++;
+        } else if (
+          sameRow(
+            mine,
+            withFileFields(mine, row, fieldsOf(file.columns, TABLE_RECORD_TYPES[table], row.id)),
+          )
+        )
+          unchanged++;
+        else if (mine.deletedAt !== null) keptDeleted++;
+        else if (!updateTakesFileRow(mine, row)) keptLive++;
+        else changed++;
+      }
+    }
+    return {
+      mode,
+      current,
+      written,
+      addedEntityPeriods,
+      skipped: 0,
+      removed: { live: 0, deleted: 0 },
+      snapshot,
+      refusal: undefined,
+      changed,
+      unchanged,
+      keptDeleted,
+      keptLive,
+      warnings: warningsFor(existing, incoming, mode, file.rowLines, file.columns),
     };
   }
 
@@ -201,5 +315,117 @@ export const planImport = (
     removed,
     snapshot,
     refusal,
+    changed: 0,
+    unchanged: 0,
+    keptDeleted: 0,
+    keptLive: 0,
+    warnings: NO_WARNINGS,
   };
+};
+
+/** Same values in every field. Key order does not matter. */
+const sameRow = (a: object, b: object): boolean => {
+  const x = a as Record<string, unknown>;
+  const y = b as Record<string, unknown>;
+  const keys = new Set([...Object.keys(x), ...Object.keys(y)]);
+  for (const k of keys) if ((x[k] ?? null) !== (y[k] ?? null)) return false;
+  return true;
+};
+
+/**
+ * The file's rows a mode writes: Add rows writes rows whose id is not here; Update rows also
+ * writes rows here that take the file's different values. Each with its record type.
+ */
+const writtenRows = (
+  existing: Bundle,
+  incoming: Bundle,
+  mode: "append" | "update",
+  columns: Map<string, Set<string>> | undefined,
+): { recordType: string; row: { id: string } }[] => {
+  const out: { recordType: string; row: { id: string } }[] = [];
+  if (incoming.profile) {
+    if (!existing.profile) out.push({ recordType: "profile", row: incoming.profile });
+    else if (mode === "update") {
+      const merged = withFileFields(
+        existing.profile,
+        incoming.profile,
+        fieldsOf(columns, "profile", incoming.profile.id),
+      );
+      if (!sameRow(existing.profile, merged)) out.push({ recordType: "profile", row: merged });
+    }
+  }
+  for (const table of ROW_TABLES) {
+    const here = new Map(existing[table].map((r) => [r.id, r]));
+    for (const row of incoming[table]) {
+      const mine = here.get(row.id);
+      if (!mine) {
+        out.push({ recordType: TABLE_RECORD_TYPES[table], row });
+        continue;
+      }
+      if (mode !== "update" || !updateTakesFileRow(mine, row)) continue;
+      const merged = withFileFields(
+        mine,
+        row,
+        fieldsOf(columns, TABLE_RECORD_TYPES[table], row.id),
+      );
+      if (!sameRow(mine, merged)) out.push({ recordType: TABLE_RECORD_TYPES[table], row: merged });
+    }
+  }
+  return out;
+};
+
+const warningsFor = (
+  existing: Bundle,
+  incoming: Bundle,
+  mode: "append" | "update",
+  rowLines: Map<string, number> | undefined,
+  columns?: Map<string, Set<string>>,
+): ImportWarnings => {
+  const rows = writtenRows(existing, incoming, mode, columns);
+
+  const bad: string[] = [];
+  for (const { recordType, row } of rows) {
+    const problems = formRangeProblems(recordType, row);
+    if (problems.length === 0) continue;
+    const line = rowLines?.get(rowLineKey(recordType, row.id));
+    bad.push(
+      `${line === undefined ? "A row" : `Row ${line}`} (${recordType}): ${problems.join(" ")}`,
+    );
+  }
+  const outOfRange = {
+    count: bad.length,
+    summary:
+      bad.length === 0
+        ? ""
+        : `${bad.length} ${bad.length === 1 ? "row has a value" : "rows have values"} the app's forms would not accept: negative amounts, negative miles, $0 where more than $0 is needed, amounts of $100,000,000 or more, or whole numbers out of range. ${bad.length === 1 ? "It imports" : "They import"} as written; check ${bad.length === 1 ? "it" : "them"} afterwards.`,
+    rows: bad.slice(0, RANGE_WARNING_LIMIT),
+  };
+
+  // The entity periods after the import: the file's written ones replace or join these.
+  const writtenEntities = new Map(
+    rows
+      .filter((r) => r.recordType === "entity")
+      .map((r) => [r.row.id, r.row as Bundle["entities"][number]]),
+  );
+  const written = new Set(writtenEntities.keys());
+  const after = [
+    ...existing.entities.map((e) => writtenEntities.get(e.id) ?? e),
+    ...incoming.entities.filter(
+      (e) => written.has(e.id) && !existing.entities.some((x) => x.id === e.id),
+    ),
+  ];
+  const overlaps: string[] = [];
+  const named = new Set<string>();
+  for (const e of after) {
+    if (!written.has(e.id) || e.deletedAt !== null) continue;
+    const other = findEntityOverlap(after, e);
+    if (!other) continue;
+    const pair = [e.id, other.id].sort().join("|");
+    if (named.has(pair)) continue;
+    named.add(pair);
+    overlaps.push(
+      `The file's ${describeEntityPeriod(e)} overlaps your ${describeEntityPeriod(other)}.`,
+    );
+  }
+  return { outOfRange, overlaps };
 };

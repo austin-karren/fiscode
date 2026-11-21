@@ -552,14 +552,23 @@ entries it holds, and then asks what to do with it. Nothing changes until you co
   dialog says how many rows are replaced and how many rows in the app are not in the file.
 - **Add rows** — keep everything in the app and add the file's rows whose `id` is not there yet.
   Rows already there are skipped and stay as they are; the dialog counts them.
+- **Update rows** — for an amended file. Rows whose `id` is in the app take the file's values,
+  rows with new ids are added, and nothing is removed. A row deleted in the app stays deleted, and
+  a row the file marks deleted stays as it is in the app. The dialog counts the rows that change,
+  are added and stay the same.
 
-Neither is chosen for you. Three cases differ:
+Add rows and Update rows warn, without refusing, about the rows they write that the app's forms
+would not accept (negative amounts, negative miles, $0 where more than $0 is needed, amounts of
+$100,000,000 or more, whole numbers out of range), naming the spreadsheet row, and about entity
+periods that would overlap another live one. Restore never warns: a backup comes back exactly.
+
+None is chosen for you. Three cases differ:
 
 - **An empty app** (a new install): there is nothing to keep, so there is no question. The setup
   screen has **Restore from a backup**, and the file brings its own profile. A full export
   restored this way exports again as the same bytes.
 - **A yearly file**: Restore is refused once the app holds data, because a yearly file holds one
-  year and no deleted rows. Add rows still works.
+  year and no deleted rows. Update rows is chosen for you; Add rows also works.
 - **A file with no rows, or one that is not a fiscode CSV**: refused, with the reason on screen.
 
 An import is all or nothing. If any row cannot be written, or the page is closed before it
