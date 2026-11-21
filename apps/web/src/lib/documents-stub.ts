@@ -98,7 +98,7 @@ const subtreeIds = (id: string): string[] => [
 ];
 
 const sha256Hex = async (blob: Blob) => {
-  const digest = await crypto.subtle.digest("SHA-256", await new Response(blob).arrayBuffer());
+  const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 };
 const EXT_MIMES: Record<string, string> = {
@@ -124,8 +124,7 @@ async function storeBytes(file: Blob & { name: string }) {
   }
   const sha256 = await sha256Hex(file);
   const existed = blobs.has(sha256);
-  if (!existed)
-    blobs.set(sha256, new Blob([await new Response(file).arrayBuffer()], { type: mime }));
+  if (!existed) blobs.set(sha256, new Blob([await file.arrayBuffer()], { type: mime }));
   return { mime, sha256, existed };
 }
 

@@ -98,17 +98,8 @@ function DocumentsPage() {
 
   const upload = async (files: File[]) => {
     if (files.length === 0) return;
-    const { results: lines, duplicates } = await uploadFiles(files, folderId, data.allDocs);
-    setResults(lines);
-    // The same bytes again: stored once, quietly. Say where the first copy is.
-    for (const { added, first } of duplicates) {
-      toast.info(`${added.name} is the same file as ${first.name}.`, {
-        action: {
-          label: "Open it",
-          onClick: () => void navigate({ search: (s) => ({ ...s, doc: first.id }) }),
-        },
-      });
-    }
+    // A line per file; a duplicate's line names where the first copy is, with a link to it.
+    setResults(await uploadFiles(files, folderId, data.allDocs, (id) => folderPath(folders, id)));
     await refresh();
   };
 
@@ -258,6 +249,18 @@ function DocumentsPage() {
                         className={r.ok ? "text-foreground" : "text-destructive"}
                       >
                         {r.line}
+                        {r.sameAs ? (
+                          <>
+                            {" "}
+                            <Link
+                              from="/documents"
+                              search={(s) => ({ ...s, doc: r.sameAs!.id })}
+                              className="underline underline-offset-2"
+                            >
+                              Open it
+                            </Link>
+                          </>
+                        ) : null}
                       </li>
                     ))}
                   </ul>

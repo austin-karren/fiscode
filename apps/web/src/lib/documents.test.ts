@@ -19,7 +19,7 @@ const file = (name: string, body: string | Uint8Array<ArrayBuffer>, type = "") =
 describe("uploading documents (stub)", () => {
   it("gives every file its own result and never fails the batch", async () => {
     const folder = await folderRepo.create({ name: "Demo upload" });
-    const { results } = await uploadFiles(
+    const results = await uploadFiles(
       [
         file("demo-receipt.pdf", "%PDF-1.4 demo", "application/pdf"),
         file("demo-letter.docx", "PK demo"),
@@ -28,6 +28,7 @@ describe("uploading documents (stub)", () => {
       ],
       folder.id,
       [],
+      () => "Demo upload",
     );
     expect(results).toEqual([
       { name: "demo-receipt.pdf", ok: true, line: "Added demo-receipt.pdf." },
@@ -42,20 +43,37 @@ describe("uploading documents (stub)", () => {
     expect(await documentRepo.listInFolder(folder.id)).toHaveLength(2);
   });
 
-  it("stores the same bytes once and names the first copy", async () => {
-    const folder = await folderRepo.create({ name: "Demo dedupe" });
-    const first = await documentRepo.upload(file("demo-a.pdf", "%PDF same", "application/pdf"), {
-      folderId: folder.id,
+  it("names where the first copy is, per file, across folders and within a batch (REVIEW #83 r1 F1)", async () => {
+    const receipts = await folderRepo.create({ name: "Demo receipts" });
+    const other = await folderRepo.create({ name: "Demo other" });
+    const photo = await documentRepo.upload(file("demo-photo.png", "PNG same", "image/png"), {
+      folderId: receipts.id,
     });
-    const { results, duplicates } = await uploadFiles(
-      [file("demo-b.pdf", "%PDF same", "application/pdf")],
-      folder.id,
-      [first],
+    const receipt = await documentRepo.upload(file("demo-a.pdf", "%PDF same", "application/pdf"), {
+      folderId: receipts.id,
+    });
+    const paths: Record<string, string> = {
+      [receipts.id]: "Demo receipts",
+      [other.id]: "Demo other",
+    };
+    const results = await uploadFiles(
+      [
+        file("demo-photo.png", "PNG same", "image/png"),
+        file("demo-b.pdf", "%PDF same", "application/pdf"),
+        file("demo-new.txt", "fresh", "text/plain"),
+        file("demo-new-again.txt", "fresh", "text/plain"), // the same bytes, in this same batch
+      ],
+      other.id,
+      [photo, receipt],
+      (id) => (id ? paths[id]! : "Unfiled"),
     );
-    expect(results[0]?.ok).toBe(true);
-    expect(duplicates.map((d) => [d.added.name, d.first.name])).toEqual([
-      ["demo-b.pdf", "demo-a.pdf"],
+    expect(results.map((r) => r.line)).toEqual([
+      "Added demo-photo.png: the same file as demo-photo.png in Demo receipts.",
+      "Added demo-b.pdf: the same file as demo-a.pdf in Demo receipts.",
+      "Added demo-new.txt.",
+      "Added demo-new-again.txt: the same file as demo-new.txt in Demo other.",
     ]);
+    expect(results[0]?.sameAs?.id).toBe(photo.id);
   });
 
   it("reports a document whose bytes aren't on this device", async () => {
