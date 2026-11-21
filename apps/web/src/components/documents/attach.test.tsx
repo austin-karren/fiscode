@@ -116,6 +116,8 @@ describe("Attach from a row", () => {
     fireEvent.click(attach);
     expect(await within(dialog).findByText("Attached")).toBeInTheDocument();
     expect(toast.success).toHaveBeenCalledWith("Attached demo-invoice-alpha.pdf.");
+    // REVIEW #86 r1 F1: focus goes back to the search, not the dialog.
+    expect(within(dialog).getByLabelText("Search documents")).toHaveFocus();
     expect((await documentLinkRepo.forRecord("expense", "ex_choose")).length).toBe(1);
   });
 
@@ -153,6 +155,8 @@ describe("linked documents in the Edit dialog", () => {
       await screen.findByText("None attached. Use Attach on the row to add one."),
     ).toBeInTheDocument();
     expect(onChanged).toHaveBeenCalled();
+    // REVIEW #86 r1 F1: with no document left, focus goes to the list's heading.
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Documents" })).toHaveFocus());
     const [message, options] = vi.mocked(toast).mock.calls[0]!;
     expect(message).toBe("Unlinked demo-linked.pdf.");
     (options as unknown as { action: { onClick: () => void } }).action.onClick();
@@ -170,7 +174,26 @@ describe("the document sheet's linked rows", () => {
     render(
       <DocumentSheet doc={doc} folderPath="Unfiled" onClose={() => {}} onChanged={() => {}} />,
     );
-    const row = await screen.findByRole("link", { name: "income in_9" });
+    const row = await screen.findByRole("link", { name: "Income · income in_9" });
     expect(row).toHaveAttribute("href", "/income#row-in_9");
+  });
+});
+
+describe("an upload to a row deleted meanwhile (REVIEW #86 r1 F2)", () => {
+  it("says so in a toast and doesn't refresh the screen, which would close the dialog", async () => {
+    deleteRecordForStub("ex_gone_upload");
+    vi.mocked(toast.error).mockClear();
+    const onChanged = vi.fn();
+    const dialog = await openAttach("ex_gone_upload", onChanged);
+    await within(dialog).findByText("2026 / Expenses");
+    fireEvent.change(dialog.querySelector<HTMLInputElement>('input[type="file"]')!, {
+      target: { files: [new File(["gone"], "demo-late.txt", { type: "text/plain" })] },
+    });
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "Added demo-late.txt. It isn't attached: That record no longer exists, so the document can't be attached to it.",
+      ),
+    );
+    expect(onChanged).not.toHaveBeenCalled();
   });
 });

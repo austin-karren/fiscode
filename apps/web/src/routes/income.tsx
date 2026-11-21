@@ -301,7 +301,7 @@ function IncomePage() {
                 <DataTable.Row
                   key={i.id}
                   id={rowAnchor(i.id)}
-                  className={hash === rowAnchor(i.id) ? "bg-accent" : ""}
+                  highlighted={hash === rowAnchor(i.id)}
                 >
                   <DataTable.Cell label="Date">
                     <span className="inline-flex items-center gap-1.5">

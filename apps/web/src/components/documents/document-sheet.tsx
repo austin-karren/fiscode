@@ -16,7 +16,7 @@ import { DocumentBytesMissingError } from "@fiscode/core";
 import { documentLinkRepo, documentRepo } from "@fiscode/db";
 import type { DocumentRow } from "@fiscode/csv";
 import { errorLine, fileKind, formatBytes } from "../../lib/documents-view";
-import { isLinkable, ROUTE_FOR, rowAnchor } from "../../lib/documents-links";
+import { isLinkable, linkedRowLabel, ROUTE_FOR, rowAnchor } from "../../lib/documents-links";
 import { formatDate, formatDateTime } from "../../lib/format-date";
 
 type Versions = Awaited<ReturnType<typeof documentRepo.versions>>;
@@ -212,10 +212,10 @@ function SheetBody({
                       hash={rowAnchor(l.recordId)}
                       className="underline-offset-4 hover:underline"
                     >
-                      {l.record.label}
+                      {linkedRowLabel(l.record)}
                     </Link>
                   ) : (
-                    l.record.label
+                    linkedRowLabel(l.record)
                   )}
                 </li>
               ))}

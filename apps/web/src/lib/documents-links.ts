@@ -1,5 +1,7 @@
 import { YEAR_DEFAULT_FOLDER_KEYS } from "@fiscode/core";
-import { folderRepo } from "@fiscode/db";
+import { folderRepo, type LinkedRecord } from "@fiscode/db";
+
+import { formatDate } from "./format-date";
 
 // Rows that documents attach to, and where an upload from each row lands.
 
@@ -43,3 +45,15 @@ export async function folderForRecord(
   }
   return { id: null, path: "Unfiled" };
 }
+
+const KIND: Record<string, string> = { expense: "Expense", income: "Income", mileage: "Trip" };
+
+/**
+ * A linked row in words, as rows read elsewhere: "Expense Jul 9, 2026 · Travel · $250.00". The
+ * repo's label starts with the ISO date; the rest of it is kept.
+ */
+export const linkedRowLabel = (r: LinkedRecord): string => {
+  const rest = r.label.split(" · ").slice(r.date && r.label.startsWith(r.date) ? 1 : 0);
+  const head = [KIND[r.recordType], r.date ? formatDate(r.date) : ""].filter(Boolean).join(" ");
+  return [head, ...rest].filter(Boolean).join(" · ");
+};

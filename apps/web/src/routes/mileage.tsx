@@ -297,7 +297,7 @@ function MileagePage() {
                 <DataTable.Row
                   key={m.id}
                   id={rowAnchor(m.id)}
-                  className={hash === rowAnchor(m.id) ? "bg-accent" : ""}
+                  highlighted={hash === rowAnchor(m.id)}
                 >
                   <DataTable.Cell label="Date">
                     <span className="inline-flex items-center gap-1.5">

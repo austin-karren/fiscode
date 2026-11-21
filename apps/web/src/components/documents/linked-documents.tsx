@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 
@@ -22,6 +22,7 @@ export function LinkedDocuments({
 }) {
   const [links, setLinks] = useState<Linked[]>();
   const id = useId();
+  const list = useRef<HTMLElement>(null);
 
   const load = useCallback(
     () => documentLinkRepo.forRecord(recordType, recordId).then(setLinks),
@@ -31,7 +32,22 @@ export function LinkedDocuments({
     void load();
   }, [load]);
 
-  const unlink = async (l: Linked) => {
+  // After Unlink, focus moves to the next Unlink button (or the previous), else the heading.
+  const focusAfter = (index: number) => {
+    const buttons = list.current?.querySelectorAll<HTMLElement>("button[data-unlink]") ?? [];
+    const next = buttons[Math.min(index, buttons.length - 1)];
+    (next ?? list.current?.querySelector<HTMLElement>("h3"))?.focus();
+  };
+
+  // Focus moves once the list has re-rendered without (or with) the row.
+  const focusPending = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusPending.current === null) return;
+    focusAfter(focusPending.current);
+    focusPending.current = null;
+  });
+
+  const unlink = async (l: Linked, index: number) => {
     const { document: doc, ...row } = l;
     await softDeleteWithUndo<DocumentLinkRow>({
       repo: { softDelete: documentLinkRepo.unlink, revertTo: documentLinkRepo.revertTo },
@@ -39,6 +55,7 @@ export function LinkedDocuments({
       message: `Unlinked ${doc.name}.`,
       undoneMessage: `Attached ${doc.name} again.`,
       onChange: () => {
+        focusPending.current = index;
         void load();
         onChanged();
       },
@@ -47,8 +64,8 @@ export function LinkedDocuments({
 
   if (links === undefined) return null;
   return (
-    <section aria-labelledby={`${id}-docs`} className="mt-4 grid gap-1">
-      <h3 id={`${id}-docs`} className="text-sm font-medium">
+    <section ref={list} aria-labelledby={`${id}-docs`} className="mt-4 grid gap-1">
+      <h3 id={`${id}-docs`} tabIndex={-1} className="text-sm font-medium outline-none">
         Documents
       </h3>
       {links.length === 0 ? (
@@ -57,7 +74,7 @@ export function LinkedDocuments({
         </p>
       ) : (
         <ul className="grid gap-1 text-sm">
-          {links.map((l) => (
+          {links.map((l, index) => (
             <li key={l.id} className="flex min-w-0 items-center justify-between gap-2">
               <Link
                 to="/documents"
@@ -71,7 +88,8 @@ export function LinkedDocuments({
                 variant="ghost"
                 size="sm"
                 className="shrink-0"
-                onClick={() => void unlink(l)}
+                data-unlink
+                onClick={() => void unlink(l, index)}
               >
                 Unlink <span className="sr-only">{l.document.name}</span>
               </Button>

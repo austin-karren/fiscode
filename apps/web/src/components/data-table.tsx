@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 // Compound table primitive. Composition over prop-driven config.
 //
@@ -48,17 +48,27 @@ function TR({
   children,
   className = "",
   id,
+  highlighted = false,
 }: {
   children: ReactNode;
   className?: string;
-  /** A link target ("#row-<id>"): the row is marked while it's the page's target. */
+  /** A link target ("#row-<id>"). */
   id?: string;
+  /** The row a link pointed at: marked, and given focus so keyboard users land on it. */
+  highlighted?: boolean;
 }) {
+  const ref = useRef<HTMLTableRowElement>(null);
+  useEffect(() => {
+    if (highlighted) ref.current?.focus({ preventScroll: true });
+  }, [highlighted]);
   return (
     <tr
+      ref={ref}
       role="row"
       id={id}
-      className={`scroll-mt-20 border-b border-border/40 last:border-b-0 @max-2xl:block @max-2xl:py-2 ${className}`}
+      tabIndex={highlighted ? -1 : undefined}
+      data-highlighted={highlighted || undefined}
+      className={`scroll-mt-20 border-b border-border/40 last:border-b-0 data-highlighted:bg-primary/10 data-highlighted:shadow-[inset_4px_0_0_var(--color-primary)] data-highlighted:outline-none @max-2xl:block @max-2xl:py-2 ${className}`}
     >
       {children}
     </tr>

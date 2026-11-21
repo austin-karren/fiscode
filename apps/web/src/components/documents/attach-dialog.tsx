@@ -103,6 +103,7 @@ function AttachBody({
   const [folders, setFolders] = useState<DocumentFolderRow[]>([]);
   const [linked, setLinked] = useState<Set<string>>(new Set());
   const input = useRef<HTMLInputElement>(null);
+  const searchBox = useRef<HTMLInputElement>(null);
   const id = useId();
 
   // What the dialog reads when it opens: the upload folder, the folders for paths, and what this
@@ -169,7 +170,10 @@ function AttachBody({
         );
       }
       setLines(out);
-      onChanged();
+      // A refused link may mean the row is gone: then refreshing unmounts this dialog and its
+      // lines, so the refusals also go to a toast, and only a real attach refreshes.
+      for (const l of out) if (!l.ok) toast.error(l.line);
+      if (out.some((l) => l.ok)) onChanged();
     } finally {
       setBusy(false);
     }
@@ -180,6 +184,8 @@ function AttachBody({
     if (problem) toast.error(problem);
     else {
       toast.success(`Attached ${doc.name}.`);
+      // The button became "Attached": focus goes back to the search, not the dialog.
+      searchBox.current?.focus();
       onChanged();
     }
   };
@@ -227,6 +233,7 @@ function AttachBody({
         <div className="grid gap-1.5">
           <Label htmlFor={`${id}-q`}>Search documents</Label>
           <Input
+            ref={searchBox}
             id={`${id}-q`}
             type="search"
             value={query}

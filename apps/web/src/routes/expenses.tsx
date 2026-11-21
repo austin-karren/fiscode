@@ -420,7 +420,7 @@ function ExpensesPage() {
                 <DataTable.Row
                   key={x.id}
                   id={rowAnchor(x.id)}
-                  className={hash === rowAnchor(x.id) ? "bg-accent" : ""}
+                  highlighted={hash === rowAnchor(x.id)}
                 >
                   <DataTable.Cell label="Date">
                     <span className="inline-flex items-center gap-1.5">
