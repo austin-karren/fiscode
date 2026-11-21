@@ -565,3 +565,66 @@ describe("importBundle — another device's document folders via Add rows (revie
     expect(after.documentFolders.find((f) => f.id === "df_other")!.defaultKey).toBeNull();
   });
 });
+
+describe("importBundle — backup-restore (a full backup restored over data)", () => {
+  const fullExport = async () =>
+    exportBundle(await buildBundle({ includeDeleted: true, includeHistory: true }), {
+      scope: "full",
+    });
+  const snapshots = async () =>
+    (await historyRepo.listAll()).filter((h) => h.entity === "__import_snapshot");
+  const prior = () =>
+    clientRepo.create({
+      name: "Prior",
+      type: null,
+      notes: null,
+      defaultRateCents: null,
+      defaultCommissionRate: null,
+      deletedAt: null,
+    });
+  const BACKUP = { createdAt: "2026-11-21T05:55:00.000Z" };
+
+  it("replaces everything like a restore, and records backup-restore with the backup's time", async () => {
+    await prior();
+    await importBundle(fullBundle(), "backup-restore", { backup: BACKUP });
+    expect((await buildBundle()).clients.map((c) => c.name).sort()).toEqual(["Acme", "Zeta"]);
+    const [snap] = await snapshots();
+    expect(snap!.entityId).toBe("backup-restore");
+    expect(JSON.parse(snap!.afterJson!).backup).toEqual(BACKUP);
+    // The prior state is in the snapshot, so History can put it back.
+    expect(JSON.parse(snap!.beforeJson!).clients.map((c: { name: string }) => c.name)).toEqual([
+      "Prior",
+    ]);
+  });
+
+  it("a CSV restore keeps its reason, with no backup field", async () => {
+    await prior();
+    await importBundle(fullBundle(), "import-restore");
+    const [snap] = await snapshots();
+    expect(snap!.entityId).toBe("import-restore");
+    expect(JSON.parse(snap!.afterJson!).backup).toBeUndefined();
+  });
+
+  it("History can go back from it (history-restore of its before state)", async () => {
+    await prior();
+    const priorData = exportBundle(await buildBundle({ includeDeleted: true }), { scope: "full" });
+    await importBundle(fullBundle(), "backup-restore", { backup: BACKUP });
+    const [snap] = await snapshots();
+    await importBundle(JSON.parse(snap!.beforeJson!) as Bundle, "history-restore");
+    expect(exportBundle(await buildBundle({ includeDeleted: true }), { scope: "full" })).toBe(
+      priorData,
+    );
+  });
+
+  it("round trip: the log with a backup-restore entry exports, restores and exports byte-identical", async () => {
+    await prior();
+    await importBundle(fullBundle(), "backup-restore", { backup: BACKUP });
+    const first = await fullExport();
+    teardownTestDb(sqlite);
+    sqlite = setupTestDb();
+    const parsed = parseCsv(first);
+    expect(parsed.validationErrors).toEqual([]);
+    await importBundle(parsed.bundle, "import-restore");
+    expect(await fullExport()).toBe(first);
+  });
+});

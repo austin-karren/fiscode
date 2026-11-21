@@ -248,6 +248,24 @@ describe("describeHistoryRow", () => {
       "Went back to an earlier state from History (3 rows)",
     ],
     [
+      "a full backup restored over data, named by the day it was made",
+      row(
+        "__import_snapshot",
+        "revert",
+        bundle([]),
+        { ...bundle([expense]), backup: { createdAt: "2026-11-20T18:00:00.000Z" } },
+        "backup-restore",
+      ),
+      "imported",
+      "Restored from the backup of Nov 20, 2026 (4 rows)",
+    ],
+    [
+      "a full backup restored, when the entry doesn't say which backup",
+      row("__import_snapshot", "revert", bundle([]), bundle([expense]), "backup-restore"),
+      "imported",
+      "Restored from a backup (4 rows)",
+    ],
+    [
       "an overwrite import under its old name",
       row("__import_snapshot", "revert", bundle([]), bundle([expense]), "import-overwrite"),
       "imported",

@@ -6,6 +6,7 @@ import {
   BackupPassphraseError,
   BackupTooNewError,
   BackupUnexpectedFileError,
+  isoFromDate,
 } from "@fiscode/core";
 import { Decrypter, Encrypter } from "age-encryption";
 import {
@@ -299,9 +300,19 @@ export const humanPaths = (bundle: Bundle): Map<string, string> => {
 export const buildBackupZip = async (
   bundle: Bundle,
   store: BlobStore,
-  options: { createdAt: string; build?: string; onProgress?: ProgressFn },
+  options: {
+    createdAt: string;
+    build?: string;
+    /**
+     * The date in the file names (YYYY-MM-DD). Default: `createdAt`'s LOCAL date, as the CSV
+     * export names its file (`todayIso`). check-roundtrip passes the original backup's date, so
+     * a rebuild in another timezone gives the same zip.
+     */
+    date?: string;
+    onProgress?: ProgressFn;
+  },
 ): Promise<{ bytes: Uint8Array; manifest: BackupManifest; fileName: string }> => {
-  const date = options.createdAt.slice(0, 10);
+  const date = options.date ?? isoFromDate(new Date(options.createdAt));
   const csvText = exportBundle(bundle, { scope: "full" });
   const csvBytes = strToU8(csvText);
   const csvPath = exportFileName({ scope: "full" }, date);
@@ -584,7 +595,10 @@ export const restoreBackupInto = async (
     await store.put(sha, new Blob([part(bytes)]));
   }
   options.onProgress?.({ phase: "writing", done: blobs.length, total: blobs.length + 1 });
-  await importBundle(file.bundle as never, "import-restore");
+  // Its own reason in History (not a CSV import's "import-restore"), with the backup's time.
+  await importBundle(file.bundle as never, "backup-restore", {
+    backup: { createdAt: file.manifest.createdAt },
+  });
   options.onProgress?.({ phase: "writing", done: blobs.length + 1, total: blobs.length + 1 });
 };
 

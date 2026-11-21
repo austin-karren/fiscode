@@ -178,7 +178,10 @@ export const restoreBackupToDir = async (
 };
 
 /** The deterministic (unencrypted) backup zip of a profile directory. */
-const zipDir = async (dir: string, options: { createdAt: string; build?: string }) => {
+const zipDir = async (
+  dir: string,
+  options: { createdAt: string; build?: string; date?: string },
+) => {
   if (!existsSync(join(dir, DB_FILE))) throw new Error(`${dir} has no ${DB_FILE}.`);
   const close = await openProfileDir(dir);
   try {
@@ -252,6 +255,9 @@ export const checkRoundtrip = async (
     const again = await zipDir(join(dir, "profile"), {
       createdAt: manifest.createdAt,
       build: manifest.app.build,
+      // The date the backup was named for where it was made (its CSV's name), not this
+      // machine's local date of createdAt.
+      date: /(\d{4}-\d{2}-\d{2})\.csv$/.exec(manifest.csv.path)?.[1],
     });
     const original = await decryptBackup(new Uint8Array(readFileSync(path)), passphrase);
     if (sameBytes(original, again.bytes)) return { identical: true, sameZip: true, manifest };
