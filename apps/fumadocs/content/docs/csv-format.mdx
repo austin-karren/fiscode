@@ -214,7 +214,7 @@ v1 files also had an `# exported:` time line. It is read and ignored.
 The `schema:` marker is used for one thing: a file marked `v1` never carried the `'` formula
 guard, so its text is kept exactly as written.
 
-Exports are always written as v4. Schema v4 adds four profile columns, `prior_year_total_tax`, `prior_year_agi`, `prior_year_state_tax` and `prior_year_figures_year`; schema v3 added `placed_in_service_date` on expenses. v1, v2 and v3 files still import, with the newer columns empty. An app version older than v4 refuses a v4 file rather than read it wrongly.
+Exports are always written as v5. Schema v5 adds the `w2_job` and `estimated_payment` record types and the profile column `prior_year_not_filed`. Schema v4 added four profile columns, `prior_year_total_tax`, `prior_year_agi`, `prior_year_state_tax` and `prior_year_figures_year`; schema v3 added `placed_in_service_date` on expenses. v1 to v4 files still import, with the newer columns and record types empty. An app version older than v5 refuses a v5 file rather than read it wrongly.
 
 ## Columns by record type
 
@@ -281,6 +281,11 @@ Single row. Drives the tax engine's filing status, state, and feature flags.
       description:
         "The tax year the three prior_year_ figures are from; they count only for the estimate of the next year. Empty = not entered (figures without a year are ignored). Added in schema v4.",
       type: "whole number",
+    },
+    prior_year_not_filed: {
+      description:
+        "yes = no return was filed for prior_year_figures_year, so the prior-year safe harbor is not available (Form 2210 line 8). Empty = not claimed. Added in schema v5.",
+      type: "yes / no",
     },
   }}
 />
@@ -478,6 +483,59 @@ they're stored and surfaced in the dashboard but don't yet flow into the deducti
     notes: { description: "Free-form.", type: "string" },
   }}
 />
+
+### `w2_job`
+
+One of your own W-2s: one employer, one tax year. Amounts are the W-2's boxes. A spouse's W-2
+income stays in `spouse` rows. Added in schema v5.
+
+<TypeTable
+  type={{
+    tax_year: { description: "The year of the W-2.", type: "whole number", required: true },
+    employer: { description: "Employer name.", type: "string", required: true },
+    start_date: { description: "First day worked that year (display only).", type: "date" },
+    end_date: { description: "Last day worked that year (display only).", type: "date" },
+    wages: { description: "Box 1: wages, tips, other compensation. Adds to AGI.", type: "money" },
+    federal_withholding: { description: "Box 2: federal income tax withheld.", type: "money" },
+    ss_wages: { description: "Box 3: Social Security wages (Schedule SE line 8a).", type: "money" },
+    ss_tax_withheld: {
+      description: "Box 4: Social Security tax withheld (stored).",
+      type: "money",
+    },
+    medicare_wages: { description: "Box 5: Medicare wages and tips (Form 8959).", type: "money" },
+    ss_tips: { description: "Box 7: Social Security tips (Schedule SE line 8a).", type: "money" },
+    state_wages: { description: "Box 16: state wages (stored).", type: "money" },
+    state_withholding: { description: "Box 17: state income tax withheld.", type: "money" },
+    notes: { description: "Free-form.", type: "string" },
+  }}
+/>
+
+### `estimated_payment`
+
+An estimated tax payment you made. Added in schema v5.
+
+<TypeTable
+  type={{
+    date: { description: "The date paid (postmark or debit date).", type: "date", required: true },
+    amount: { description: "Amount paid.", type: "money", required: true },
+    jurisdiction: { description: "federal | UT", type: "code", required: true },
+    tax_year: {
+      description:
+        "The year it is for. A January payment is usually the prior year's fourth installment.",
+      type: "whole number",
+      required: true,
+    },
+    applied_quarter: {
+      description:
+        "1-4, the installment you applied it to. Empty = from the date (the next due date).",
+      type: "whole number",
+    },
+    notes: { description: "Free-form.", type: "string" },
+  }}
+/>
+
+A yearly file carries W-2s and payments by `tax_year`, so a payment made in January for the year
+before goes in that year's file.
 
 ## File names
 

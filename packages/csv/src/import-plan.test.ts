@@ -19,6 +19,7 @@ const profile = () => ({
   priorYearAgiCents: null,
   priorYearStateTaxCents: null,
   priorYearFiguresYear: null,
+  priorYearNotFiled: null,
   createdAt: FIXED,
   updatedAt: FIXED,
 });

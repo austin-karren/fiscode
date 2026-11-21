@@ -24,6 +24,9 @@ export const profile = sqliteTable("profile", {
   // The tax year those figures are from. They count only for the estimate of the year after it
   // (Pub 505: "100% of the total tax shown on your 2025 return" for 2026); null = not entered.
   priorYearFiguresYear: integer("prior_year_figures_year"),
+  // "I didn't file a return for <prior_year_figures_year>" (DF-07). Counts only for the year after
+  // that stamp: Form 2210 line 8, "If you didn't file a return for 2024 … don't complete line 8".
+  priorYearNotFiled: integer("prior_year_not_filed", { mode: "boolean" }),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(current_timestamp)`),

@@ -100,6 +100,7 @@ const profile = {
   priorYearAgiCents: null,
   priorYearStateTaxCents: null,
   priorYearFiguresYear: null,
+  priorYearNotFiled: null,
   ...stamps,
 };
 const bundle = (expenses: unknown[], extra: Record<string, unknown> = {}) => ({

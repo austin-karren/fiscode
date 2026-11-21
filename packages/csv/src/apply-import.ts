@@ -68,6 +68,13 @@ export const applyImport = (
       incoming.retirementContributions,
       conflicts,
     ),
+    w2Jobs: mergeRows("w2_job", existing.w2Jobs, incoming.w2Jobs, conflicts),
+    estimatedPayments: mergeRows(
+      "estimated_payment",
+      existing.estimatedPayments,
+      incoming.estimatedPayments,
+      conflicts,
+    ),
     // History is append-only: entries the file brings are added, and an entry
     // both sides already hold is the same entry, not a conflict to report.
     history: mergeRows("history", existing.history, incoming.history, []),

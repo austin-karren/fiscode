@@ -13,6 +13,7 @@ import {
   subCents,
   toDollars,
 } from "./money.ts";
+import type { Cents } from "./money.ts";
 
 describe("money", () => {
   it("dollars/cents conversion round-trips", () => {
@@ -142,5 +143,12 @@ describe("parseWholeNumber", () => {
   it("reads a minus sign only when the caller asks for one", () => {
     expect(parseWholeNumber("-5", { signed: true })).toEqual({ ok: true, value: -5 });
     expect(parseWholeNumber("-0", { signed: true })).toEqual({ ok: true, value: 0 });
+  });
+});
+
+describe("mulRate rounds an exact half cent up, despite float error", () => {
+  it("3,617,500 × 0.009 = 32,557.5 → 32,558 (the float product is 32,557.4999…)", () => {
+    expect(3_617_500 * 0.009).toBeLessThan(32_557.5);
+    expect(mulRate(3_617_500 as Cents, 0.009)).toBe(32_558);
   });
 });

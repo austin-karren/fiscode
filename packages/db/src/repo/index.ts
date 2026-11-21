@@ -9,6 +9,8 @@ import {
   income,
   mileage,
   retirementContribution,
+  w2Job,
+  estimatedPayment,
   spouse,
   timeEntry,
   vehicle,
@@ -27,6 +29,10 @@ import {
   type MileageRow,
   type RetirementContributionInsert,
   type RetirementContributionRow,
+  type W2JobInsert,
+  type W2JobRow,
+  type EstimatedPaymentInsert,
+  type EstimatedPaymentRow,
   type SpouseInsert,
   type SpouseRow,
   type TimeEntryInsert,
@@ -166,6 +172,15 @@ export const retirementRepo = makeCrudRepo<RetirementContributionInsert, Retirem
   { orderBy: "date" },
 );
 
+export const w2JobRepo = makeCrudRepo<W2JobInsert, W2JobRow>(w2Job, "w2_job", {
+  orderBy: "taxYear",
+});
+export const estimatedPaymentRepo = makeCrudRepo<EstimatedPaymentInsert, EstimatedPaymentRow>(
+  estimatedPayment,
+  "estimated_payment",
+  { orderBy: "date" },
+);
+
 export const historyRepo = {
   async listFor(entityName: string, entityId: string): Promise<HistoryRow[]> {
     const db = getDb();
@@ -215,6 +230,8 @@ export const buildBundle = async (
     homeOfficeRows,
     expenses,
     retirementRows,
+    w2Rows,
+    paymentRows,
   ] = await Promise.all([
     profileRepo.get(),
     rows(entityRepo),
@@ -227,6 +244,8 @@ export const buildBundle = async (
     rows(homeOfficeRepo),
     rows(expenseRepo),
     rows(retirementRepo),
+    rows(w2JobRepo),
+    rows(estimatedPaymentRepo),
   ]);
   return {
     ...emptyBundle(),
@@ -241,6 +260,8 @@ export const buildBundle = async (
     homeOffice: homeOfficeRows,
     expenses,
     retirementContributions: retirementRows,
+    w2Jobs: w2Rows,
+    estimatedPayments: paymentRows,
     history,
   };
 };

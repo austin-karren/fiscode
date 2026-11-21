@@ -59,7 +59,16 @@ export const soleProprietorStrategy: TaxStrategy = {
   compute(input: TaxInput, cfg: YearConfig): TaxEstimate {
     const netProfit = clampMinZero(subCents(input.gross1099, input.deductibleExpenses));
 
-    const se = computeSeTax(netProfit, input.filingStatus, cfg);
+    const own = input.ownW2;
+    // Additional Medicare threshold for SE income (Form 8959 Part II): reduced "by the total
+    // amount of Medicare wages received" (https://www.irs.gov/instructions/i8959). On a joint
+    // return that is both spouses' Medicare wages: the filer's own box 5, and the spouse's annual
+    // W-2 wages, the spouse block's only wage figure, standing in for their box 5. The spouse's
+    // wages are already 0 on any other return (engine.ts, spouseOnJointReturn).
+    const se = computeSeTax(netProfit, input.filingStatus, cfg, {
+      ssWages: own?.ssWages,
+      medicareWages: addCents(own?.medicareWages ?? cents(0), input.spouseW2Wages),
+    });
 
     // Self-employed health insurance, Form 7206 (2025), https://www.irs.gov/pub/irs-pdf/f7206.pdf:
     // line 14 "Enter the smaller of line 3 [premiums] or line 13", where line 13 is the net profit
@@ -72,11 +81,11 @@ export const soleProprietorStrategy: TaxStrategy = {
     const premiums = input.selfEmployedHealthInsurance ?? cents(0);
     const selfEmployedHealthInsurance = premiums < sehiLimit ? premiums : sehiLimit;
 
-    // AGI ≈ net profit + spouse W-2 wages − half SE tax − SE health insurance. Other
-    // adjustments (HSA, retirement) are not modelled.
+    // AGI ≈ net profit + W-2 wages (own, Form 1040 line 1a; the spouse's on a joint return)
+    // − half SE tax − SE health insurance. Other adjustments (HSA, retirement) are not modelled.
     const agi = clampMinZero(
       subCents(
-        addCents(netProfit, input.spouseW2Wages),
+        addCents(netProfit, input.spouseW2Wages, own?.wages ?? cents(0)),
         addCents(se.halfSeTaxDeduction, selfEmployedHealthInsurance),
       ),
     );
@@ -102,7 +111,15 @@ export const soleProprietorStrategy: TaxStrategy = {
 
     const totalLiability = addCents(federalIncomeTax, se.totalSeTax, stateIncomeTax);
 
-    const totalWithholding = addCents(input.spouseFederalWithholding, input.spouseStateWithholding);
+    const federalWithholding = addCents(
+      input.spouseFederalWithholding,
+      own?.federalWithholding ?? cents(0),
+    );
+    const stateWithholding = addCents(
+      input.spouseStateWithholding,
+      own?.stateWithholding ?? cents(0),
+    );
+    const totalWithholding = addCents(federalWithholding, stateWithholding);
 
     return {
       year: input.year,
@@ -123,8 +140,8 @@ export const soleProprietorStrategy: TaxStrategy = {
       },
       spouseWithholding: totalWithholding,
       federalLiability: addCents(federalIncomeTax, se.totalSeTax),
-      federalWithholding: input.spouseFederalWithholding,
-      stateWithholding: input.spouseStateWithholding,
+      federalWithholding,
+      stateWithholding,
       totalLiability,
       remainingOwed: clampMinZero(subCents(totalLiability, totalWithholding)),
     };
@@ -141,6 +158,11 @@ export const soleProprietorStrategy: TaxStrategy = {
       }
       return annualizedQuarterly(input, cfg, soleProprietorStrategy, requiredAnnualPayment);
     }
-    return evenQuarterly(this.compute(input, cfg), cfg, requiredAnnualPayment);
+    return evenQuarterly(
+      this.compute(input, cfg),
+      cfg,
+      requiredAnnualPayment,
+      input.estimatedPayments?.federal ?? [],
+    );
   },
 };
