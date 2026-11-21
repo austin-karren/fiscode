@@ -5,6 +5,7 @@ import {
   Clock,
   CloudDownload,
   Coins,
+  FolderOpen,
   FileSpreadsheet,
   Gauge,
   History,
@@ -33,6 +34,7 @@ export const NAV_GROUPS = [
       { to: "/time", label: "Time", icon: Clock },
       { to: "/w2-jobs", label: "W-2 jobs", icon: Building2 },
       { to: "/payments", label: "Payments", icon: Landmark },
+      { to: "/documents", label: "Documents", icon: FolderOpen },
     ],
   },
   {
