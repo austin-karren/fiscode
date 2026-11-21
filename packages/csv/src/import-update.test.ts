@@ -426,3 +426,32 @@ describe("review #78 r1 nits: years without separators; retirement and DF-07 amo
     );
   });
 });
+
+describe("columns are per row, not per record type (review #78 r2)", () => {
+  it("two expense sections, the second without placed_in_service_date: changed 0, the date kept", () => {
+    const existing = app();
+    const i = existing.expenses.findIndex((e) => e.category === "equipment");
+    existing.expenses[i] = { ...existing.expenses[i]!, placedInServiceDate: "2026-02-01" };
+    const csv = exportBundle(existing, { scope: "full" });
+    // Move the equipment row into a second expense table whose header lacks the column.
+    const lines = csv.split("\r\n");
+    const header = lines.find((l) => l.startsWith("record_type,date,category"))!;
+    const cols = header.split(",");
+    const cut = cols.indexOf("placed_in_service_date");
+    const row = lines.find((l) => l.includes(existing.expenses[i]!.id))!;
+    const drop = (l: string) =>
+      l
+        .split(",")
+        .filter((_, k) => k !== cut)
+        .join(",");
+    const rest = lines.filter((l) => l !== row);
+    const second = ["", "# Expenses (more)", drop(header), drop(row)];
+    const file = [...rest.slice(0, -1), ...second, ""].join("\r\n");
+    const read = readImportFile(file);
+    if (!read.ok) throw new Error(`expected a readable file: ${read.headline}`);
+    expect(planImport(existing, read.bundle, "update", read).changed).toBe(0);
+    const { next } = applyImport(existing, read.bundle, "update", read);
+    expect(next.expenses[i]!.placedInServiceDate).toBe("2026-02-01");
+    expect(planImport(existing, read.bundle, "update", read).warnings.outOfRange.count).toBe(0);
+  });
+});

@@ -277,8 +277,9 @@ export type ImportResult = {
    */
   rowLines: Map<string, number>;
   /**
-   * The stored columns (flat keys) each record type's rows had a header for. A file in an older
-   * format lacks the newer columns; Update rows takes only these from it.
+   * The stored columns (flat keys) each row's header had, keyed by `rowLineKey(recordType, id)`.
+   * A file in an older format, or a table with fewer columns, lacks some; Update rows takes only
+   * these from each row.
    */
   columns: Map<string, Set<string>>;
 };
@@ -503,13 +504,13 @@ export const parseCsv = (raw: string): ImportResult => {
         return;
       }
       seenIds.set(idKey, index + 1);
-      // The stored columns this row's header has, for its record type.
-      const have = columns.get(result.data.record_type) ?? new Set<string>();
+      // The stored columns this row's own header has.
+      const have = new Set<string>();
       for (const name of header) {
         const column = HEADER_LOOKUP.get(name);
         if (column) have.add(column.key);
       }
-      columns.set(result.data.record_type, have);
+      columns.set(idKey, have);
       if (result.data.record_type === "profile") profileLine = index + 1;
       validated.push(result.data);
     } else {

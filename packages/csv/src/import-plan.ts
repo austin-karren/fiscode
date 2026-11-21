@@ -240,7 +240,11 @@ export const planImport = (
       else if (
         sameRow(
           existing.profile,
-          withFileFields(existing.profile, incoming.profile, fieldsOf(file.columns, "profile")),
+          withFileFields(
+            existing.profile,
+            incoming.profile,
+            fieldsOf(file.columns, "profile", incoming.profile.id),
+          ),
         )
       )
         unchanged++;
@@ -248,14 +252,19 @@ export const planImport = (
     }
     for (const table of ROW_TABLES) {
       const here = new Map(existing[table].map((r) => [r.id, r]));
-      const fields = fieldsOf(file.columns, TABLE_RECORD_TYPES[table]);
       for (const row of incoming[table]) {
         const mine = here.get(row.id);
         if (!mine) {
           if (row.deletedAt === null) written.live++;
           else written.deleted++;
           if (table === "entities" && row.deletedAt === null) addedEntityPeriods++;
-        } else if (sameRow(mine, withFileFields(mine, row, fields))) unchanged++;
+        } else if (
+          sameRow(
+            mine,
+            withFileFields(mine, row, fieldsOf(file.columns, TABLE_RECORD_TYPES[table], row.id)),
+          )
+        )
+          unchanged++;
         else if (mine.deletedAt !== null) keptDeleted++;
         else if (!updateTakesFileRow(mine, row)) keptLive++;
         else changed++;
@@ -340,14 +349,13 @@ const writtenRows = (
       const merged = withFileFields(
         existing.profile,
         incoming.profile,
-        fieldsOf(columns, "profile"),
+        fieldsOf(columns, "profile", incoming.profile.id),
       );
       if (!sameRow(existing.profile, merged)) out.push({ recordType: "profile", row: merged });
     }
   }
   for (const table of ROW_TABLES) {
     const here = new Map(existing[table].map((r) => [r.id, r]));
-    const fields = fieldsOf(columns, TABLE_RECORD_TYPES[table]);
     for (const row of incoming[table]) {
       const mine = here.get(row.id);
       if (!mine) {
@@ -355,7 +363,11 @@ const writtenRows = (
         continue;
       }
       if (mode !== "update" || !updateTakesFileRow(mine, row)) continue;
-      const merged = withFileFields(mine, row, fields);
+      const merged = withFileFields(
+        mine,
+        row,
+        fieldsOf(columns, TABLE_RECORD_TYPES[table], row.id),
+      );
       if (!sameRow(mine, merged)) out.push({ recordType: TABLE_RECORD_TYPES[table], row: merged });
     }
   }

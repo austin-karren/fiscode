@@ -1,6 +1,7 @@
 import type { Bundle } from "./bundle-types.ts";
 import { emptyBundle } from "./bundle-types.ts";
 import { TABLE_RECORD_TYPES } from "./form-ranges.ts";
+import { rowLineKey } from "./import.ts";
 
 /**
  * `restore` replaces everything with the file. `append` keeps what is here and
@@ -36,7 +37,7 @@ export const applyImport = (
   existing: Bundle,
   incoming: Bundle,
   mode: ImportMode,
-  /** From `parseCsv`: the columns each record type's header had. Update rows takes only those. */
+  /** From `parseCsv`: the columns each row's header had. Update rows takes only those. */
   file: { columns?: Map<string, Set<string>> } = {},
 ): AppliedImport => {
   if (mode === "restore") {
@@ -139,7 +140,11 @@ const updateBundle = (
     ...emptyBundle(),
     profile:
       incoming.profile && existing.profile
-        ? withFileFields(existing.profile, incoming.profile, fieldsOf(columns, "profile"))
+        ? withFileFields(
+            existing.profile,
+            incoming.profile,
+            fieldsOf(columns, "profile", incoming.profile.id),
+          )
         : (incoming.profile ?? existing.profile),
     history: mergeRows("history", existing.history, incoming.history, []),
   };
@@ -150,7 +155,7 @@ const updateBundle = (
     (next as Record<string, unknown>)[table] = updateRows(
       rowsOf(existing, table),
       rowsOf(incoming, table),
-      fieldsOf(columns, TABLE_RECORD_TYPES[table]),
+      (id) => fieldsOf(columns, TABLE_RECORD_TYPES[table], id),
     );
   }
   return next;
@@ -159,13 +164,15 @@ const updateBundle = (
 const updateRows = <T extends { id: string; deletedAt: string | null }>(
   existingRows: readonly T[],
   incomingRows: readonly T[],
-  fields: Set<string> | undefined,
+  fieldsFor: (id: string) => Set<string> | undefined,
 ): T[] => {
   const fromFile = new Map(incomingRows.map((r) => [r.id, r]));
   const here = new Set(existingRows.map((r) => r.id));
   const kept = existingRows.map((row) => {
     const file = fromFile.get(row.id);
-    return file && updateTakesFileRow(row, file) ? withFileFields(row, file, fields) : row;
+    return file && updateTakesFileRow(row, file)
+      ? withFileFields(row, file, fieldsFor(row.id))
+      : row;
   });
   return [...kept, ...incomingRows.filter((r) => !here.has(r.id))];
 };
@@ -179,15 +186,16 @@ const camel = (key: string): string =>
   key.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 
 /**
- * The bundle fields a file's header carried for a record type, or undefined when unknown (a
- * bundle not read from a file: every field counts).
+ * The bundle fields one row's header carried, or undefined when unknown (a bundle not read from
+ * a file: every field counts).
  */
 export const fieldsOf = (
   columns: Map<string, Set<string>> | undefined,
   recordType: string,
+  id: string,
 ): Set<string> | undefined => {
   if (!columns) return undefined;
-  const keys = columns.get(recordType) ?? new Set<string>();
+  const keys = columns.get(rowLineKey(recordType, id)) ?? new Set<string>();
   return new Set([...keys].map((k) => FIELD_FOR_COLUMN[k] ?? camel(k)));
 };
 
