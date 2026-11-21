@@ -187,7 +187,7 @@ describe("import card: an empty app", () => {
     choose(exportBundle(backup(), { scope: "full" }), "backup.csv");
 
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveTextContent("Restore this backup?");
+    expect(dialog).toHaveTextContent("Restore this CSV?");
     expect(dialog).toHaveTextContent("backup.csv holds 3 rows, 1 deleted row and 1 history entry.");
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     expect(dialog).toHaveTextContent("3 rows will show in the app.");

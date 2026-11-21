@@ -11,6 +11,20 @@ vi.mock("@fiscode/db", async () => {
   };
 });
 
+// The router isn't needed here: its links render as plain anchors with their target.
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    children,
+    to,
+    hash,
+    ...rest
+  }: Record<string, unknown> & { children: React.ReactNode }) => (
+    <a href={`${to as string}${hash ? `#${hash as string}` : ""}`} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+
 import { validDocumentName } from "@fiscode/core";
 import { documentRepo, folderRepo } from "@fiscode/db";
 
@@ -163,9 +177,10 @@ describe("document sheet", () => {
     render(
       <DocumentSheet doc={doc} folderPath="Unfiled" onClose={() => {}} onChanged={() => {}} />,
     );
-    expect(
-      await screen.findByText("File not on this device — restore a backup"),
-    ).toBeInTheDocument();
+    const link = await screen.findByRole("link", { name: "restore a backup" });
+    expect(link.closest("p")).toHaveTextContent("File not on this device — restore a backup");
+    // It opens the restore flow: the backup card on the dashboard.
+    expect(link).toHaveAttribute("href", "/#backup");
   });
 
   it("revokes the preview's object URL when it closes", async () => {

@@ -78,9 +78,10 @@ export function ExportCard() {
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">
-          Yearly export is the artifact you hand to your accountant. Full export is your portable
-          backup. The accountant summary is a second file to read alongside the yearly CSV: totals
-          and the figures fiscode works out. It can't be imported.
+          The yearly CSV is the file you hand to your accountant. The full CSV holds every row and
+          your history, but not your document files: Back up everything carries those. The
+          accountant summary is a second file to read alongside the yearly CSV: totals and the
+          figures fiscode works out. It can't be imported.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button onClick={exportFull} disabled={busy}>

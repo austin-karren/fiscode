@@ -16,6 +16,7 @@ import { DocumentBytesMissingError } from "@fiscode/core";
 import { documentLinkRepo, documentRepo } from "@fiscode/db";
 import type { DocumentRow } from "@fiscode/csv";
 import { errorLine, fileKind, formatBytes } from "../../lib/documents-view";
+import { BACKUP_CARD_ID } from "../backup-card";
 import { isLinkable, linkedRowLabel, ROUTE_FOR, rowAnchor } from "../../lib/documents-links";
 import { formatDate, formatDateTime } from "../../lib/format-date";
 
@@ -130,7 +131,12 @@ function SheetBody({
         <section aria-label="Preview" className="rounded-md border border-border bg-muted/30">
           {missing ? (
             <div role="status" className="grid gap-1 p-4 text-sm">
-              <p>File not on this device — restore a backup</p>
+              <p>
+                File not on this device —{" "}
+                <Link to="/" hash={BACKUP_CARD_ID} className="underline underline-offset-4">
+                  restore a backup
+                </Link>
+              </p>
               {/* A CSV restore brings rows, not files: the file itself can come back by hand. */}
               <p className="text-muted-foreground">Or add the file again with Replace file.</p>
             </div>
