@@ -200,4 +200,26 @@ describe("document sheet", () => {
     );
     expect((await documentRepo.get(doc.id))?.mime).toBe("image/png");
   });
+
+  it("labels the newest version Current, though the repo lists oldest first (REVIEW #83 final F5)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 20, 19, 23));
+    const doc = await documentRepo.upload(
+      new File(["PNG demo"], "demo.png", { type: "image/png" }),
+    );
+    vi.setSystemTime(new Date(2026, 10, 20, 19, 24));
+    const replaced = await documentRepo.replaceBytes(
+      doc.id,
+      new File(["%PDF demo, longer"], "demo.pdf", { type: "application/pdf" }),
+    );
+    vi.useRealTimers();
+    render(
+      <DocumentSheet doc={replaced} folderPath="Unfiled" onClose={() => {}} onChanged={() => {}} />,
+    );
+    const versions = await screen.findAllByText(/^(Current|Earlier) ·/);
+    expect(versions.map((v) => v.textContent)).toEqual([
+      expect.stringMatching(/^Current · Nov 20, 2026, 7:24/),
+      expect.stringMatching(/^Earlier · Nov 20, 2026, 7:23/),
+    ]);
+  });
 });

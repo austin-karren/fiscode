@@ -355,9 +355,11 @@ export const documentRepo = {
     return URL.createObjectURL(await documentRepo.readBytes(id));
   },
   async versions(id: string) {
-    return (versionLog.get(id) ?? [])
-      .map((v) => ({ ...v, available: blobs.has(v.sha256) }))
-      .toReversed();
+    return (
+      (versionLog.get(id) ?? [])
+        // Oldest first, as the real repo returns them.
+        .map((v) => ({ ...v, available: blobs.has(v.sha256) }))
+    );
   },
 };
 

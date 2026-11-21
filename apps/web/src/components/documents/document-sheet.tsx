@@ -85,7 +85,10 @@ function SheetBody({
       .catch((err) => {
         if (err instanceof DocumentBytesMissingError && live) setMissing(true);
       });
-    void documentRepo.versions(doc.id).then((v) => live && setVersions(v));
+    // Newest first, whatever order the repo returns (it gives oldest first): the top one is current.
+    void documentRepo
+      .versions(doc.id)
+      .then((v) => live && setVersions(v.toSorted((a, b) => b.at.localeCompare(a.at))));
     void documentLinkRepo.forDocument(doc.id).then((l) => live && setLinks(l));
     return () => {
       live = false;
@@ -124,9 +127,11 @@ function SheetBody({
       <div className="grid gap-4 px-4 pb-4">
         <section aria-label="Preview" className="rounded-md border border-border bg-muted/30">
           {missing ? (
-            <p role="status" className="p-4 text-sm">
-              File not on this device — restore a backup
-            </p>
+            <div role="status" className="grid gap-1 p-4 text-sm">
+              <p>File not on this device — restore a backup</p>
+              {/* A CSV restore brings rows, not files: the file itself can come back by hand. */}
+              <p className="text-muted-foreground">Or add the file again with Replace file.</p>
+            </div>
           ) : !url ? (
             <p className="p-4 text-sm text-muted-foreground">Loading…</p>
           ) : doc.mime === "application/pdf" ? (
