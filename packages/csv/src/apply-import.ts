@@ -1,5 +1,6 @@
 import type { Bundle } from "./bundle-types.ts";
 import { emptyBundle } from "./bundle-types.ts";
+import { TABLE_RECORD_TYPES } from "./form-ranges.ts";
 
 /**
  * `restore` replaces everything with the file. `append` keeps what is here and
@@ -35,12 +36,18 @@ export const applyImport = (
   existing: Bundle,
   incoming: Bundle,
   mode: ImportMode,
+  /** From `parseCsv`: the columns each record type's header had. Update rows takes only those. */
+  file: { columns?: Map<string, Set<string>> } = {},
 ): AppliedImport => {
   if (mode === "restore") {
     return { next: { ...incoming }, conflicts: [], replaced: existing };
   }
   if (mode === "update") {
-    return { next: updateBundle(existing, incoming), conflicts: [], replaced: existing };
+    return {
+      next: updateBundle(existing, incoming, file.columns),
+      conflicts: [],
+      replaced: existing,
+    };
   }
   const conflicts: ImportConflict[] = [];
   const next: Bundle = {
@@ -114,10 +121,17 @@ export const updateTakesFileRow = (
  * with new ids are added, rows the file lacks are kept, and nothing is removed. The file's
  * profile replaces this one when the file has one. History is appended as in `append`.
  */
-const updateBundle = (existing: Bundle, incoming: Bundle): Bundle => {
+const updateBundle = (
+  existing: Bundle,
+  incoming: Bundle,
+  columns: Map<string, Set<string>> | undefined,
+): Bundle => {
   const next: Bundle = {
     ...emptyBundle(),
-    profile: incoming.profile ?? existing.profile,
+    profile:
+      incoming.profile && existing.profile
+        ? withFileFields(existing.profile, incoming.profile, fieldsOf(columns, "profile"))
+        : (incoming.profile ?? existing.profile),
     history: mergeRows("history", existing.history, incoming.history, []),
   };
   type Row = { id: string; deletedAt: string | null };
@@ -127,6 +141,7 @@ const updateBundle = (existing: Bundle, incoming: Bundle): Bundle => {
     (next as Record<string, unknown>)[table] = updateRows(
       rowsOf(existing, table),
       rowsOf(incoming, table),
+      fieldsOf(columns, TABLE_RECORD_TYPES[table]),
     );
   }
   return next;
@@ -135,12 +150,49 @@ const updateBundle = (existing: Bundle, incoming: Bundle): Bundle => {
 const updateRows = <T extends { id: string; deletedAt: string | null }>(
   existingRows: readonly T[],
   incomingRows: readonly T[],
+  fields: Set<string> | undefined,
 ): T[] => {
   const fromFile = new Map(incomingRows.map((r) => [r.id, r]));
   const here = new Set(existingRows.map((r) => r.id));
   const kept = existingRows.map((row) => {
     const file = fromFile.get(row.id);
-    return file && updateTakesFileRow(row, file) ? file : row;
+    return file && updateTakesFileRow(row, file) ? withFileFields(row, file, fields) : row;
   });
   return [...kept, ...incomingRows.filter((r) => !here.has(r.id))];
+};
+
+// A column whose bundle field is not its camelCased name.
+const FIELD_FOR_COLUMN: Record<string, string> = {
+  default_commission_rate_basis_points: "defaultCommissionRate",
+};
+
+const camel = (key: string): string =>
+  key.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
+
+/**
+ * The bundle fields a file's header carried for a record type, or undefined when unknown (a
+ * bundle not read from a file: every field counts).
+ */
+export const fieldsOf = (
+  columns: Map<string, Set<string>> | undefined,
+  recordType: string,
+): Set<string> | undefined => {
+  if (!columns) return undefined;
+  const keys = columns.get(recordType) ?? new Set<string>();
+  return new Set([...keys].map((k) => FIELD_FOR_COLUMN[k] ?? camel(k)));
+};
+
+/**
+ * Update rows: the row here with the file's value for each field the file's format has. A file
+ * in an older format lacks newer columns; their values here stay (review #78 r1).
+ */
+export const withFileFields = <T extends object>(
+  here: T,
+  file: T,
+  fields: Set<string> | undefined,
+): T => {
+  if (!fields) return file;
+  const out: Record<string, unknown> = { ...(here as Record<string, unknown>) };
+  for (const [k, v] of Object.entries(file)) if (fields.has(k)) out[k] = v;
+  return out as T;
 };

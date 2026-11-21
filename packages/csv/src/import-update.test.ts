@@ -242,3 +242,76 @@ describe("planImport warnings: overlapping entity periods (Add rows, Update rows
     expect(planImport(existing, fine, "update").warnings.overlaps).toEqual([]);
   });
 });
+
+describe("Update rows takes only the columns the file's format has (review #78 r1)", () => {
+  // The app holds prior-year figures and a placed-in-service date; the file is the app's own
+  // yearly export, unedited, written in an older format that lacks those columns.
+  const withNewerFields = (): Bundle => {
+    const b = app();
+    b.profile = {
+      ...b.profile!,
+      priorYearTotalTaxCents: 3_000_00,
+      priorYearAgiCents: 100_000_00,
+      priorYearStateTaxCents: 500_00,
+      priorYearFiguresYear: 2025,
+    };
+    const i = b.expenses.findIndex((e) => e.category === "equipment");
+    b.expenses[i] = { ...b.expenses[i]!, placedInServiceDate: "2026-02-01" };
+    return b;
+  };
+  // Drop a format's newer columns from every header and row, and mark the file with its version.
+  const asOlder = (csv: string, version: string, drop: string[]): string => {
+    const lines = csv.split("\r\n");
+    let cut: number[] = [];
+    return lines
+      .map((l) => {
+        if (l.startsWith("﻿# fiscode export") || l.startsWith("# fiscode export")) {
+          return l.replace(/schema: v\d+/, `schema: ${version}`);
+        }
+        if (l.startsWith("record_type,")) {
+          const cols = l.split(",");
+          cut = drop.map((d) => cols.indexOf(d)).filter((i) => i >= 0);
+          return cols.filter((_, i) => !cut.includes(i)).join(",");
+        }
+        if (l === "" || l.startsWith("#")) return l;
+        return l
+          .split(",")
+          .filter((_, i) => !cut.includes(i))
+          .join(",");
+      })
+      .join("\r\n");
+  };
+  const PRIOR = [
+    "prior_year_total_tax",
+    "prior_year_agi",
+    "prior_year_state_tax",
+    "prior_year_figures_year",
+  ];
+
+  it.each([
+    ["v3", PRIOR],
+    ["v2", [...PRIOR, "placed_in_service_date"]],
+  ])("an unedited %s yearly file changes nothing and keeps the newer fields", (version, drop) => {
+    const existing = withNewerFields();
+    const csv = asOlder(exportBundle(existing, { scope: "yearly", year: 2026 }), version, drop);
+    const read = readImportFile(csv);
+    if (!read.ok) throw new Error(`expected a readable file: ${read.headline}`);
+    const plan = planImport(existing, read.bundle, "update", read);
+    expect(plan.changed).toBe(0);
+    const { next } = applyImport(existing, read.bundle, "update", read);
+    expect(next.profile).toEqual(existing.profile);
+    expect(next.expenses).toEqual(existing.expenses);
+  });
+
+  it("an edit in an older file still applies; the columns it lacks stay as they are here", () => {
+    const existing = withNewerFields();
+    const edited = clone(existing);
+    edited.profile = { ...edited.profile!, dependents: 2 };
+    const csv = asOlder(exportBundle(edited, { scope: "yearly", year: 2026 }), "v3", PRIOR);
+    const read = readImportFile(csv);
+    if (!read.ok) throw new Error("expected a readable file");
+    expect(planImport(existing, read.bundle, "update", read).changed).toBe(1);
+    const { next } = applyImport(existing, read.bundle, "update", read);
+    expect(next.profile).toEqual({ ...existing.profile!, dependents: 2 });
+  });
+});

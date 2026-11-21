@@ -1,5 +1,5 @@
 import { describeEntityPeriod, findEntityOverlap } from "@fiscode/core";
-import { updateTakesFileRow, type ImportMode } from "./apply-import.ts";
+import { fieldsOf, updateTakesFileRow, withFileFields, type ImportMode } from "./apply-import.ts";
 import type { Bundle } from "./bundle-types.ts";
 import { formRangeProblems, TABLE_RECORD_TYPES } from "./form-ranges.ts";
 import { parseCsv, rowLineKey, type ImportError } from "./import.ts";
@@ -50,6 +50,8 @@ export type ImportFile =
       counts: RowCounts;
       /** The spreadsheet row of each row (see `ImportResult.rowLines`). */
       rowLines: Map<string, number>;
+      /** The columns each record type's header had (see `ImportResult.columns`). */
+      columns: Map<string, Set<string>>;
     }
   | {
       ok: false;
@@ -68,7 +70,7 @@ export type ImportFile =
  * user's data with zero rows.
  */
 export const readImportFile = (raw: string): ImportFile => {
-  const { bundle, provenance, validationErrors, tables, rowLines } = parseCsv(raw);
+  const { bundle, provenance, validationErrors, tables, rowLines, columns } = parseCsv(raw);
   // An error with no row number is about the whole file, e.g. a schema marker
   // from a newer fiscode. That message already says what to do.
   const wholeFile = validationErrors.find((e) => e.line === 0);
@@ -104,7 +106,15 @@ export const readImportFile = (raw: string): ImportFile => {
       errors: [],
     };
   }
-  return { ok: true, bundle, scope: provenance.scope, year: provenance.year, counts, rowLines };
+  return {
+    ok: true,
+    bundle,
+    scope: provenance.scope,
+    year: provenance.year,
+    counts,
+    rowLines,
+    columns,
+  };
 };
 
 export type ImportPlan = {
@@ -167,7 +177,12 @@ export const planImport = (
   existing: Bundle,
   incoming: Bundle,
   mode: ImportMode,
-  file: { scope?: "full" | "yearly"; year?: number; rowLines?: Map<string, number> } = {},
+  file: {
+    scope?: "full" | "yearly";
+    year?: number;
+    rowLines?: Map<string, number>;
+    columns?: Map<string, Set<string>>;
+  } = {},
 ): ImportPlan => {
   const current = countRows(existing);
   const existingHistory = new Set(existing.history.map((h) => h.id));
@@ -207,7 +222,7 @@ export const planImport = (
       unchanged: 0,
       keptDeleted: 0,
       keptLive: 0,
-      warnings: warningsFor(existing, incoming, mode, file.rowLines),
+      warnings: warningsFor(existing, incoming, mode, file.rowLines, file.columns),
     };
   }
 
@@ -220,18 +235,25 @@ export const planImport = (
     let addedEntityPeriods = 0;
     if (incoming.profile) {
       if (!existing.profile) written.live++;
-      else if (sameRow(existing.profile, incoming.profile)) unchanged++;
+      else if (
+        sameRow(
+          existing.profile,
+          withFileFields(existing.profile, incoming.profile, fieldsOf(file.columns, "profile")),
+        )
+      )
+        unchanged++;
       else changed++;
     }
     for (const table of ROW_TABLES) {
       const here = new Map(existing[table].map((r) => [r.id, r]));
+      const fields = fieldsOf(file.columns, TABLE_RECORD_TYPES[table]);
       for (const row of incoming[table]) {
         const mine = here.get(row.id);
         if (!mine) {
           if (row.deletedAt === null) written.live++;
           else written.deleted++;
           if (table === "entities" && row.deletedAt === null) addedEntityPeriods++;
-        } else if (sameRow(mine, row)) unchanged++;
+        } else if (sameRow(mine, withFileFields(mine, row, fields))) unchanged++;
         else if (mine.deletedAt !== null) keptDeleted++;
         else if (!updateTakesFileRow(mine, row)) keptLive++;
         else changed++;
@@ -250,7 +272,7 @@ export const planImport = (
       unchanged,
       keptDeleted,
       keptLive,
-      warnings: warningsFor(existing, incoming, mode, file.rowLines),
+      warnings: warningsFor(existing, incoming, mode, file.rowLines, file.columns),
     };
   }
 
@@ -307,22 +329,32 @@ const writtenRows = (
   existing: Bundle,
   incoming: Bundle,
   mode: "append" | "update",
+  columns: Map<string, Set<string>> | undefined,
 ): { recordType: string; row: { id: string } }[] => {
   const out: { recordType: string; row: { id: string } }[] = [];
   if (incoming.profile) {
-    const writes = !existing.profile
-      ? true
-      : mode === "update" && !sameRow(existing.profile, incoming.profile);
-    if (writes) out.push({ recordType: "profile", row: incoming.profile });
+    if (!existing.profile) out.push({ recordType: "profile", row: incoming.profile });
+    else if (mode === "update") {
+      const merged = withFileFields(
+        existing.profile,
+        incoming.profile,
+        fieldsOf(columns, "profile"),
+      );
+      if (!sameRow(existing.profile, merged)) out.push({ recordType: "profile", row: merged });
+    }
   }
   for (const table of ROW_TABLES) {
     const here = new Map(existing[table].map((r) => [r.id, r]));
+    const fields = fieldsOf(columns, TABLE_RECORD_TYPES[table]);
     for (const row of incoming[table]) {
       const mine = here.get(row.id);
-      const writes = !mine
-        ? true
-        : mode === "update" && updateTakesFileRow(mine, row) && !sameRow(mine, row);
-      if (writes) out.push({ recordType: TABLE_RECORD_TYPES[table], row });
+      if (!mine) {
+        out.push({ recordType: TABLE_RECORD_TYPES[table], row });
+        continue;
+      }
+      if (mode !== "update" || !updateTakesFileRow(mine, row)) continue;
+      const merged = withFileFields(mine, row, fields);
+      if (!sameRow(mine, merged)) out.push({ recordType: TABLE_RECORD_TYPES[table], row: merged });
     }
   }
   return out;
@@ -333,8 +365,9 @@ const warningsFor = (
   incoming: Bundle,
   mode: "append" | "update",
   rowLines: Map<string, number> | undefined,
+  columns?: Map<string, Set<string>>,
 ): ImportWarnings => {
-  const rows = writtenRows(existing, incoming, mode);
+  const rows = writtenRows(existing, incoming, mode, columns);
 
   const bad: string[] = [];
   for (const { recordType, row } of rows) {
@@ -355,10 +388,14 @@ const warningsFor = (
   };
 
   // The entity periods after the import: the file's written ones replace or join these.
-  const written = new Set(rows.filter((r) => r.recordType === "entity").map((r) => r.row.id));
-  const fileEntities = new Map(incoming.entities.map((e) => [e.id, e]));
+  const writtenEntities = new Map(
+    rows
+      .filter((r) => r.recordType === "entity")
+      .map((r) => [r.row.id, r.row as Bundle["entities"][number]]),
+  );
+  const written = new Set(writtenEntities.keys());
   const after = [
-    ...existing.entities.map((e) => (written.has(e.id) ? fileEntities.get(e.id)! : e)),
+    ...existing.entities.map((e) => writtenEntities.get(e.id) ?? e),
     ...incoming.entities.filter(
       (e) => written.has(e.id) && !existing.entities.some((x) => x.id === e.id),
     ),

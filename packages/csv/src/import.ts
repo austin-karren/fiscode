@@ -234,6 +234,11 @@ export type ImportResult = {
    * warning about a row can name the row a person sees.
    */
   rowLines: Map<string, number>;
+  /**
+   * The stored columns (flat keys) each record type's rows had a header for. A file in an older
+   * format lacks the newer columns; Update rows takes only these from it.
+   */
+  columns: Map<string, Set<string>>;
 };
 
 /** The key of `ImportResult.rowLines`: a record type and an id. */
@@ -355,6 +360,7 @@ export const parseCsv = (raw: string): ImportResult => {
       provenance,
       tables: 0,
       rowLines: new Map(),
+      columns: new Map(),
       validationErrors: [
         {
           rowIndex: -1,
@@ -378,6 +384,7 @@ export const parseCsv = (raw: string): ImportResult => {
   let profileLine = 0;
   // Spreadsheet row of each id seen so far, per record type.
   const seenIds = new Map<string, number>();
+  const columns = new Map<string, Set<string>>();
   all.forEach((row, index) => {
     if (isBlank(row) || isComment(row)) return;
     // Header names are matched without regard to case or outer spaces.
@@ -454,6 +461,13 @@ export const parseCsv = (raw: string): ImportResult => {
         return;
       }
       seenIds.set(idKey, index + 1);
+      // The stored columns this row's header has, for its record type.
+      const have = columns.get(result.data.record_type) ?? new Set<string>();
+      for (const name of header) {
+        const column = HEADER_LOOKUP.get(name);
+        if (column) have.add(column.key);
+      }
+      columns.set(result.data.record_type, have);
       if (result.data.record_type === "profile") profileLine = index + 1;
       validated.push(result.data);
     } else {
@@ -476,7 +490,7 @@ export const parseCsv = (raw: string): ImportResult => {
       message: "profile.se_start_date is required but missing or empty",
     });
   }
-  return { bundle, provenance, validationErrors, tables, rowLines: seenIds };
+  return { bundle, provenance, validationErrors, tables, rowLines: seenIds, columns };
 };
 
 export { rowToBundle };
