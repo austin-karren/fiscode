@@ -5,13 +5,41 @@ const { loaded } = vi.hoisted(() => ({ loaded: { jobs: [] as unknown[] } }));
 
 // The router's history doesn't exist in jsdom: it is replaced at the package boundary. The rows
 // come from the DF-07 stub's in-memory repo.
+// SQLite over OPFS doesn't exist in jsdom: the repo is an in-memory fake with makeCrudRepo's API.
+const { fakeRepo } = vi.hoisted(() => ({
+  fakeRepo: () => {
+    const rows = new Map<
+      string,
+      Record<string, unknown> & { id: string; deletedAt: string | null }
+    >();
+    let n = 0;
+    return {
+      list: async () => [...rows.values()].filter((r) => r.deletedAt === null),
+      listIncludingDeleted: async () => [...rows.values()],
+      create: async (input: Record<string, unknown>) => {
+        const row = { ...input, id: `row_${++n}`, createdAt: "", updatedAt: "", deletedAt: null };
+        rows.set(row.id, row);
+        return row;
+      },
+      update: async (id: string, patch: Record<string, unknown>) => {
+        const row = { ...rows.get(id)!, ...patch };
+        rows.set(id, row);
+        return row;
+      },
+      softDelete: async () => true,
+      revertTo: async () => undefined,
+    };
+  },
+}));
+vi.mock("@fiscode/db", () => ({ w2JobRepo: fakeRepo() }));
+
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useLoaderData: () => ({ jobs: loaded.jobs, year: 2026 }),
   useRouter: () => ({ invalidate: vi.fn(async () => {}) }),
 }));
 
-import { w2JobRepo } from "../lib/w2-payments-stub";
+import { w2JobRepo } from "@fiscode/db";
 import { Route } from "./w2-jobs";
 
 const W2JobsPage = Route.options.component!;

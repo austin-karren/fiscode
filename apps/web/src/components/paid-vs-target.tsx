@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@fiscode/ui/components
 import { cents, formatUSD } from "@fiscode/core";
 import { Link } from "@tanstack/react-router";
 
-import type { PaymentsResult } from "../lib/w2-payments-stub";
+import type { PaymentsResult } from "@fiscode/tax";
 import { formatDate } from "../lib/format-date";
 import { DataTable } from "./data-table";
 import { SectionTitle } from "./section-title";

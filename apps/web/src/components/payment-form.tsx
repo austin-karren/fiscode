@@ -9,10 +9,12 @@ import {
   defaultAppliedQuarter,
   defaultTaxYear,
   JURISDICTION_LABELS,
-  type EstimatedPaymentRow,
-  type Jurisdiction,
-  type Quarter,
-} from "../lib/w2-payments-stub";
+  labelFor,
+} from "@fiscode/core";
+import type { EstimatedPaymentRow } from "@fiscode/csv";
+
+type Jurisdiction = keyof typeof JURISDICTION_LABELS;
+type Quarter = 1 | 2 | 3 | 4;
 import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { LabelWithTooltip } from "./forms/labeled";
 import { SelectWithLabels } from "./forms/select-with-labels";
@@ -52,7 +54,7 @@ export const paymentDefaults = (today: Date): PaymentValues => ({
 export const paymentValuesFrom = (row: EstimatedPaymentRow, today: Date): PaymentValues => ({
   date: isoToDate(row.date) ?? today,
   amount: (row.amountCents / 100).toFixed(2),
-  jurisdiction: row.jurisdiction,
+  jurisdiction: row.jurisdiction as Jurisdiction,
   taxYear: String(row.taxYear),
   appliedQuarter: row.appliedQuarter === null ? "auto" : (String(row.appliedQuarter) as "1"),
   notes: row.notes ?? "",
@@ -259,4 +261,4 @@ export function PaymentFields({
 
 /** "Federal $1,200.00 on Apr 10, 2026": a payment named for buttons and toasts. */
 export const paymentLabel = (row: EstimatedPaymentRow, formatDate: (iso: string) => string) =>
-  `${JURISDICTION_LABELS[row.jurisdiction]} payment ${formatUSD(cents(row.amountCents))} on ${formatDate(row.date)}`;
+  `${labelFor(JURISDICTION_LABELS, row.jurisdiction)} payment ${formatUSD(cents(row.amountCents))} on ${formatDate(row.date)}`;

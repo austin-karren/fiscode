@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultAppliedQuarter } from "../lib/w2-payments-stub";
+import { defaultAppliedQuarter } from "@fiscode/core";
 import { defaultTaxYear, paymentInsertFrom, paymentSchema } from "./payment-form";
 import { w2Defaults, w2InsertFrom, w2Schema, w2ValuesFrom } from "./w2-job-form";
 

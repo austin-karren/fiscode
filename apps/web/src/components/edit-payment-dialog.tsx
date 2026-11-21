@@ -11,7 +11,8 @@ import {
 import { Button } from "@fiscode/ui/components/button";
 import { toast } from "sonner";
 
-import { estimatedPaymentRepo, type EstimatedPaymentRow } from "../lib/w2-payments-stub";
+import { estimatedPaymentRepo } from "@fiscode/db";
+import type { EstimatedPaymentRow } from "@fiscode/csv";
 import { formatDate } from "../lib/format-date";
 import { useToday } from "../lib/use-today";
 import { noChangesToSave, useEditDialog } from "../hooks/use-edit-dialog";

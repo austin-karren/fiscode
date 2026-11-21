@@ -11,7 +11,8 @@ import {
 import { Button } from "@fiscode/ui/components/button";
 import { toast } from "sonner";
 
-import { w2JobRepo, type W2JobRow } from "../lib/w2-payments-stub";
+import { w2JobRepo } from "@fiscode/db";
+import type { W2JobRow } from "@fiscode/csv";
 import { noChangesToSave, useEditDialog } from "../hooks/use-edit-dialog";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { W2Fields, w2InsertFrom, w2Label, w2ValuesFrom, useW2Form } from "./w2-job-form";

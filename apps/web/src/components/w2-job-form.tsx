@@ -4,7 +4,7 @@ import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 
 import { optionalMoneyAmountOrZero } from "../lib/field-schemas";
-import type { W2JobRow } from "../lib/w2-payments-stub";
+import type { W2JobRow } from "@fiscode/csv";
 import { DatePicker, dateToIso, isoToDate } from "./forms/date-picker";
 import { LabelWithTooltip } from "./forms/labeled";
 import { SelectWithLabels } from "./forms/select-with-labels";

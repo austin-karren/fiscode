@@ -21,13 +21,6 @@ import { Badge } from "@fiscode/ui/components/badge";
 import { CircleAlert } from "lucide-react";
 import { StartupIgnoredNotice } from "../components/startup-ignored-notice";
 import { PaidVsTarget } from "../components/paid-vs-target";
-import {
-  estimatedPaymentRepo,
-  priorYearNotFiledFor,
-  stubPayments,
-  w2JobRepo,
-  type PriorYearBasis,
-} from "../lib/w2-payments-stub";
 
 import { EntityUnsupportedAlert } from "../components/entity-unsupported-alert";
 import { GLOSSARY } from "../lib/tax-glossary";
@@ -70,25 +63,10 @@ export const Route = createFileRoute("/")({
     const profile = bundle.profile!;
     const year = yearOf(todayIso());
     const { result, derived } = estimateBundleYear(bundle, year);
-    // DF-07 outputs from the stub until d-data's engine ships them on `result`.
-    const payments = stubPayments({
-      year,
-      floor: result.safeHarbor.floor,
-      noInstallmentsRequired: result.quarterly.noInstallmentsRequired === true,
-      // Federal only (Form 2210 line 6): the spouse's on a joint return, as the quarterly card counts.
-      spouseFederalWithholding: result.estimate.federalWithholding,
-      // Today's minimum already nets the spouse's Utah withholding; the stub nets only the
-      // taxpayer's own box 17 and Utah payments from it. The engine's line 5 replaces this.
-      utahMinimumBeforePayments: result.statePrepayment?.minimum,
-      utahDueDate: result.statePrepayment?.dueDate,
-      jobs: await w2JobRepo.listIncludingDeleted(),
-      payments: await estimatedPaymentRepo.listIncludingDeleted(),
-    });
-    const priorYearBasis: PriorYearBasis = priorYearNotFiledFor(year)
-      ? "not_filed"
-      : result.safeHarbor.firstYear
-        ? "not_entered"
-        : "entered";
+    // DF-07 (d-data #79): paid against what is due, and why the prior-year safe harbor applies.
+    const payments = result.payments;
+    const priorYearBasis =
+      result.safeHarbor.priorYearBasis ?? (result.safeHarbor.firstYear ? "not_entered" : "entered");
     return {
       bundle,
       profile,

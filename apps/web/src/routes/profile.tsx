@@ -3,7 +3,6 @@ import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-route
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { FieldCheckbox } from "../components/forms/field-checkbox";
-import { priorYearNotFiledFor, setPriorYearNotFiled } from "../lib/w2-payments-stub";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
 import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
@@ -192,7 +191,9 @@ function ProfileFormPanel({
       priorYearTotalTax: figuresStale ? "" : amountInput(profile.priorYearTotalTaxCents),
       priorYearAgi: figuresStale ? "" : amountInput(profile.priorYearAgiCents),
       priorYearStateTax: figuresStale ? "" : amountInput(profile.priorYearStateTaxCents),
-      priorYearNotFiled: priorYearNotFiledFor(priorYear + 1),
+      // Stamped with the year it is for, like the figures: it counts only for last year's return.
+      priorYearNotFiled:
+        profile.priorYearNotFiled === true && profile.priorYearFiguresYear === priorYear,
     },
     // Cast because zod's optional Date doesn't line up with TanStack Form's
     // exactOptional handling.
@@ -219,11 +220,10 @@ function ProfileFormPanel({
               priorYearAgiCents: null,
               priorYearStateTaxCents: null,
               priorYearFiguresYear: priorYear,
+              priorYearNotFiled: true,
             }
-          : priorYearFiguresToSave(parsed)),
+          : { ...priorYearFiguresToSave(parsed), priorYearNotFiled: false }),
       });
-      // profile.prior_year_not_filed (d-data's contract), in the stub until it lands.
-      setPriorYearNotFiled(parsed.priorYearNotFiled ? priorYear : null);
       const newStart = dateToIso(value.seStartDate!);
       if (moveEntityStart && entityStartToMove(newStart) && !entityMoveBlocked(newStart)) {
         const moved = await entityRepo.moveFirstStart(newStart);

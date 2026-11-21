@@ -13,7 +13,7 @@ import { NoDataEmpty } from "../components/empty-states/no-data";
 import { SectionTitle } from "../components/section-title";
 import { EditW2JobDialog } from "../components/edit-w2-job-dialog";
 import { W2Fields, w2Defaults, w2InsertFrom, w2Label, useW2Form } from "../components/w2-job-form";
-import { w2JobRepo } from "../lib/w2-payments-stub";
+import { w2JobRepo } from "@fiscode/db";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { formatDate } from "../lib/format-date";

@@ -19,11 +19,8 @@ import {
   paymentLabel,
   usePaymentForm,
 } from "../components/payment-form";
-import {
-  defaultAppliedQuarter,
-  estimatedPaymentRepo,
-  JURISDICTION_LABELS,
-} from "../lib/w2-payments-stub";
+import { estimatedPaymentRepo } from "@fiscode/db";
+import { defaultAppliedQuarter, JURISDICTION_LABELS, labelFor } from "@fiscode/core";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { formatDate } from "../lib/format-date";
@@ -124,7 +121,7 @@ function PaymentsPage() {
                     <span className="whitespace-nowrap">{formatDate(p.date)}</span>
                   </DataTable.Cell>
                   <DataTable.Cell label="Paid to">
-                    {JURISDICTION_LABELS[p.jurisdiction]}
+                    {labelFor(JURISDICTION_LABELS, p.jurisdiction)}
                   </DataTable.Cell>
                   <DataTable.Cell label="For">
                     {p.jurisdiction === "UT"

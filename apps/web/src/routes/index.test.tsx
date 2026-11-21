@@ -28,6 +28,29 @@ const payment = (quarter: number, start: string, end: string, due: string) => ({
 });
 
 // Demo figures in the loader's shape: only what the page reads.
+function emptyPayments() {
+  const q = (quarter: 1 | 2 | 3 | 4, dueDate: string) => ({
+    quarter,
+    dueDate,
+    requiredThrough: 0,
+    paidByDueDate: 0,
+    shortfall: 0,
+    paidAppliedHere: 0,
+  });
+  return {
+    federal: {
+      withholding: 0,
+      estimates: 0,
+      totalPaid: 0,
+      target: 0,
+      remaining: 0,
+      quarters: [q(1, "2026-04-15"), q(2, "2026-06-15"), q(3, "2026-09-15"), q(4, "2027-01-15")],
+      safeHarborMet: true,
+    },
+    state: undefined,
+  };
+}
+
 const loaderData = {
   profile: {
     filingStatus: "single",
@@ -68,16 +91,9 @@ const loaderData = {
     seStartDate: "2026-03-02",
     excludedBeforeSeStart: { income: 1, expense: 0, mileage: 0 },
   },
-  // DF-07 (stub until d-data's engine): nothing paid, no return entered.
-  payments: stubPayments({
-    year: 2026,
-    floor: 0,
-    utahMinimumBeforePayments: undefined,
-    utahDueDate: undefined,
-    jobs: [],
-    payments: [],
-  }) as PaymentsResult,
-  priorYearBasis: "not_entered" as PriorYearBasis,
+  // DF-07: nothing paid, no return entered.
+  payments: emptyPayments() as PaymentsResult,
+  priorYearBasis: "not_entered" as "entered" | "not_entered" | "not_filed",
 };
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
@@ -89,9 +105,8 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 }));
 
 import { exampleBundle } from "@fiscode/csv";
-import { estimateBundleYear } from "@fiscode/tax";
+import { estimateBundleYear, type PaymentsResult } from "@fiscode/tax";
 
-import { stubPayments, type PaymentsResult, type PriorYearBasis } from "../lib/w2-payments-stub";
 import { Route } from "./index";
 
 const Dashboard = Route.options.component!;
@@ -473,29 +488,13 @@ describe("equipment ticked Startup", () => {
   });
 });
 
-describe("paid so far (DF-07, stub outputs)", () => {
-  // Demo: a W-2 Jan 1 - Feb 18 ($950.50 federal, $380 Utah withheld), federal payments of $1,200
-  // on Apr 10 and Jun 10, and $300 to Utah; a $6,000 federal target, a $1,000 Utah minimum.
+describe("paid so far (DF-07, from engine output)", () => {
+  // The brief's demo: a W-2 Jan 1 - Feb 18 (Demo Corp: $8,500 wages, $950.50 federal and $380
+  // Utah withheld), $1,200 federal on Apr 10 and Jun 10, $300 to Utah on Jun 10. `moreIncome`
+  // adds a demo 1099 row so installments are required.
   const FIXED = "2026-06-04T12:00:00.000Z";
   const dated = { createdAt: FIXED, updatedAt: FIXED, deletedAt: null };
-  const job = {
-    ...dated,
-    id: "w2_demo",
-    taxYear: 2026,
-    employer: "Demo Corp",
-    startDate: "2026-01-01",
-    endDate: "2026-02-18",
-    wagesCents: 850_000,
-    federalWithholdingCents: 95_050,
-    ssWagesCents: 850_000,
-    ssTipsCents: 0,
-    ssTaxWithheldCents: 0,
-    medicareWagesCents: 850_000,
-    stateWagesCents: 850_000,
-    stateWithholdingCents: 38_000,
-    notes: null,
-  };
-  const pay = (id: string, date: string, amountCents: number, jurisdiction: "federal" | "UT") => ({
+  const pay = (id: string, date: string, amountCents: number, jurisdiction: string) => ({
     ...dated,
     id,
     date,
@@ -505,53 +504,76 @@ describe("paid so far (DF-07, stub outputs)", () => {
     appliedQuarter: null,
     notes: null,
   });
-  const demo = () =>
-    stubPayments({
-      year: 2026,
-      floor: 600_000,
-      utahMinimumBeforePayments: 100_000,
-      utahDueDate: "2027-04-15" as never,
-      jobs: [job],
-      payments: [
-        pay("p1", "2026-04-10", 120_000, "federal"),
-        pay("p2", "2026-06-10", 120_000, "federal"),
-        pay("p3", "2026-06-10", 30_000, "UT"),
-      ],
-    });
-  const withPayments = (payments: PaymentsResult, run: () => void) => {
-    const saved = loaderData.payments;
-    loaderData.payments = payments;
+  const engine = (moreIncome: boolean) => {
+    const b = exampleBundle();
+    b.w2Jobs = [
+      {
+        ...dated,
+        id: "w2_demo",
+        taxYear: 2026,
+        employer: "Demo Corp",
+        startDate: "2026-01-01",
+        endDate: "2026-02-18",
+        wagesCents: 850_000,
+        federalWithholdingCents: 95_050,
+        ssWagesCents: 850_000,
+        ssTaxWithheldCents: 52_700,
+        medicareWagesCents: 850_000,
+        ssTipsCents: 0,
+        stateWagesCents: 850_000,
+        stateWithholdingCents: 38_000,
+        notes: null,
+      },
+    ];
+    b.estimatedPayments = [
+      pay("p1", "2026-04-10", 120_000, "federal"),
+      pay("p2", "2026-06-10", 120_000, "federal"),
+      pay("p3", "2026-06-10", 30_000, "UT"),
+    ];
+    if (moreIncome) {
+      b.income = [...b.income, { ...b.income[0]!, id: "in_demo_big", amountCents: 6_000_000 }];
+    }
+    return estimateBundleYear(b, 2026).result;
+  };
+  const usd = (c: number) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(c / 100);
+  const withResult = (result: ReturnType<typeof engine>, run: () => void) => {
+    const saved = { payments: loaderData.payments, quarterly: loaderData.result.quarterly };
+    loaderData.payments = result.payments;
+    (loaderData.result as { quarterly: unknown }).quarterly = result.quarterly;
     try {
       run();
     } finally {
-      loaderData.payments = saved;
+      loaderData.payments = saved.payments;
+      (loaderData.result as { quarterly: unknown }).quarterly = saved.quarterly;
     }
   };
 
   it("shows each quarter's due-by, paid-by and shortfall, and the federal and Utah totals", () => {
-    withPayments(demo(), () => {
+    const result = engine(true);
+    const { federal, state } = result.payments;
+    expect(result.quarterly.noInstallmentsRequired).not.toBe(true);
+    expect(federal.estimates).toBe(240_000);
+    withResult(result, () => {
       render(<Dashboard />);
-      const row = (q: number) => screen.getByText(new RegExp(`^Q${q}, due`)).closest("tr")!;
-      // Q1: $1,500 due by Apr 15; $237.63 withheld share + $1,200 paid = $1,437.63; $62.37 short.
-      expect(row(1)).toHaveTextContent("$1,500.00");
-      expect(row(1)).toHaveTextContent("$1,437.63");
-      expect(row(1)).toHaveTextContent("$62.37");
-      // Q2: $3,000 due; $475.25 + $2,400 = $2,875.25; $124.75 short.
-      expect(row(2)).toHaveTextContent("$2,875.25");
-      expect(row(2)).toHaveTextContent("$124.75");
+      for (const q of federal.quarters) {
+        const row = screen.getByText(new RegExp(`^Q${q.quarter}, due`)).closest("tr")!;
+        expect(row).toHaveTextContent(usd(q.requiredThrough));
+        expect(row).toHaveTextContent(usd(q.paidByDueDate));
+        expect(row).toHaveTextContent(q.shortfall > 0 ? usd(q.shortfall) : "—");
+      }
       expect(screen.getByText(/^Federal:/).closest("p")).toHaveTextContent(
-        "Federal: $3,350.50 paid of $6,000.00 ($950.50 withheld, $2,400.00 in payments). $2,649.50 still due.",
+        `Federal: ${usd(federal.totalPaid)} paid of ${usd(federal.target)} (${usd(federal.withholding)} withheld, ${usd(federal.estimates)} in payments). ${usd(federal.remaining)} still due.`,
       );
       expect(screen.getByText(/^Utah:/).closest("p")).toHaveTextContent(
-        "Utah: $680.00 paid ($380.00 withheld, $300.00 in payments). $320.00 still due by Apr 15, 2027.",
+        `Utah: ${usd(state!.totalPaid)} paid (${usd(state!.withholding)} withheld, ${usd(state!.estimates)} in payments).`,
       );
       expect(screen.getByText(/doesn't calculate an underpayment penalty yet/)).toBeInTheDocument();
-      expect(screen.queryByText("On track")).not.toBeInTheDocument();
     });
   });
 
   it("mutes quarters already past", () => {
-    withPayments(demo(), () => {
+    withResult(engine(true), () => {
       render(<Dashboard />);
       // This file runs on July 1, 2026: Q1 (Apr 15) and Q2 (Jun 15) are past; Q3 is not.
       expect(screen.getByText(/^Q1, due/).closest("tr")).toHaveClass("text-muted-foreground");
@@ -560,12 +582,20 @@ describe("paid so far (DF-07, stub outputs)", () => {
     });
   });
 
-  it("says 'On track' when no quarter is short", () => {
-    const met = demo();
-    met.federal.safeHarborMet = true;
-    withPayments(met, () => {
+  it("agrees with the quarterly card under the $1,000 rule: 'No payment required', no shortfall", () => {
+    const result = engine(false);
+    expect(result.quarterly.noInstallmentsRequired).toBe(true);
+    expect(result.payments.federal.target).toBe(0);
+    withResult(result, () => {
       render(<Dashboard />);
+      expect(screen.getByText(/^Federal:/).closest("p")).toHaveTextContent(
+        "No payment required: under $1,000 owed after withholding.",
+      );
+      expect(screen.queryByText(/still due\./)).not.toBeInTheDocument();
       expect(screen.getByText("On track")).toBeInTheDocument();
+      for (const n of [1, 2, 3, 4]) {
+        expect(screen.getByText(new RegExp(`^Q${n}, due`)).closest("tr")).toHaveTextContent(/—$/);
+      }
     });
   });
 });
@@ -590,52 +620,6 @@ describe("didn't file a 2025 return (DF-07)", () => {
   it("shows no 90% alert when the return is just not entered", () => {
     render(<Dashboard />);
     expect(screen.queryByText("No 2025 return filed")).not.toBeInTheDocument();
-  });
-});
-
-describe("paid so far agrees with the quarterly card (REVIEW #80 r1 F1)", () => {
-  it("counts the spouse's federal withholding with the taxpayer's own", () => {
-    const p = stubPayments({
-      year: 2026,
-      floor: 600_000,
-      spouseFederalWithholding: 630_000,
-      utahMinimumBeforePayments: undefined,
-      utahDueDate: undefined,
-      jobs: [],
-      payments: [],
-    });
-    expect(p.federal.withholding).toBe(630_000);
-    expect(p.federal.totalPaid).toBe(630_000);
-  });
-
-  it("under the $1,000 rule: target 0, 'No payment required', and no shortfall", () => {
-    const payments = stubPayments({
-      year: 2026,
-      floor: 600_000,
-      noInstallmentsRequired: true,
-      utahMinimumBeforePayments: undefined,
-      utahDueDate: undefined,
-      jobs: [],
-      payments: [],
-    });
-    expect(payments.federal.target).toBe(0);
-    const savedP = loaderData.payments;
-    const q = loaderData.result.quarterly as { noInstallmentsRequired?: boolean };
-    loaderData.payments = payments;
-    q.noInstallmentsRequired = true;
-    try {
-      render(<Dashboard />);
-      expect(screen.getByText(/^Federal:/).closest("p")).toHaveTextContent(
-        "No payment required: under $1,000 owed after withholding.",
-      );
-      expect(screen.queryByText(/still due\./)).not.toBeInTheDocument();
-      for (const n of [1, 2, 3, 4]) {
-        expect(screen.getByText(new RegExp(`^Q${n}, due`)).closest("tr")).toHaveTextContent(/—$/);
-      }
-    } finally {
-      loaderData.payments = savedP;
-      delete q.noInstallmentsRequired;
-    }
   });
 });
 
