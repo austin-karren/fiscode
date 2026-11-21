@@ -34,6 +34,7 @@ const makeBundle = (overrides: Partial<Bundle> = {}): Bundle => ({
     priorYearAgiCents: null,
     priorYearStateTaxCents: null,
     priorYearFiguresYear: null,
+    priorYearNotFiled: null,
     createdAt: FIXED,
     updatedAt: FIXED,
   },
@@ -59,6 +60,8 @@ const makeBundle = (overrides: Partial<Bundle> = {}): Bundle => ({
   history: [],
   expenses: [],
   retirementContributions: [],
+  w2Jobs: [],
+  estimatedPayments: [],
   ...overrides,
 });
 

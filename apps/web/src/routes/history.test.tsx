@@ -334,6 +334,7 @@ describe("restore from history", () => {
       priorYearAgiCents: null,
       priorYearStateTaxCents: null,
       priorYearFiguresYear: null,
+      priorYearNotFiled: null,
       ...stamps,
     };
     const edited = { ...profile, filingStatus: "mfj" };

@@ -11,6 +11,8 @@ import {
   type MileageRow,
   type ProfileRow,
   type RetirementContributionRow,
+  type W2JobRow,
+  type EstimatedPaymentRow,
   type SpouseRow,
   type TimeEntryRow,
   type VehicleRow,
@@ -41,6 +43,10 @@ const strOrNull = (v: string | undefined): string | null =>
 
 const bool = (v: string | undefined): boolean => v === "1";
 
+/** Yes, no, or empty (not set). */
+const boolOrNull = (v: string | undefined): boolean | null =>
+  v === "1" ? true : v === "0" ? false : null;
+
 const rowToBundle = (rows: CsvRow[]): Bundle => {
   const b = emptyBundle();
   for (const r of rows) {
@@ -60,6 +66,7 @@ const rowToBundle = (rows: CsvRow[]): Bundle => {
           priorYearAgiCents: numOrNull(r.prior_year_agi_cents),
           priorYearStateTaxCents: numOrNull(r.prior_year_state_tax_cents),
           priorYearFiguresYear: numOrNull(r.prior_year_figures_year),
+          priorYearNotFiled: boolOrNull(r.prior_year_not_filed),
           createdAt: r.created_at ?? "",
           updatedAt: r.updated_at ?? "",
         } satisfies ProfileRow;
@@ -206,6 +213,41 @@ const rowToBundle = (rows: CsvRow[]): Bundle => {
           updatedAt: r.updated_at ?? "",
           deletedAt: strOrNull(r.deleted_at),
         } satisfies RetirementContributionRow);
+        break;
+      case "w2_job":
+        b.w2Jobs.push({
+          id: r.id,
+          taxYear: num(r.tax_year),
+          employer: r.employer ?? "",
+          startDate: strOrNull(r.start_date),
+          endDate: strOrNull(r.end_date),
+          wagesCents: num(r.wages_cents),
+          federalWithholdingCents: num(r.federal_withholding_cents),
+          ssWagesCents: num(r.ss_wages_cents),
+          ssTaxWithheldCents: num(r.ss_tax_withheld_cents),
+          medicareWagesCents: num(r.medicare_wages_cents),
+          ssTipsCents: num(r.ss_tips_cents),
+          stateWagesCents: num(r.state_wages_cents),
+          stateWithholdingCents: num(r.state_withholding_cents),
+          notes: strOrNull(r.notes),
+          createdAt: r.created_at ?? "",
+          updatedAt: r.updated_at ?? "",
+          deletedAt: strOrNull(r.deleted_at),
+        } satisfies W2JobRow);
+        break;
+      case "estimated_payment":
+        b.estimatedPayments.push({
+          id: r.id,
+          date: r.date ?? "",
+          amountCents: num(r.amount_cents),
+          jurisdiction: r.jurisdiction ?? "",
+          taxYear: num(r.tax_year),
+          appliedQuarter: numOrNull(r.applied_quarter),
+          notes: strOrNull(r.notes),
+          createdAt: r.created_at ?? "",
+          updatedAt: r.updated_at ?? "",
+          deletedAt: strOrNull(r.deleted_at),
+        } satisfies EstimatedPaymentRow);
         break;
       case "history":
         b.history.push({

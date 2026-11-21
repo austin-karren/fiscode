@@ -20,6 +20,8 @@ const ROW_TABLES = [
   "homeOffice",
   "expenses",
   "retirementContributions",
+  "w2Jobs",
+  "estimatedPayments",
 ] as const satisfies readonly (keyof Bundle)[];
 
 /** Count a bundle's rows. The profile is one live row. */

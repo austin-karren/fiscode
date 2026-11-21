@@ -7,6 +7,7 @@ export * from "./vehicles.ts";
 export * from "./home-office.ts";
 export * from "./expenses.ts";
 export * from "./retirement.ts";
+export * from "./payments.ts";
 export * from "./history.ts";
 export * from "./tax-year-cache.ts";
 
@@ -19,6 +20,7 @@ import { vehicle, mileage } from "./vehicles.ts";
 import { homeOffice } from "./home-office.ts";
 import { expense } from "./expenses.ts";
 import { retirementContribution } from "./retirement.ts";
+import { estimatedPayment, w2Job } from "./payments.ts";
 import { history } from "./history.ts";
 import { taxYearCache } from "./tax-year-cache.ts";
 
@@ -34,6 +36,8 @@ export const tables = {
   homeOffice,
   expense,
   retirementContribution,
+  w2Job,
+  estimatedPayment,
   history,
   taxYearCache,
 } as const;

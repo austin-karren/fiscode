@@ -10,7 +10,7 @@ import { z } from "zod";
 // lay the same fields out as one table per record type, with money in
 // dollars. The importer maps both back to this flat row before validating.
 
-export const CSV_SCHEMA_VERSION = "v4" as const;
+export const CSV_SCHEMA_VERSION = "v5" as const;
 
 export const recordTypeSchema = z.enum([
   "profile",
@@ -24,6 +24,8 @@ export const recordTypeSchema = z.enum([
   "home_office",
   "expense",
   "retirement_contribution",
+  "w2_job",
+  "estimated_payment",
   "history",
 ]);
 export type RecordType = z.infer<typeof recordTypeSchema>;
@@ -69,6 +71,7 @@ export const csvRowSchema = z.object({
   prior_year_agi_cents: optInt,
   prior_year_state_tax_cents: optInt,
   prior_year_figures_year: optInt,
+  prior_year_not_filed: optBool,
 
   // entity / spouse / home_office shared dated range
   start_date: optStr,
@@ -128,6 +131,22 @@ export const csvRowSchema = z.object({
   // retirement_contribution
   account: optStr,
 
+  // w2_job (start_date, end_date, notes shared)
+  tax_year: optInt,
+  employer: optStr,
+  wages_cents: optInt,
+  federal_withholding_cents: optInt,
+  ss_wages_cents: optInt,
+  ss_tax_withheld_cents: optInt,
+  medicare_wages_cents: optInt,
+  ss_tips_cents: optInt,
+  state_wages_cents: optInt,
+  state_withholding_cents: optInt,
+
+  // estimated_payment (date, amount_cents, tax_year, notes shared)
+  jurisdiction: optStr,
+  applied_quarter: optInt,
+
   // history (the append-only edit log; one row per change)
   at: optStr,
   entity: optStr,
@@ -159,6 +178,7 @@ export const CSV_COLUMNS: ReadonlyArray<keyof CsvRow> = [
   "prior_year_agi_cents",
   "prior_year_state_tax_cents",
   "prior_year_figures_year",
+  "prior_year_not_filed",
   "start_date",
   "end_date",
   "type",
@@ -197,6 +217,18 @@ export const CSV_COLUMNS: ReadonlyArray<keyof CsvRow> = [
   "monthly_insurance_cents",
   "regular_exclusive_ack",
   "account",
+  "tax_year",
+  "employer",
+  "wages_cents",
+  "federal_withholding_cents",
+  "ss_wages_cents",
+  "ss_tax_withheld_cents",
+  "medicare_wages_cents",
+  "ss_tips_cents",
+  "state_wages_cents",
+  "state_withholding_cents",
+  "jurisdiction",
+  "applied_quarter",
   "at",
   "entity",
   "entity_id",
@@ -206,4 +238,4 @@ export const CSV_COLUMNS: ReadonlyArray<keyof CsvRow> = [
 ];
 
 /** Schema markers this build can read. A file with any other marker is refused. */
-export const READABLE_SCHEMA_VERSIONS: readonly string[] = ["v1", "v2", "v3", "v4"];
+export const READABLE_SCHEMA_VERSIONS: readonly string[] = ["v1", "v2", "v3", "v4", "v5"];

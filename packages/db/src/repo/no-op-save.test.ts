@@ -37,6 +37,7 @@ const profileInput = {
   priorYearAgiCents: null,
   priorYearStateTaxCents: null,
   priorYearFiguresYear: null,
+  priorYearNotFiled: null,
 };
 
 describe("a save that changes nothing", () => {
