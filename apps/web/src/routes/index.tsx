@@ -78,9 +78,6 @@ function Dashboard() {
   const { profile, year, result, derived, hasExact } = useLoaderData({
     from: "/",
   });
-  // Self-employment began this year: there may still be a prior-year return
-  // (from a W-2 job, say), so the safe harbor card points to Profile.
-  const seStartedThisYear = derived ? Number(derived.seStartDate.slice(0, 4)) >= year : false;
   const today = todayIso();
   const upcoming = nextDueQuarter(result.quarterly, today);
   // The $1,000 rule (packages/tax): no federal estimated payment is required.
@@ -235,17 +232,6 @@ function Dashboard() {
               {formatUSD(result.safeHarbor.floor)}
             </Field>
           </div>
-          {result.safeHarbor.firstYear && seStartedThisYear ? (
-            // New to self-employment this year, figures blank: a prior-year
-            // return (from a W-2 job or otherwise) still gives a safe harbor.
-            <p className="mt-3 text-sm text-muted-foreground">
-              Filed a {year - 1} return (W-2 or otherwise)? Enter it on{" "}
-              <Link to="/profile" className="underline underline-offset-2">
-                Profile
-              </Link>{" "}
-              to use the prior-year safe harbor.
-            </p>
-          ) : null}
         </CardContent>
       </Card>
 
@@ -406,15 +392,16 @@ function Section179Notice({ count }: { count: number }) {
 }
 
 // The prior-year safe harbor needs the return for the year before this one (Pub 505: "the total
-// tax shown on your 2025 return" for 2026). Without it the floor is 90% of this year's tax.
+// tax shown on your 2025 return" for 2026). Without it the floor is 90% of this year's tax. A new SE
+// filer may still have one (a W-2 job), so it asks rather than assumes; the card says only "not entered".
 function PriorYearReturnNotice({ applied, year }: { applied: boolean | undefined; year: number }) {
   if (applied !== false) return null;
   return (
     <Alert>
       <CircleAlert />
       <AlertDescription>
-        Enter your {year - 1} return to use the prior-year safe harbor. Add it on your{" "}
-        <Link to="/profile">Profile</Link>.
+        Filed a {year - 1} return (W-2 or otherwise)? Enter it on <Link to="/profile">Profile</Link>{" "}
+        to use the prior-year safe harbor.
       </AlertDescription>
     </Alert>
   );

@@ -173,10 +173,10 @@ describe("dashboard titles and warnings", () => {
     expect(screen.getByRole("heading", { name: /Safe harbor \(federal\)/ })).toBeInTheDocument();
   });
 
-  it("prompts for a 2025 return as static text, not an interrupting alert (no first-year warning)", () => {
+  it("has no first-year warning and no interrupting alert in the safe harbor card", () => {
     // Demo loader data: SE start Mar 2, 2026, no prior-year figures.
     render(<Dashboard />);
-    expect(screen.getByText(/^Filed a 2025 return/)).toBeInTheDocument();
+    expect(screen.getByText("not entered")).toBeInTheDocument();
     expect(screen.queryByText("First-year filing")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -286,11 +286,13 @@ describe("dashboard: asks for last year's return when the prior-year safe harbor
     delete derived.priorYearFiguresApplied;
   });
 
-  it("figures missing or from another year: 'Enter your 2025 return', with a link to Profile", () => {
+  it("figures missing or from another year: asks for a 2025 return, with a link to Profile", () => {
     derived.priorYearFiguresApplied = false;
     render(<Dashboard />);
-    const line = screen.getByText(/Enter your 2025 return/).closest("[data-slot=alert]")!;
-    expect(line).toHaveTextContent("Enter your 2025 return to use the prior-year safe harbor.");
+    const line = screen.getByText(/Filed a 2025 return/).closest("[data-slot=alert]")!;
+    expect(line).toHaveTextContent(
+      "Filed a 2025 return (W-2 or otherwise)? Enter it on Profile to use the prior-year safe harbor.",
+    );
     expect(within(line as HTMLElement).getByRole("link", { name: "Profile" })).toHaveAttribute(
       "href",
       "/profile",
@@ -300,7 +302,7 @@ describe("dashboard: asks for last year's return when the prior-year safe harbor
   it("2025 figures applied: says nothing", () => {
     derived.priorYearFiguresApplied = true;
     render(<Dashboard />);
-    expect(screen.queryByText(/Enter your 2025 return/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Filed a 2025 return/)).not.toBeInTheDocument();
   });
 });
 
@@ -362,11 +364,14 @@ describe("safe harbor without last year's return", () => {
     };
     const { result, derived } = estimateBundleYear(b, 2026);
     const saved = { harbor: loaderData.result.safeHarbor, se: loaderData.derived.seStartDate };
+    const d = loaderData.derived as { priorYearFiguresApplied?: boolean };
     (loaderData.result as { safeHarbor: unknown }).safeHarbor = result.safeHarbor;
     loaderData.derived.seStartDate = derived.seStartDate;
+    d.priorYearFiguresApplied = derived.priorYearFiguresApplied;
     return () => {
       loaderData.result.safeHarbor = saved.harbor;
       loaderData.derived.seStartDate = saved.se;
+      delete d.priorYearFiguresApplied;
     };
   };
   const PROMPT =
@@ -378,13 +383,14 @@ describe("safe harbor without last year's return", () => {
       render(<Dashboard />);
       expect(screen.getByText("not entered")).toBeInTheDocument();
       expect(screen.queryByText("First-year filing")).not.toBeInTheDocument();
-      expect(screen.queryByText(/Filed a 2025 return/)).not.toBeInTheDocument();
+      // The page notice asks for the return, once.
+      expect(screen.getAllByText(/Filed a 2025 return/)).toHaveLength(1);
     } finally {
       restore();
     }
   });
 
-  it("SE start this year, figures blank: 'not entered' and a prompt to enter a 2025 return, never 'first year'", () => {
+  it("SE start this year, figures blank: 'not entered', and the request for a 2025 return once, never 'first year'", () => {
     const restore = run("2026-03-02", null);
     try {
       render(<Dashboard />);
@@ -392,9 +398,11 @@ describe("safe harbor without last year's return", () => {
       expect(screen.queryByText(/first year/i)).not.toBeInTheDocument();
       expect(screen.queryByText("First-year filing")).not.toBeInTheDocument();
       expect(screen.queryByText(/90% of current-year tax/)).not.toBeInTheDocument();
-      const prompt = screen.getByText(/^Filed a 2025 return/);
-      expect(prompt).toHaveTextContent(PROMPT);
-      expect(within(prompt).getByRole("link", { name: "Profile" })).toHaveAttribute(
+      const asks = screen.getAllByText(/Filed a 2025 return/);
+      expect(asks).toHaveLength(1);
+      const notice = asks[0]!.closest("[data-slot=alert]") as HTMLElement;
+      expect(notice).toHaveTextContent(PROMPT);
+      expect(within(notice).getByRole("link", { name: "Profile" })).toHaveAttribute(
         "href",
         "/profile",
       );
