@@ -23,6 +23,7 @@ import { CONFIG_YEARS_BACK, DatePicker, dateToIso } from "../components/forms/da
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { ImportCard } from "../components/import-card";
+import { BackupCard } from "../components/backup-card";
 import { SectionTitle } from "../components/section-title";
 import { submitForm } from "../lib/submit-form";
 
@@ -235,8 +236,9 @@ function SetupPage() {
       </EnterToSubmitForm>
 
       {/* "Restore a backup" on the set-up-first screens links here. */}
-      <div id="restore" className="scroll-mt-16">
+      <div id="restore" className="grid scroll-mt-16 gap-4">
         <ImportCard variant="setup" onImported={() => navigate({ to: "/" })} />
+        <BackupCard variant="setup" onRestored={() => navigate({ to: "/" })} />
       </div>
     </Page>
   );

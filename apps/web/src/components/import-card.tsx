@@ -323,7 +323,7 @@ const reveal = (alert: HTMLDivElement | null) => {
 };
 
 /** A refused file, shown in the card until another file is picked. */
-function Refusal({ fileName, file }: { fileName: string; file: RefusedFile }) {
+export function Refusal({ fileName, file }: { fileName: string; file: RefusedFile }) {
   return (
     <Alert ref={reveal} tabIndex={-1} variant="destructive" className="w-full outline-none">
       <CircleAlert />
@@ -412,7 +412,7 @@ const plainFoldersLine = (count: number): string =>
   `${n(count, "folder")} kept as ${count === 1 ? "a plain folder" : "plain folders"}: this profile already has that year's default folders.`;
 
 /** What a mode will do, one checkable sentence per line. */
-const describePlan = (plan: ImportPlan, fileHasNoProfile: boolean): string[] => {
+export const describePlan = (plan: ImportPlan, fileHasNoProfile: boolean): string[] => {
   const { current, written, removed, skipped } = plan;
   const lines: string[] = [];
   const history =

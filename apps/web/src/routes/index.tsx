@@ -27,6 +27,7 @@ import { GLOSSARY } from "../lib/tax-glossary";
 import { Page } from "../components/page";
 import { ExportCard } from "../components/export-card";
 import { ImportCard } from "../components/import-card";
+import { BackupCard } from "../components/backup-card";
 import { BackupNudge } from "../components/backup-nudge";
 import { InfoTooltip } from "../components/info-tooltip";
 import { UtahPrepaymentLine } from "../components/utah-prepayment-line";
@@ -289,6 +290,7 @@ function Dashboard() {
       <section id="data" className="grid items-start gap-4 pt-2 @md:grid-cols-2 @xl:grid-cols-3">
         <ExportCard />
         <ImportCard />
+        <BackupCard />
         <BackupNudge />
       </section>
     </Page>
