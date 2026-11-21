@@ -43,11 +43,11 @@ export const fsBlobStore = (dir: string): BlobStore => {
  * Point the @fiscode/db repos at a profile directory: its SQLite file (created with every
  * migration when new) and its blob directory. Returns a close function.
  */
-export const openProfileDir = (dir: string): (() => void) => {
+export const openProfileDir = async (dir: string): Promise<() => void> => {
   mkdirSync(dir, { recursive: true });
   const file = join(dir, DB_FILE);
   const isNew = !existsSync(file);
-  const sqlite = new Database(file);
+  const { sqlite, db } = await openSqlite(file);
   if (isNew) {
     for (const f of readdirSync(MIGRATIONS)
       .filter((n) => n.endsWith(".sql"))
@@ -55,7 +55,6 @@ export const openProfileDir = (dir: string): (() => void) => {
       sqlite.exec(readFileSync(join(MIGRATIONS, f), "utf8"));
     }
   }
-  const db = drizzle(sqlite, { schema: tables, casing: "snake_case" });
   // One BEGIN ... COMMIT on the single connection: all or nothing, as runAtomic is in the app.
   __setDbForTests(db as never, async (queries) => {
     sqlite.exec("BEGIN");
@@ -73,6 +72,31 @@ export const openProfileDir = (dir: string): (() => void) => {
     __setBlobStoreForTests(undefined);
     sqlite.close();
   };
+};
+
+type Sqlite = { exec(sql: string): unknown; close(): void };
+
+/**
+ * The SQLite driver for where this runs: Bun's built-in bun:sqlite under Bun (the repo's pinned
+ * Bun 1.3 can't load better-sqlite3's native addon: it crashes), better-sqlite3 under Node (the
+ * tests). The module names are variables so neither runtime's bundler or type checker needs the
+ * other's driver.
+ */
+const openSqlite = async (file: string): Promise<{ sqlite: Sqlite; db: unknown }> => {
+  if (typeof (globalThis as { Bun?: unknown }).Bun !== "undefined") {
+    const bunSqlite = "bun:sqlite";
+    const bunDrizzle = "drizzle-orm/bun-sqlite";
+    const { Database: BunDatabase } = (await import(/* @vite-ignore */ bunSqlite)) as {
+      Database: new (path: string) => Sqlite;
+    };
+    const { drizzle: bunDrizzleFn } = (await import(/* @vite-ignore */ bunDrizzle)) as {
+      drizzle: (client: Sqlite, config: object) => unknown;
+    };
+    const sqlite = new BunDatabase(file);
+    return { sqlite, db: bunDrizzleFn(sqlite, { schema: tables, casing: "snake_case" }) };
+  }
+  const sqlite = new Database(file);
+  return { sqlite, db: drizzle(sqlite, { schema: tables, casing: "snake_case" }) };
 };
 
 const zipFile = (path: string) => new Blob([readFileSync(path)]);
@@ -121,7 +145,7 @@ export const restoreBackupToDir = async (
   }
   const file = await readBackup(zipFile(path));
   if (!file.ok) throw new Error(refusal(file));
-  const close = openProfileDir(dir);
+  const close = await openProfileDir(dir);
   try {
     await restoreBackupInto(file, fsBlobStore(dir));
   } finally {
@@ -136,7 +160,7 @@ export const backupDir = async (
   options: { createdAt: string; build?: string },
 ): Promise<{ bytes: Uint8Array; fileName: string; manifest: BackupManifest }> => {
   if (!existsSync(join(dir, DB_FILE))) throw new Error(`${dir} has no ${DB_FILE}.`);
-  const close = openProfileDir(dir);
+  const close = await openProfileDir(dir);
   try {
     const bundle = await buildBundle({ includeDeleted: true, includeHistory: true });
     return await buildBackupZip(bundle, fsBlobStore(dir), options);

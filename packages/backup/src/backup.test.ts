@@ -305,7 +305,12 @@ describe("backup: headless (node.ts, the script's functions)", () => {
     const zip = join(dir, backup.fileName);
     writeFileSync(zip, new Uint8Array(await backup.blob.arrayBuffer()));
     const bin = fileURLToPath(new URL("../bin/fiscode-backup.ts", import.meta.url));
-    const run = (...args: string[]) => spawnSync("bun", [bin, ...args], { encoding: "utf8" });
+    // Bun as the repo pins it (packageManager), as CI runs it. stderr goes to the test output.
+    const run = (...args: string[]) => {
+      const r = spawnSync("bun", [bin, ...args], { encoding: "utf8" });
+      if (r.stderr) console.error(r.stderr);
+      return r;
+    };
     const verify = run("verify", zip);
     expect(verify.stderr).toBe("");
     expect(verify.status).toBe(0);
@@ -413,7 +418,12 @@ describe("review #85 r1: the script reports missing files", () => {
     const zip = join(dir, backup.fileName);
     writeFileSync(zip, new Uint8Array(await backup.blob.arrayBuffer()));
     const bin = fileURLToPath(new URL("../bin/fiscode-backup.ts", import.meta.url));
-    const run = (...args: string[]) => spawnSync("bun", [bin, ...args], { encoding: "utf8" });
+    // Bun as the repo pins it (packageManager), as CI runs it. stderr goes to the test output.
+    const run = (...args: string[]) => {
+      const r = spawnSync("bun", [bin, ...args], { encoding: "utf8" });
+      if (r.stderr) console.error(r.stderr);
+      return r;
+    };
     const verify = run("verify", zip);
     expect(verify.status).toBe(3);
     expect(verify.stdout).toMatch(/files? listed as missing/);
