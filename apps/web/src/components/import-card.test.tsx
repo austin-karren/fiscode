@@ -467,3 +467,67 @@ describe("import card: warnings for Add rows and Update rows", () => {
     ).toBeNull();
   });
 });
+
+describe("import card: Update rows with an older-format file (review #78 r1)", () => {
+  it("writes only the columns the file has: a v3 file keeps the prior-year figures here", async () => {
+    const here: Bundle = {
+      ...backup(),
+      profile: {
+        ...backup().profile!,
+        priorYearTotalTaxCents: 3_000_00,
+        priorYearAgiCents: 100_000_00,
+        priorYearStateTaxCents: 500_00,
+        priorYearFiguresYear: 2025,
+      },
+    };
+    buildBundle.mockResolvedValue(here);
+    importBundle.mockResolvedValue(undefined);
+    // The same data as a v3 file: no prior-year columns, and one amount changed.
+    const v3 = exportBundle(
+      {
+        ...here,
+        income: here.income.map((i) => (i.id === "in_2026" ? { ...i, amountCents: 999_00 } : i)),
+      },
+      { scope: "full" },
+    ).replace("schema: v5", "schema: v3");
+
+    const dropped = dropColumns(v3, [
+      "prior_year_total_tax",
+      "prior_year_agi",
+      "prior_year_state_tax",
+      "prior_year_figures_year",
+      "prior_year_not_filed",
+    ]);
+    render(<ImportCard />);
+    choose(dropped, "amended-v3.csv");
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Update rows/ }));
+    expect(dialog).toHaveTextContent("1 row here will take the file's values.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Update rows" }));
+
+    await waitFor(() => expect(importBundle).toHaveBeenCalledTimes(1));
+    const written = importBundle.mock.calls[0]![0] as Bundle;
+    expect(written.profile).toEqual(here.profile);
+    expect(written.income.find((i) => i.id === "in_2026")!.amountCents).toBe(999_00);
+  });
+});
+
+/** Remove columns by header name from every table of a CSV (cells here have no commas). */
+const dropColumns = (csv: string, names: string[]): string => {
+  let cut: number[] = [];
+  return csv
+    .split("\r\n")
+    .map((l) => {
+      if (l.startsWith("record_type,")) {
+        const cols = l.split(",");
+        cut = names.map((n) => cols.indexOf(n)).filter((i) => i >= 0);
+        return cols.filter((_, i) => !cut.includes(i)).join(",");
+      }
+      if (l === "" || l.startsWith("#") || l.startsWith("﻿#")) return l;
+      return l
+        .split(",")
+        .filter((_, i) => !cut.includes(i))
+        .join(",");
+    })
+    .join("\r\n");
+};

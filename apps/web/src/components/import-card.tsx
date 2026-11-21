@@ -146,7 +146,7 @@ export function ImportCard({
     setBusy(true);
     setFailure(null);
     try {
-      const applied = applyImport(pending.existing, pending.file.bundle, plan.mode);
+      const applied = applyImport(pending.existing, pending.file.bundle, plan.mode, pending.file);
       // One transaction: this resolves only once every row is committed.
       await importBundle(applied.next, IMPORT_REASONS[plan.mode]);
       const added = plan.written.live + plan.written.deleted;
