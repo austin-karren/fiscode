@@ -44,7 +44,7 @@ export const MAX_FOLDER_DEPTH = 8;
 /** The longest folder name. */
 export const MAX_FOLDER_NAME = 120;
 
-/** The folders `ensureYearDefaults` makes under each `<year>` root, in order. */
+/** The folders `ensureYearDefaults` makes under each `<year>` root, in order, with their keys. */
 export const YEAR_DEFAULT_FOLDERS = [
   "Expenses",
   "Income",
@@ -53,6 +53,19 @@ export const YEAR_DEFAULT_FOLDERS = [
   "Tax forms",
   "Other",
 ] as const;
+
+/** `document_folder.default_key` of a year's root folder. */
+export const YEAR_ROOT_KEY = "year-root";
+
+/** `document_folder.default_key` for each default child folder. */
+export const YEAR_DEFAULT_FOLDER_KEYS: Record<(typeof YEAR_DEFAULT_FOLDERS)[number], string> = {
+  Expenses: "expenses",
+  Income: "income",
+  Mileage: "mileage",
+  "Health insurance": "health-insurance",
+  "Tax forms": "tax-forms",
+  Other: "other",
+};
 
 /** Record types a document can link to (CSV record-type names; open for later ones). */
 export const LINKABLE_RECORD_TYPES = ["expense", "income", "mileage"] as const;
@@ -78,6 +91,24 @@ export const validFolderName = (raw: string): string => {
     throw new FolderNameInvalidError(`Use ${MAX_FOLDER_NAME} characters or fewer.`);
   }
   if (name.includes("/")) throw new FolderNameInvalidError("A folder name can't contain /.");
+  return name;
+};
+
+export class DocumentNameInvalidError extends DocumentError {
+  override readonly name = "DocumentNameInvalidError";
+  constructor(reason: string) {
+    super(reason);
+  }
+}
+
+/** A document name after trimming, or a `DocumentNameInvalidError` (same rules as folders). */
+export const validDocumentName = (raw: string): string => {
+  const name = raw.trim();
+  if (name === "") throw new DocumentNameInvalidError("Enter a name.");
+  if (name.length > MAX_FOLDER_NAME) {
+    throw new DocumentNameInvalidError(`Use ${MAX_FOLDER_NAME} characters or fewer.`);
+  }
+  if (name.includes("/")) throw new DocumentNameInvalidError("A name can't contain /.");
   return name;
 };
 

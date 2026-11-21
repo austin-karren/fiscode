@@ -259,6 +259,7 @@ const rowToBundle = (rows: CsvRow[]): Bundle => {
           name: r.name ?? "",
           taxYear: numOrNull(r.tax_year),
           sortOrder: num(r.sort_order),
+          defaultKey: strOrNull(r.default_key),
           createdAt: r.created_at ?? "",
           updatedAt: r.updated_at ?? "",
           deletedAt: strOrNull(r.deleted_at),

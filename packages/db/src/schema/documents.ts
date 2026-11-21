@@ -12,6 +12,9 @@ export const documentFolder = sqliteTable("document_folder", {
   // Set on a year's default folders and their children; a filter only.
   taxYear: integer("tax_year"),
   sortOrder: integer("sort_order").notNull().default(0),
+  // Which of a year's default folders this is ('year-root', 'expenses', ...), or null for a
+  // folder the user made. ensureYearDefaults never makes a key twice for a year (review #84 r1).
+  defaultKey: text("default_key"),
   deletedAt: text("deleted_at"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),

@@ -239,6 +239,7 @@ const bundleToRows = (bundle: Bundle): Record<string, string>[] => {
         parent_id: str(f.parentId),
         tax_year: num(f.taxYear),
         sort_order: num(f.sortOrder),
+        default_key: str(f.defaultKey),
         created_at: f.createdAt,
         updated_at: f.updatedAt,
         deleted_at: str(f.deletedAt),

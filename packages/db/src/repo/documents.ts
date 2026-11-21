@@ -13,6 +13,9 @@ import {
   MAX_FOLDER_DEPTH,
   RecordNotFoundError,
   YEAR_DEFAULT_FOLDERS,
+  YEAR_DEFAULT_FOLDER_KEYS,
+  YEAR_ROOT_KEY,
+  validDocumentName,
   documentMimeFor,
   formatUSD,
   validFolderName,
@@ -20,7 +23,7 @@ import {
   newId,
   type Cents,
 } from "@fiscode/core";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getBlobStore, sha256Hex } from "../blob-store.ts";
 import { getDb, runAtomic, type AtomicQuery } from "../client.ts";
 import {
@@ -128,6 +131,7 @@ export const folderRepo = {
       parentId,
       taxYear: input.taxYear ?? null,
       sortOrder: 0,
+      defaultKey: null,
       deletedAt: null,
     });
   },
@@ -241,27 +245,120 @@ export const folderRepo = {
 
   /**
    * The year's default folders: a `<year>` root with Expenses, Income, Mileage, Health insurance,
-   * Tax forms and Other. Idempotent. A folder the user deleted is never made again: a deleted row
-   * with that name in that place counts as there. Returns the live ones, root first, in order.
+   * Tax forms and Other. Idempotent, and safe to call twice at once (one in flight per year).
+   * Each is known by its `default_key`: a key that has ever existed for the year, under any name,
+   * live or deleted, is never made again (a renamed, moved or deleted default stays as the user
+   * left it). A folder the user made with the same name (any case) in that place is adopted. The
+   * check and every write run in one transaction. Returns the live ones, root first, in order.
    */
-  async ensureYearDefaults(taxYear: number): Promise<DocumentFolderRow[]> {
-    const everyFolder = await folderCrud.listIncludingDeleted();
-    const find = (name: string, parentId: string | null) =>
-      everyFolder
-        .filter((f) => (f.parentId ?? null) === parentId && f.name === name)
-        .toSorted((a, b) => Number(a.deletedAt !== null) - Number(b.deletedAt !== null))[0];
-    const rootName = String(taxYear);
-    let root = find(rootName, null);
-    if (root?.deletedAt) return [];
-    root ??= await folderRepo.create({ name: rootName, taxYear });
-    const out = [root];
-    for (const name of YEAR_DEFAULT_FOLDERS) {
-      const existing = find(name, root.id);
-      if (existing?.deletedAt) continue;
-      out.push(existing ?? (await folderRepo.create({ name, parentId: root.id, taxYear })));
-    }
-    return out;
+  ensureYearDefaults(taxYear: number): Promise<DocumentFolderRow[]> {
+    const running = ensuring.get(taxYear);
+    if (running) return running;
+    const run = ensureYearDefaultsNow(taxYear).finally(() => ensuring.delete(taxYear));
+    ensuring.set(taxYear, run);
+    return run;
   },
+
+  /**
+   * Restore a folder from History (also the undo of a single delete). Never refuses: a name now
+   * taken by a live sibling comes back as "Name (2)" (or the next free number), and a folder whose
+   * parent is gone comes back under its tax year's root, or at the top level.
+   */
+  async revertTo(id: string, snapshot: DocumentFolderRow): Promise<DocumentFolderRow | undefined> {
+    if (snapshot.deletedAt !== null) return folderCrud.revertTo(id, snapshot);
+    const folders = (await liveFolders()).filter((f) => f.id !== id);
+    let parentId = snapshot.parentId ?? null;
+    if (parentId !== null && !folders.some((f) => f.id === parentId)) {
+      const root = folders.find(
+        (f) =>
+          f.defaultKey === YEAR_ROOT_KEY &&
+          snapshot.taxYear !== null &&
+          f.taxYear === snapshot.taxYear,
+      );
+      parentId = root?.id ?? null;
+    }
+    const taken = (name: string) =>
+      folders.some(
+        (f) =>
+          (f.parentId ?? null) === parentId &&
+          f.name.localeCompare(name, "en", { sensitivity: "base" }) === 0,
+      );
+    let name = snapshot.name;
+    for (let n = 2; taken(name); n++) name = `${snapshot.name} (${n})`;
+    return folderCrud.revertTo(id, { ...snapshot, parentId, name });
+  },
+};
+
+const ensuring = new Map<number, Promise<DocumentFolderRow[]>>();
+
+const sameName = (a: string, b: string) => a.localeCompare(b, "en", { sensitivity: "base" }) === 0;
+
+const ensureYearDefaultsNow = async (taxYear: number): Promise<DocumentFolderRow[]> => {
+  const db = getDb();
+  const every = await folderCrud.listIncludingDeleted();
+  const keyed = (key: string) => every.find((f) => f.taxYear === taxYear && f.defaultKey === key);
+  const at = nowIso();
+  const queries: AtomicQuery[] = [];
+  const history = (id: string, op: "insert" | "update", before: unknown, after: unknown) =>
+    db.insert(historyTable).values({
+      id: newId(),
+      entity: "document_folder",
+      entityId: id,
+      op,
+      beforeJson: before === undefined ? null : JSON.stringify(before),
+      afterJson: JSON.stringify(after),
+      at,
+    });
+  // A live folder of the user's with this name in this place becomes the default; else a new one.
+  const claim = (key: string, name: string, parentId: string | null): DocumentFolderRow => {
+    const mine = every.find(
+      (f) =>
+        f.deletedAt === null &&
+        f.defaultKey === null &&
+        (f.parentId ?? null) === parentId &&
+        sameName(f.name, name),
+    );
+    if (mine) {
+      const after = { ...mine, defaultKey: key, taxYear, updatedAt: at };
+      queries.push(
+        db
+          .update(documentFolder)
+          .set({ defaultKey: key, taxYear, updatedAt: at })
+          .where(eq(documentFolder.id, mine.id)),
+        history(mine.id, "update", mine, after),
+      );
+      return after;
+    }
+    const row: DocumentFolderRow = {
+      id: newId(),
+      parentId,
+      name,
+      taxYear,
+      sortOrder: 0,
+      defaultKey: key,
+      deletedAt: null,
+      createdAt: at,
+      updatedAt: at,
+    };
+    queries.push(db.insert(documentFolder).values(row), history(row.id, "insert", undefined, row));
+    return row;
+  };
+
+  const existingRoot = keyed(YEAR_ROOT_KEY);
+  if (existingRoot?.deletedAt) return [];
+  const root = existingRoot ?? claim(YEAR_ROOT_KEY, String(taxYear), null);
+  const out: DocumentFolderRow[] = [root];
+  for (const name of YEAR_DEFAULT_FOLDERS) {
+    const key = YEAR_DEFAULT_FOLDER_KEYS[name];
+    const existing = keyed(key);
+    if (existing) {
+      if (existing.deletedAt === null) out.push(existing);
+      continue;
+    }
+    out.push(claim(key, name, root.id));
+  }
+  await runAtomic(queries);
+  return out;
 };
 
 /** Update rows to `set` and write one history row each, as queries for `runAtomic`. */
@@ -346,9 +443,10 @@ export const documentRepo = {
     return { ok, failed };
   },
 
+  /** Throws DocumentNameInvalidError for an empty, over-long or "/" name (as folders). */
   async rename(id: string, name: string): Promise<DocumentRow> {
     await requireDocument(id);
-    return (await documentCrud.update(id, { name: name.trim() }))!;
+    return (await documentCrud.update(id, { name: validDocumentName(name) }))!;
   },
 
   async move(id: string, folderId: string | null): Promise<DocumentRow> {
@@ -588,14 +686,39 @@ export const documentLinkRepo = {
     return Object.fromEntries(rows.map((r) => [r.id, Number(r.n)]));
   },
 
-  /** Live link counts per live document, for the document list. One query. Documents with none are absent. */
+  /**
+   * Live link counts per live document, for the document list. One query. A link counts only when
+   * its record is live too, as in `forDocument`. Documents with none are absent.
+   */
   async countsByDocument(): Promise<Map<string, number>> {
     const db = getDb();
     const rows = await db
       .select({ id: documentLink.documentId, n: sql<number>`count(*)` })
       .from(documentLink)
       .innerJoin(document, eq(document.id, documentLink.documentId))
-      .where(and(isNull(documentLink.deletedAt), isNull(document.deletedAt)))
+      .leftJoin(
+        expense,
+        and(eq(documentLink.recordType, "expense"), eq(expense.id, documentLink.recordId)),
+      )
+      .leftJoin(
+        income,
+        and(eq(documentLink.recordType, "income"), eq(income.id, documentLink.recordId)),
+      )
+      .leftJoin(
+        mileage,
+        and(eq(documentLink.recordType, "mileage"), eq(mileage.id, documentLink.recordId)),
+      )
+      .where(
+        and(
+          isNull(documentLink.deletedAt),
+          isNull(document.deletedAt),
+          or(
+            and(isNotNull(expense.id), isNull(expense.deletedAt)),
+            and(isNotNull(income.id), isNull(income.deletedAt)),
+            and(isNotNull(mileage.id), isNull(mileage.deletedAt)),
+          ),
+        ),
+      )
       .groupBy(documentLink.documentId);
     return new Map(rows.map((r) => [r.id, Number(r.n)]));
   },

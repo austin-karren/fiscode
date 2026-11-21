@@ -364,6 +364,7 @@ export const SECTIONS: readonly Section[] = [
       text("parent_id"),
       int("tax_year"),
       int("sort_order"),
+      text("default_key"),
       text("id"),
       ...TAIL,
     ],

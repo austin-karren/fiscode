@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "57baaf22-2bc0-42ad-a6a8-0dfc8fb13593",
+  "id": "2bd87e71-2e3f-4e25-a9c8-d47a039de55f",
   "prevId": "22e964d7-a993-4e7f-adec-7b17ed9cbe0d",
   "tables": {
     "profile": {
@@ -1353,6 +1353,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "default_key": {
+          "name": "default_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "deleted_at": {
           "name": "deleted_at",

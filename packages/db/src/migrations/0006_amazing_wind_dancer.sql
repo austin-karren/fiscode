@@ -20,6 +20,7 @@ CREATE TABLE `document_folder` (
 	`name` text NOT NULL,
 	`tax_year` integer,
 	`sort_order` integer DEFAULT 0 NOT NULL,
+	`default_key` text,
 	`deleted_at` text,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL

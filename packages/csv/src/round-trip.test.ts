@@ -233,6 +233,7 @@ const fullBundle = (): Bundle => ({
       name: "2026",
       taxYear: 2026,
       sortOrder: 0,
+      defaultKey: "year-root",
       createdAt: FIXED_TIMESTAMP,
       updatedAt: FIXED_TIMESTAMP,
       deletedAt: null,

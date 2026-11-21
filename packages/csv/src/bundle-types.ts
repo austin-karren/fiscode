@@ -166,6 +166,8 @@ export type DocumentFolderRow = Dated & {
   name: string;
   taxYear: number | null;
   sortOrder: number;
+  /** Which of a year's default folders this is ('year-root', 'expenses', ...); null = the user's. */
+  defaultKey: string | null;
 };
 
 /** A document's row: its bytes are a blob on the device (by sha256), never in the CSV. */

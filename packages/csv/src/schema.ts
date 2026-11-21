@@ -153,6 +153,7 @@ export const csvRowSchema = z.object({
   // document_folder / document / document_link (name, tax_year, notes shared)
   parent_id: optStr,
   sort_order: optInt,
+  default_key: optStr,
   folder_id: optStr,
   mime: optStr,
   size_bytes: optInt,
@@ -247,6 +248,7 @@ export const CSV_COLUMNS: ReadonlyArray<keyof CsvRow> = [
   "applied_quarter",
   "parent_id",
   "sort_order",
+  "default_key",
   "folder_id",
   "mime",
   "size_bytes",

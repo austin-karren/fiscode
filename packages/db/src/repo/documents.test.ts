@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 import {
   DocumentBytesMissingError,
+  DocumentNameInvalidError,
   DocumentTooLargeError,
   DocumentTypeNotAllowedError,
   FolderCycleError,
@@ -261,5 +262,75 @@ describe("documentLinkRepo", () => {
         [d2.id, 1],
       ]),
     );
+  });
+});
+
+describe("review #84 r1", () => {
+  it("(1) ensureYearDefaults adopts the user's own folders, matching names without case", async () => {
+    const mine = await folderRepo.create({ name: "2026" });
+    const lower = await folderRepo.create({ name: "expenses", parentId: mine.id });
+    const made = await folderRepo.ensureYearDefaults(2026);
+    expect(made[0]!.id).toBe(mine.id);
+    expect(made.find((f) => f.defaultKey === "expenses")!.id).toBe(lower.id);
+    expect((await folderRepo.list()).length).toBe(7);
+  });
+
+  it("(2) a renamed or moved default folder is never made again", async () => {
+    const first = await folderRepo.ensureYearDefaults(2026);
+    const expenses = first.find((f) => f.name === "Expenses")!;
+    await folderRepo.rename(expenses.id, "Receipts");
+    const other = first.find((f) => f.name === "Other")!;
+    await folderRepo.move(other.id, null);
+    const before = (await folderRepo.listIncludingDeleted()).length;
+    await folderRepo.ensureYearDefaults(2026);
+    expect((await folderRepo.listIncludingDeleted()).length).toBe(before);
+    expect(first.every((f) => f.defaultKey !== null)).toBe(true);
+  });
+
+  it("(3) two ensureYearDefaults at once make one set", async () => {
+    await Promise.all([folderRepo.ensureYearDefaults(2026), folderRepo.ensureYearDefaults(2026)]);
+    expect((await folderRepo.list()).length).toBe(7);
+  });
+
+  it("(4) countsByDocument leaves out links to deleted records, like forDocument", async () => {
+    const e = await expense();
+    const d = await documentRepo.upload(file("r.pdf", "r"));
+    await documentLinkRepo.link(d.id, "expense", e.id);
+    expect(await documentLinkRepo.countsByDocument()).toEqual(new Map([[d.id, 1]]));
+    await expenseRepo.softDelete(e.id);
+    expect(await documentLinkRepo.forDocument(d.id)).toEqual([]);
+    expect(await documentLinkRepo.countsByDocument()).toEqual(new Map());
+  });
+
+  it("(5) restoring a folder whose name is taken comes back as 'Name (2)'", async () => {
+    const a = await folderRepo.create({ name: "Receipts" });
+    const snapshot = (await folderRepo.get(a.id))!;
+    await folderRepo.softDelete(a.id);
+    await folderRepo.create({ name: "receipts" });
+    const back = await folderRepo.revertTo(a.id, snapshot);
+    expect(back!.name).toBe("Receipts (2)");
+    expect(back!.deletedAt).toBeNull();
+  });
+
+  it("(5) restoring a folder whose parent is gone puts it under its year's root, or at the top", async () => {
+    const [root] = await folderRepo.ensureYearDefaults(2026);
+    const parent = await folderRepo.create({ name: "Trips", parentId: root!.id, taxYear: 2026 });
+    const child = await folderRepo.create({ name: "May", parentId: parent.id, taxYear: 2026 });
+    const loose = await folderRepo.create({ name: "Loose", parentId: parent.id });
+    const childSnap = (await folderRepo.get(child.id))!;
+    const looseSnap = (await folderRepo.get(loose.id))!;
+    await folderRepo.softDeleteTree(parent.id);
+    expect((await folderRepo.revertTo(child.id, childSnap))!.parentId).toBe(root!.id);
+    // No tax year: no root to go under, so the top level.
+    expect((await folderRepo.revertTo(loose.id, looseSnap))!.parentId).toBeNull();
+  });
+
+  it("(6) document rename rejects empty and over-long names, and trims", async () => {
+    const d = await documentRepo.upload(file("a.pdf", "a"));
+    await expect(documentRepo.rename(d.id, "   ")).rejects.toBeInstanceOf(DocumentNameInvalidError);
+    await expect(documentRepo.rename(d.id, "x".repeat(121))).rejects.toBeInstanceOf(
+      DocumentNameInvalidError,
+    );
+    expect((await documentRepo.rename(d.id, "  b.pdf ")).name).toBe("b.pdf");
   });
 });

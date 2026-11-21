@@ -475,6 +475,7 @@ describe("importBundle — document rows (v6)", () => {
           name: "2026",
           taxYear: 2026,
           sortOrder: 0,
+          defaultKey: "year-root",
           createdAt: FIXED,
           updatedAt: FIXED,
           deletedAt: null,

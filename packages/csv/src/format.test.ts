@@ -960,6 +960,7 @@ describe("no stored field is left out", () => {
           name: s("folder"),
           taxYear: 2026,
           sortOrder: 3,
+          defaultKey: "expenses",
           ...tail(),
         },
       ],
