@@ -45,7 +45,9 @@ describe("UtahPrepaymentLine names the TC-546 line 5 basis it used (review #72 r
   it("90% of this year's (line 3): as before", () => {
     render(<UtahPrepaymentLine prepayment={prepayment(1_557_03)} />);
     expect(
-      screen.getByText(/\(90% of this year's Utah tax, less Utah withholding and payments made\)\.$/),
+      screen.getByText(
+        /\(90% of this year's Utah tax, less Utah withholding and payments made\)\.$/,
+      ),
     ).toBeInTheDocument();
   });
 });
