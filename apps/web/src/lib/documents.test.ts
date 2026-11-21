@@ -13,7 +13,7 @@ import {
   DocumentBytesMissingError,
 } from "./documents-stub";
 import { uploadFiles } from "./documents-upload";
-import { landedLine } from "./documents-restore";
+import { landedLine, restoreDocument } from "./documents-restore";
 import { formatBytes, subtreeOf } from "./documents-view";
 
 // Demo files only: made here, never real documents.
@@ -220,5 +220,44 @@ describe("#84 r2: default folders by key, document names, restores that never re
     await folderRepo.revertTo(inner.id, { ...inner, deletedAt: null });
     expect((await folderRepo.get(inner.id))?.parentId).toBe(year.id);
     expect(await landedLine(inner)).toBe("Restored Demo inner in 2033: its folder is gone.");
+  });
+});
+
+describe("restoring a document whose folder is in Trash (REVIEW #83 r5 F4)", () => {
+  it("puts it in the nearest folder that isn't in Trash, and says so", async () => {
+    // Box > demo-notes.txt; delete the document, then the folder; restore the document.
+    const top = await folderRepo.create({ name: "Demo top" });
+    const box = await folderRepo.create({ name: "Box", parentId: top.id });
+    const doc = await documentRepo.upload(file("demo-notes.txt", "demo f4", "text/plain"), {
+      folderId: box.id,
+    });
+    await documentRepo.softDelete(doc.id);
+    await folderRepo.softDeleteTree(box.id);
+    const line = await restoreDocument((await documentRepo.get(doc.id))!);
+    expect(line).toBe("Restored demo-notes.txt in Demo top: its folder is in Trash.");
+    expect((await documentRepo.listInFolder(top.id)).map((d) => d.id)).toContain(doc.id);
+  });
+
+  it("goes to Unfiled when no folder above it is left", async () => {
+    const box = await folderRepo.create({ name: "Demo lone box" });
+    const doc = await documentRepo.upload(file("demo-lone.txt", "demo lone", "text/plain"), {
+      folderId: box.id,
+    });
+    await documentRepo.softDelete(doc.id);
+    await folderRepo.softDeleteTree(box.id);
+    expect(await restoreDocument((await documentRepo.get(doc.id))!)).toBe(
+      "Restored demo-lone.txt in Unfiled: its folder is in Trash.",
+    );
+  });
+
+  it("restores in place, quietly, when its folder is still there", async () => {
+    const box = await folderRepo.create({ name: "Demo kept box" });
+    const doc = await documentRepo.upload(file("demo-kept.txt", "demo kept", "text/plain"), {
+      folderId: box.id,
+    });
+    await documentRepo.softDelete(doc.id);
+    expect(await restoreDocument((await documentRepo.get(doc.id))!)).toBe(
+      "Restored demo-kept.txt.",
+    );
   });
 });

@@ -86,6 +86,27 @@ describe("document rename checks the name on blur and on submit (#84)", () => {
   });
 });
 
+describe("a blank name says why instead of disabling the button (REVIEW #83 r5 note)", () => {
+  it("keeps Create enabled and shows the repo's reason", async () => {
+    render(
+      <NameDialog
+        open
+        onOpenChange={() => {}}
+        title="New folder"
+        label="Folder name"
+        submitLabel="Create"
+        onSubmit={async (name) => {
+          await folderRepo.create({ name });
+        }}
+      />,
+    );
+    const create = screen.getByRole("button", { name: "Create" });
+    expect(create).toBeEnabled();
+    fireEvent.click(create);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter a name.");
+  });
+});
+
 describe("move dialog", () => {
   it("leaves out the folder and everything inside it", async () => {
     const a = await folderRepo.create({ name: "Demo move A" });

@@ -99,7 +99,9 @@ function NameForm({
       </div>
       <DialogFooter className="mt-4">
         <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
-        <Button type="submit" disabled={busy || !name.trim()}>
+        {/* Enabled for any name: pressing it says why a name can't be used (blank included),
+            rather than a disabled button that gives no reason. */}
+        <Button type="submit" disabled={busy}>
           {submitLabel}
         </Button>
       </DialogFooter>

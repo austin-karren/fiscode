@@ -1,4 +1,9 @@
-import { folderRepo, type DocumentFolderRow } from "./documents-stub";
+import {
+  documentRepo,
+  folderRepo,
+  type DocumentFolderRow,
+  type DocumentRow,
+} from "./documents-stub";
 import { folderPath } from "./documents-view";
 
 // A restore never fails: a taken name comes back as "Name (2)" and a gone parent as the year's
@@ -14,4 +19,21 @@ export async function landedLine(before: DocumentFolderRow): Promise<string> {
   return renamed
     ? `Restored ${before.name} as ${after.name} in ${where}.`
     : `Restored ${before.name} in ${where}: its folder is gone.`;
+}
+
+/**
+ * Restores a document from Trash. If its folder is in Trash too, the document goes to the nearest
+ * folder above it that isn't (or Unfiled), so it never lands somewhere no one can see, and the line
+ * says so.
+ */
+export async function restoreDocument(doc: DocumentRow): Promise<string> {
+  const all = await folderRepo.listIncludingDeleted();
+  const live = all.filter((f) => f.deletedAt === null);
+  let target = doc.folderId;
+  while (target && !live.some((f) => f.id === target)) {
+    target = all.find((f) => f.id === target)?.parentId ?? null;
+  }
+  await documentRepo.revertTo(doc.id, { ...doc, deletedAt: null, folderId: target });
+  if (target === doc.folderId) return `Restored ${doc.name}.`;
+  return `Restored ${doc.name} in ${target ? folderPath(live, target) : "Unfiled"}: its folder is in Trash.`;
 }

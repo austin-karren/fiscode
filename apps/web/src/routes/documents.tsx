@@ -28,7 +28,7 @@ import {
 import { fileKind, folderPath, formatBytes, subtreeOf } from "../lib/documents-view";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { uploadFiles, type UploadResult } from "../lib/documents-upload";
-import { landedLine } from "../lib/documents-restore";
+import { landedLine, restoreDocument } from "../lib/documents-restore";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { formatDate } from "../lib/format-date";
 
@@ -461,8 +461,7 @@ function TrashView({
     await onRestored();
   };
   const restoreDoc = async (d: DocumentRow) => {
-    await documentRepo.revertTo(d.id, { ...d, deletedAt: null });
-    toast(`Restored ${d.name}.`);
+    toast(await restoreDocument(d));
     await onRestored();
   };
   return (
