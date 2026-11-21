@@ -45,7 +45,7 @@ export function LinkedDocuments({
     if (focusPending.current === null) return;
     focusAfter(focusPending.current);
     focusPending.current = null;
-  });
+  }, [links]);
 
   const unlink = async (l: Linked, index: number) => {
     const { document: doc, ...row } = l;

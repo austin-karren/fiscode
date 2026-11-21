@@ -165,7 +165,7 @@ function AttachBody({
         const problem = await link(r.doc);
         out.push(
           problem
-            ? { ok: false, line: `${r.line} It isn't attached: ${problem}` }
+            ? { ok: false, line: `${r.line} It isn't attached. ${problem}` }
             : { ok: true, line: `${r.line.replace(/\.$/, "")} and attached it.` },
         );
       }

@@ -191,9 +191,24 @@ describe("an upload to a row deleted meanwhile (REVIEW #86 r1 F2)", () => {
     });
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
-        "Added demo-late.txt. It isn't attached: That record no longer exists, so the document can't be attached to it.",
+        "Added demo-late.txt. It isn't attached. That record no longer exists, so the document can't be attached to it.",
       ),
     );
     expect(onChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe("Unlink in the middle of the list (REVIEW #86 r2 F1)", () => {
+  it("moves focus to the next Unlink button", async () => {
+    const names = ["demo-a.txt", "demo-b.txt", "demo-c.txt"];
+    for (const n of names) {
+      const d = await documentRepo.upload(new File([n], n, { type: "text/plain" }));
+      await documentLinkRepo.link(d.id, "income", "in_mid");
+    }
+    render(<LinkedDocuments recordType="income" recordId="in_mid" onChanged={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Unlink demo-b.txt" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Unlink demo-c.txt" })).toHaveFocus(),
+    );
   });
 });
