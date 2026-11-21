@@ -25,6 +25,7 @@ import {
   importBundle,
   memoryBlobStore,
 } from "@fiscode/db";
+import { sha256Hex } from "@fiscode/db/blob-store";
 import { setupTestDb, teardownTestDb } from "@fiscode/db/test";
 import {
   createBackup,
@@ -1067,4 +1068,128 @@ describe("review #87 r1", () => {
       ].toSorted(),
     );
   });
+});
+
+describe("check-roundtrip when the restored contents differ", () => {
+  // A raw byte flip never reaches the comparison: restore's sha256 check refuses it first. To get
+  // identical: false, a backup has to pass every restore check and still back up differently.
+  let dir: string;
+  let entries: Record<string, Uint8Array>;
+  let m: BackupManifest;
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), "fiscode-backup-neg-"));
+    await importBundle(exampleBundle() as never, "import-restore");
+    await documentRepo.upload(file("Demo receipt.pdf", "demo receipt"));
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    entries = unzipSync(await plain(backup.blob));
+    m = JSON.parse(strFromU8(entries["manifest.json"]!)) as BackupManifest;
+    teardownTestDb(sqlite); // the script's functions open their own database
+  });
+  afterEach(() => {
+    sqlite = setupTestDb();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const sha = (b: Uint8Array) => sha256Hex(new Blob([b as unknown as ArrayBuffer]));
+  const write = async (name: string, zip: Record<string, Uint8Array>, manifest: unknown = m) => {
+    const path = join(dir, `${name}.zip.age`);
+    const files = { ...zip, "manifest.json": strToU8(JSON.stringify(manifest)) };
+    writeFileSync(path, await encryptBackup(zipSync(files), PASS, WF));
+    return path;
+  };
+  const script = (path: string) =>
+    spawnSync(
+      "bun",
+      [
+        fileURLToPath(new URL("../bin/fiscode-backup.ts", import.meta.url)),
+        "check-roundtrip",
+        path,
+      ],
+      {
+        encoding: "utf8",
+        env: { ...process.env, FISCODE_BACKUP_PASSPHRASE: PASS },
+      },
+    );
+
+  it("a document's bytes changed: refused before comparing (BackupFileCorruptError naming it), exit 1", async () => {
+    const d = m.documents[0]!;
+    const bytes = entries[d.path]!.slice();
+    bytes[0]! ^= 1;
+    const path = await write("doc-byte", { ...entries, [d.path]: bytes });
+    await expect(checkRoundtrip(path, PASS)).rejects.toBeInstanceOf(BackupFileCorruptError);
+    await expect(checkRoundtrip(path, PASS)).rejects.toThrow(d.path);
+    const r = script(path);
+    expect(r.status).toBe(1);
+    expect(r.stdout).not.toMatch(/identical/);
+    expect(r.stderr).toContain(d.path);
+  }, 30_000);
+
+  it("the CSV's bytes changed: refused before comparing, exit 1", async () => {
+    const csv = entries[m.csv.path]!.slice();
+    csv[csv.length - 3]! ^= 1;
+    const path = await write("csv-byte", { ...entries, [m.csv.path]: csv });
+    await expect(checkRoundtrip(path, PASS)).rejects.toBeInstanceOf(BackupFileCorruptError);
+    const r = script(path);
+    expect(r.status).toBe(1);
+    expect(r.stdout).not.toMatch(/identical/);
+  }, 30_000);
+
+  it("a CSV that restores but re-exports differently (LF line endings, resealed): identical false, exit 1", async () => {
+    const lf = entries[m.csv.path]!.filter((c) => c !== 0x0d); // the BOM stays
+    expect(lf.length).toBeLessThan(entries[m.csv.path]!.length);
+    const manifest = { ...m, csv: { ...m.csv, sha256: await sha(lf), sizeBytes: lf.length } };
+    const path = await write("csv-lf", { ...entries, [m.csv.path]: lf }, manifest);
+    expect(await checkRoundtrip(path, PASS)).toMatchObject({ identical: false, sameZip: false });
+    const r = script(path);
+    expect(r.stdout.trim()).toBe("DIFFERENT: the restored profile backs up to other contents");
+    expect(r.status).toBe(1);
+  }, 30_000);
+
+  it("a listed document file nothing references: restored, then not backed up again: identical false, exit 1", async () => {
+    const extra = strToU8("demo bytes no document uses");
+    const extraSha = await sha(extra);
+    const path = `documents/.versions/${extraSha}`;
+    const manifest = {
+      ...m,
+      documents: [
+        ...m.documents,
+        { path, sha256: extraSha, sizeBytes: extra.length, documentIds: [] },
+      ],
+      counts: { ...m.counts, blobs: m.counts.blobs + 1 },
+    };
+    const file = await write("extra-file", { ...entries, [path]: extra }, manifest);
+    expect(await checkRoundtrip(file, PASS)).toMatchObject({ identical: false, sameZip: false });
+    const r = script(file);
+    expect(r.stdout.trim()).toBe("DIFFERENT: the restored profile backs up to other contents");
+    expect(r.status).toBe(1);
+  }, 30_000);
+
+  it("control: a document byte changed and resealed everywhere is a different valid backup: identical", async () => {
+    // The check compares what restores, so a consistent edit round-trips (it isn't a forgery check).
+    const d = m.documents[0]!;
+    const bytes = entries[d.path]!.slice();
+    bytes[0]! ^= 1;
+    const newSha = await sha(bytes);
+    const raw = entries[m.csv.path]!;
+    const csv = new Uint8Array([
+      ...raw.slice(0, 3),
+      ...strToU8(strFromU8(raw.slice(3)).replaceAll(d.sha256, newSha)),
+    ]);
+    const manifest = {
+      ...m,
+      csv: { ...m.csv, sha256: await sha(csv), sizeBytes: csv.length },
+      documents: m.documents.map((x) => (x === d ? { ...x, sha256: newSha } : x)),
+    };
+    const path = await write(
+      "resealed",
+      { ...entries, [d.path]: bytes, [m.csv.path]: csv },
+      manifest,
+    );
+    expect(await checkRoundtrip(path, PASS)).toMatchObject({ identical: true });
+    expect(script(path).status).toBe(0);
+  }, 30_000);
 });
