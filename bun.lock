@@ -84,6 +84,28 @@
         "vitest": "catalog:",
       },
     },
+    "packages/backup": {
+      "name": "@fiscode/backup",
+      "version": "0.0.0",
+      "bin": {
+        "fiscode-backup": "./bin/fiscode-backup.ts",
+      },
+      "dependencies": {
+        "@fiscode/core": "workspace:*",
+        "@fiscode/csv": "workspace:*",
+        "@fiscode/db": "workspace:*",
+        "better-sqlite3": "^13.2.0",
+        "drizzle-orm": "catalog:",
+        "fflate": "^0.8.3",
+      },
+      "devDependencies": {
+        "@fiscode/config": "workspace:*",
+        "@types/better-sqlite3": "^9.6.0",
+        "typescript": "catalog:",
+        "vite": "^8.3.8",
+        "vitest": "catalog:",
+      },
+    },
     "packages/config": {
       "name": "@fiscode/config",
       "version": "0.0.0",
@@ -338,6 +360,8 @@
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.25.12", "", { "os": "win32", "cpu": "x64" }, "sha512-alJC0uCZpTFrSL0CCDjcgleBXPnCrEAhTBILpeAp7M/OFgoqtAetfBzX0xM00MUsVVPpVjlPuMbREqnZCXaTnA=="],
 
     "@exodus/bytes": ["@exodus/bytes@1.16.0", "", { "peerDependencies": { "@noble/hashes": "^1.8.0 || ^2.0.0" }, "optionalPeers": ["@noble/hashes"] }, "sha512-IcpW84uEn3N7ETtNZMlxKhfl6Pec8rUNGOTBtWbK1FKhJxIFAptZyVrvVRVBimAJxJCgc3PxepxkdWWG4DVzfA=="],
+
+    "@fiscode/backup": ["@fiscode/backup@workspace:packages/backup"],
 
     "@fiscode/config": ["@fiscode/config@workspace:packages/config"],
 
@@ -1082,6 +1106,8 @@
     "fdir": ["fdir@6.5.0", "", { "peerDependencies": { "picomatch": "^3 || ^4" }, "optionalPeers": ["picomatch"] }, "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg=="],
 
     "fetchdts": ["fetchdts@0.2.0", "", {}, "sha512-PJb4ZTGT2/wK78RmVrxZITStWabhZlKBsL52VOgq+c7clEkdHdEB+0rtzrXCbZJqeYJj+IwNWYqB5/G6vouA6A=="],
+
+    "fflate": ["fflate@0.8.3", "", {}, "sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA=="],
 
     "figures": ["figures@6.1.0", "", { "dependencies": { "is-unicode-supported": "^2.0.0" } }, "sha512-d+l3qxjSesT4V7v2fh+QnmFnUWv9lSpjarhShNTgBOfA0ttejbQUAlHLitbjkoRiDulW0OPoQPYIGhIC8ohejg=="],
 
