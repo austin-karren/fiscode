@@ -72,6 +72,9 @@ export const annualizedQuarterly = (
     return estimate.federalLiability;
   }) as Four<Cents>;
   const required = scheduleAiInstallments(annualizedTax, requiredAnnualPayment);
+  // W-2 figures (own wages, withholding, SS and Medicare wages) are the year's totals in every
+  // period: `...input` carries them unscaled. Schedule AI Part II would annualize each period's
+  // wages; that is a known gap (DF-07, docs: tax-engine "Notes on the quarterly plan").
   // Federal withholding: the spouse's (joint return only; see engine.ts) and the filer's own.
   // Estimated payments count from the date paid (DF-07).
   const withholding = (input.spouseFederalWithholding +

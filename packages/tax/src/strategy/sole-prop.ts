@@ -60,9 +60,14 @@ export const soleProprietorStrategy: TaxStrategy = {
     const netProfit = clampMinZero(subCents(input.gross1099, input.deductibleExpenses));
 
     const own = input.ownW2;
+    // Additional Medicare threshold for SE income (Form 8959 Part II): reduced "by the total
+    // amount of Medicare wages received" (https://www.irs.gov/instructions/i8959). On a joint
+    // return that is both spouses' Medicare wages: the filer's own box 5, and the spouse's annual
+    // W-2 wages, the spouse block's only wage figure, standing in for their box 5. The spouse's
+    // wages are already 0 on any other return (engine.ts, spouseOnJointReturn).
     const se = computeSeTax(netProfit, input.filingStatus, cfg, {
       ssWages: own?.ssWages,
-      medicareWages: own?.medicareWages,
+      medicareWages: addCents(own?.medicareWages ?? cents(0), input.spouseW2Wages),
     });
 
     // Self-employed health insurance, Form 7206 (2025), https://www.irs.gov/pub/irs-pdf/f7206.pdf:

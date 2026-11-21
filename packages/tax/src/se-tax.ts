@@ -13,10 +13,10 @@ import type { FilingStatus } from "@fiscode/core";
  *
  * With W-2 wages of the filer's own (DF-07):
  * - Social Security: the wage base left for SE earnings is the base less Social Security wages
- *   and tips (W-2 boxes 3 and 7), Schedule SE lines 8a-9 (IRC §1402(b)(1): self-employment
- *   income excludes what exceeds the contribution base "minus ... the amount of the wages paid
- *   to such individual during such taxable year"). The instructions: "include on line 8a ...
- *   social security wages and tips from Form W-2" (https://www.irs.gov/instructions/i1040sse).
+ *   and tips. 2026 Schedule SE (https://www.irs.gov/pub/irs-pdf/f1040sse.pdf): line 8a "Total
+ *   social security wages and tips (total of boxes 3 and 7 on Form(s) W-2)"; line 9 "Subtract
+ *   line 8d from line 7. If zero or less, enter -0-"; line 10 "Multiply the smaller of line 6 or
+ *   line 9 by 12.4% (0.124)". Lines 8b-8c (Forms 4137, 8919) are not modelled.
  * - Additional Medicare: "the threshold amount for applying Additional Medicare Tax on the
  *   self-employment income is reduced (but not below zero) by the total amount of Medicare
  *   wages received" (https://www.irs.gov/instructions/i8959). The 0.9% on the wages themselves

@@ -285,3 +285,33 @@ describe("one source for due dates: core federalDueDates matches every year conf
     expect(federalDueDates(year)).toEqual(cfg.quarterlyDueDates.map((d) => shiftToBusinessDay(d)));
   });
 });
+
+describe("R3 on a joint return: the spouse's W-2 wages also lower the Additional Medicare threshold", () => {
+  // Review #79 r1: MFJ threshold 250,000 − spouse 240,000 (the spouse block's annual W-2 wages,
+  // the proxy for their box 5) = 10,000. Own net profit 50,000 → net SE 46,175;
+  // (46,175 − 10,000) × 0.9% = 325.575 → 325.58.
+  it("MFJ, spouse 240,000, own net profit 50,000: 325.58", () => {
+    const r = estimateYear({
+      entity: "sole_prop",
+      method: "even",
+      input: input({
+        filingStatus: "mfj",
+        gross1099: dollars(50_000),
+        spouseW2Wages: dollars(240_000),
+      }),
+    });
+    expect(r.estimate.se.additionalMedicareTax).toBe(dollars(325.58));
+  });
+  it("not joint: the spouse's wages don't count (they're dropped), so none here", () => {
+    const r = estimateYear({
+      entity: "sole_prop",
+      method: "even",
+      input: input({
+        filingStatus: "mfs",
+        gross1099: dollars(50_000),
+        spouseW2Wages: dollars(240_000),
+      }),
+    });
+    expect(r.estimate.se.additionalMedicareTax).toBe(0);
+  });
+});

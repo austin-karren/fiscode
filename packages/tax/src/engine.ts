@@ -105,8 +105,9 @@ const sumOf = (ps: readonly { amount: Cents }[]): Cents =>
 
 /**
  * Paid so far against what is required (DF-07). Federal: withholding counts a quarter on each due
- * date (Form 2210 instructions: "considered to have paid one-fourth of these amounts on each
- * payment due date") and estimates on the date paid; each quarter's shortfall is the cumulative
+ * date. Pub 505 (https://www.irs.gov/publications/p505), Line 31: "One-fourth of your estimated
+ * withholding is considered withheld on the due date of each payment period." (Electing the
+ * actual dates withheld is not modelled.) Estimates count on the date paid; each quarter's shortfall is the cumulative
  * required less the cumulative paid by its due date. No penalty is figured.
  */
 const paymentsFor = (
