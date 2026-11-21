@@ -1,9 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
-  dropBytesForStub,
-  documentRepo,
-  folderRepo,
   FolderCycleError,
   FolderNameInvalidError,
   validDocumentName,
@@ -11,7 +8,19 @@ import {
   FolderNameTakenError,
   FolderTooDeepError,
   DocumentBytesMissingError,
-} from "./documents-stub";
+} from "@fiscode/core";
+import { documentRepo, folderRepo } from "@fiscode/db";
+import { dropBytesForStub } from "../test/fake-documents";
+vi.mock("@fiscode/db", async () => {
+  // SQLite and OPFS don't exist in jsdom: the repos are the in-memory fake.
+  const fake = await import("../test/fake-documents");
+  return {
+    folderRepo: fake.folderRepo,
+    documentRepo: fake.documentRepo,
+    documentLinkRepo: fake.documentLinkRepo,
+  };
+});
+
 import { uploadFiles } from "./documents-upload";
 import { landedLine, restoreDocument } from "./documents-restore";
 import { formatBytes, subtreeOf } from "./documents-view";
@@ -40,9 +49,13 @@ describe("uploading documents (stub)", () => {
       {
         name: "demo-letter.docx",
         ok: false,
-        line: "demo-letter.docx: this file type can't be added.",
+        line: '"demo-letter.docx" isn\'t a type fiscode stores. Use a PDF, PNG, JPEG, WebP, HEIC, GIF or text file.',
       },
-      { name: "demo-too-big.pdf", ok: false, line: "demo-too-big.pdf is over 25 MB." },
+      {
+        name: "demo-too-big.pdf",
+        ok: false,
+        line: '"demo-too-big.pdf" is larger than 25 MB. fiscode stores files up to 25 MB.',
+      },
     ]);
     expect(await documentRepo.listInFolder(folder.id)).toHaveLength(2);
   });
@@ -191,11 +204,11 @@ describe("#84 r2: default folders by key, document names, restores that never re
     ).toEqual(["Receipts"]);
   });
 
-  it("says why a document name can't be used", () => {
-    expect(validDocumentName("  ")).toBe("Enter a name.");
-    expect(validDocumentName("a/b.pdf")).toBe("A name can't contain /.");
-    expect(validDocumentName("x".repeat(121))).toBe("Names are 120 characters at most.");
-    expect(validDocumentName("demo.pdf")).toBeUndefined();
+  it("says why a document name can't be used (core's validDocumentName throws)", () => {
+    expect(() => validDocumentName("  ")).toThrow("Enter a name.");
+    expect(() => validDocumentName("a/b.pdf")).toThrow(/\//);
+    expect(() => validDocumentName("x".repeat(121))).toThrow("Use 120 characters or fewer.");
+    expect(validDocumentName(" demo.pdf ")).toBe("demo.pdf");
   });
 
   it("restores a folder whose name was taken as 'Name (2)', and says so", async () => {

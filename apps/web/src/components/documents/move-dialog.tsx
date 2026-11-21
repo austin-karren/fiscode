@@ -10,7 +10,7 @@ import {
 import { Button } from "@fiscode/ui/components/button";
 import { Label } from "@fiscode/ui/components/label";
 
-import type { FolderNode } from "../../lib/documents-stub";
+import type { FolderNode } from "@fiscode/db";
 import { errorLine, flattenTree, folderPath } from "../../lib/documents-view";
 import { SelectWithLabels } from "../forms/select-with-labels";
 

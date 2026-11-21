@@ -11,12 +11,9 @@ import { Label } from "@fiscode/ui/components/label";
 import { Textarea } from "@fiscode/ui/components/textarea";
 import { toast } from "sonner";
 
-import {
-  documentLinkRepo,
-  documentRepo,
-  DocumentBytesMissingError,
-  type DocumentRow,
-} from "../../lib/documents-stub";
+import { DocumentBytesMissingError } from "@fiscode/core";
+import { documentLinkRepo, documentRepo } from "@fiscode/db";
+import type { DocumentRow } from "@fiscode/csv";
 import { errorLine, fileKind, formatBytes } from "../../lib/documents-view";
 import { formatDate, formatDateTime } from "../../lib/format-date";
 

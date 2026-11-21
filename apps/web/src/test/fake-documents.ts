@@ -1,98 +1,27 @@
-// STUB of d-data's Document folders contract (dispatchers/d-data/drafts/contract-documents.md):
-// folderRepo, documentRepo, documentLinkRepo, the @fiscode/core constants and typed errors.
-// Names and shapes are the contract's. Everything lives in memory, bytes included.
-//
-// When d-data's PR merges: delete this file; import the repos from @fiscode/db and the constants
-// and errors from @fiscode/core. Every reader imports from here, so that is the one change.
+// TEST FAKE of @fiscode/db's document repos (folderRepo, documentRepo, documentLinkRepo), in
+// memory: jsdom has neither SQLite nor OPFS. Tests mock "@fiscode/db" with these. It keeps the real
+// repos' rules the UI depends on and throws @fiscode/core's real errors. It was the stub the
+// Documents screen was built against before d-data #84; the app now uses the real repos.
+import {
+  ALLOWED_DOCUMENT_MIMES,
+  DocumentBytesMissingError,
+  DocumentNotFoundError,
+  DocumentTooLargeError,
+  DocumentTypeNotAllowedError,
+  FolderCycleError,
+  FolderNameInvalidError,
+  FolderNameTakenError,
+  FolderNotFoundError,
+  FolderTooDeepError,
+  MAX_DOCUMENT_BYTES,
+  YEAR_DEFAULT_FOLDER_KEYS,
+  YEAR_ROOT_KEY,
+  validDocumentName,
+} from "@fiscode/core";
+import type { DocumentFolderRow, DocumentLinkRow, DocumentRow } from "@fiscode/csv";
+import type { FolderNode } from "@fiscode/db";
 
-// ─── @fiscode/core: limits and typed errors ─────────────────────────────────
-
-export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
-export const ALLOWED_DOCUMENT_MIMES = [
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/heic",
-  "image/gif",
-  "text/plain",
-] as const;
 const MAX_FOLDER_DEPTH = 8;
-
-/** document_folder.default_key of the year's folders: found by key, so a rename keeps them. */
-export const YEAR_ROOT_KEY = "year-root";
-export const YEAR_DEFAULT_FOLDER_KEYS = {
-  expenses: "Expenses",
-  income: "Income",
-  mileage: "Mileage",
-  "health-insurance": "Health insurance",
-  "tax-forms": "Tax forms",
-  other: "Other",
-} as const;
-
-/** Why a document name can't be used, or undefined when it can (core's validDocumentName). */
-export const validDocumentName = (name: string): string | undefined => {
-  const trimmed = name.trim();
-  if (!trimmed) return "Enter a name.";
-  if (trimmed.includes("/")) return "A name can't contain /.";
-  if (trimmed.length > 120) return "Names are 120 characters at most.";
-  return undefined;
-};
-
-/** Every documents error; its `message` can be shown as is. */
-export class DocumentError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = new.target.name;
-  }
-}
-export class FolderNameTakenError extends DocumentError {}
-export class FolderNameInvalidError extends DocumentError {}
-export class DocumentNotFoundError extends DocumentError {}
-export class DocumentNameInvalidError extends DocumentError {}
-export class FolderNotFoundError extends DocumentError {}
-export class FolderTooDeepError extends DocumentError {}
-export class FolderCycleError extends DocumentError {}
-export class DocumentTooLargeError extends DocumentError {}
-export class DocumentTypeNotAllowedError extends DocumentError {}
-export class StorageQuotaError extends DocumentError {}
-export class DocumentBytesMissingError extends DocumentError {}
-export class RecordNotFoundError extends DocumentError {}
-
-// ─── Rows ───────────────────────────────────────────────────────────────────
-
-type Dated = { id: string; createdAt: string; updatedAt: string; deletedAt: string | null };
-
-export type DocumentFolderRow = Dated & {
-  parentId: string | null;
-  name: string;
-  taxYear: number | null;
-  sortOrder: number;
-  /** YEAR_ROOT_KEY or a YEAR_DEFAULT_FOLDER_KEYS key for the year's folders; null for the user's. */
-  defaultKey: string | null;
-};
-export type DocumentRow = Dated & {
-  folderId: string | null;
-  name: string;
-  mime: string;
-  sizeBytes: number;
-  sha256: string;
-  addedAt: string;
-  notes: string | null;
-};
-export type DocumentLinkRow = Dated & { documentId: string; recordType: string; recordId: string };
-export type LinkedRecord = {
-  recordType: string;
-  id: string;
-  date: string;
-  label: string;
-  amountCents?: number;
-};
-export type FolderNode = {
-  folder: DocumentFolderRow;
-  children: FolderNode[];
-  documentCount: number;
-};
 
 // ─── In-memory store ────────────────────────────────────────────────────────
 
@@ -107,7 +36,8 @@ const versionLog = new Map<
 let seq = 0;
 const now = () => new Date().toISOString();
 const newId = (prefix: string) => `${prefix}_${(++seq).toString(36).padStart(4, "0")}`;
-const live = <T extends Dated>(rows: Iterable<T>) => [...rows].filter((r) => r.deletedAt === null);
+const live = <T extends { deletedAt: string | null }>(rows: Iterable<T>) =>
+  [...rows].filter((r) => r.deletedAt === null);
 
 const cleanName = (name: string) => {
   const trimmed = name.trim();
@@ -125,7 +55,7 @@ const assertNameFree = (parentId: string | null, name: string, exceptId?: string
     (f) =>
       f.parentId === parentId && f.id !== exceptId && f.name.toLowerCase() === name.toLowerCase(),
   );
-  if (taken) throw new FolderNameTakenError(`A folder named "${name}" is already here.`);
+  if (taken) throw new FolderNameTakenError(name);
 };
 const subtreeIds = (id: string): string[] => [
   id,
@@ -154,10 +84,10 @@ const mimeOf = (file: Blob & { name: string }) =>
 async function storeBytes(file: Blob & { name: string }) {
   const mime = mimeOf(file);
   if (!(ALLOWED_DOCUMENT_MIMES as readonly string[]).includes(mime)) {
-    throw new DocumentTypeNotAllowedError(`${file.name}: this file type can't be added.`);
+    throw new DocumentTypeNotAllowedError(file.name);
   }
   if (file.size > MAX_DOCUMENT_BYTES) {
-    throw new DocumentTooLargeError(`${file.name} is over 25 MB.`);
+    throw new DocumentTooLargeError(file.name);
   }
   const sha256 = await sha256Hex(file);
   const existed = blobs.has(sha256);
@@ -189,9 +119,9 @@ export const folderRepo = {
     defaultKey?: string | null;
   }): Promise<DocumentFolderRow> {
     const clean = cleanName(name);
-    if (parentId && !folders.get(parentId)) throw new FolderNotFoundError("That folder is gone.");
+    if (parentId && !folders.get(parentId)) throw new FolderNotFoundError();
     if (depthOf(parentId) + 1 > MAX_FOLDER_DEPTH) {
-      throw new FolderTooDeepError("Folders go 8 levels deep at most.");
+      throw new FolderTooDeepError();
     }
     assertNameFree(parentId, clean);
     const t = now();
@@ -211,7 +141,7 @@ export const folderRepo = {
   },
   async rename(id: string, name: string): Promise<DocumentFolderRow> {
     const row = folders.get(id);
-    if (!row) throw new FolderNotFoundError("That folder is gone.");
+    if (!row) throw new FolderNotFoundError();
     const clean = cleanName(name);
     assertNameFree(row.parentId, clean, id);
     const next = { ...row, name: clean, updatedAt: now() };
@@ -220,13 +150,13 @@ export const folderRepo = {
   },
   async move(id: string, newParentId: string | null): Promise<DocumentFolderRow> {
     const row = folders.get(id);
-    if (!row) throw new FolderNotFoundError("That folder is gone.");
+    if (!row) throw new FolderNotFoundError();
     if (newParentId && subtreeIds(id).includes(newParentId)) {
-      throw new FolderCycleError("A folder can't go inside itself.");
+      throw new FolderCycleError();
     }
     const height = Math.max(...subtreeIds(id).map((f) => depthOf(f) - depthOf(id) + 1));
     if (depthOf(newParentId) + height > MAX_FOLDER_DEPTH) {
-      throw new FolderTooDeepError("Folders go 8 levels deep at most.");
+      throw new FolderTooDeepError();
     }
     assertNameFree(newParentId, row.name, id);
     const next = { ...row, parentId: newParentId, updatedAt: now() };
@@ -314,7 +244,7 @@ export const folderRepo = {
       existing ??
       (await folderRepo.create({ name: String(taxYear), taxYear, defaultKey: YEAR_ROOT_KEY }));
     const made = [year];
-    for (const [key, name] of Object.entries(YEAR_DEFAULT_FOLDER_KEYS)) {
+    for (const [name, key] of Object.entries(YEAR_DEFAULT_FOLDER_KEYS)) {
       if (!byKey(year.id, key)) {
         made.push(await folderRepo.create({ name, parentId: year.id, taxYear, defaultKey: key }));
       }
@@ -337,7 +267,7 @@ export const documentRepo = {
   },
   async update(id: string, patch: Partial<Pick<DocumentRow, "notes" | "name">>) {
     const row = documents.get(id);
-    if (!row) throw new DocumentNotFoundError("That document is gone.");
+    if (!row) throw new DocumentNotFoundError();
     const next = { ...row, ...patch, updatedAt: now() };
     documents.set(id, next);
     return next;
@@ -388,13 +318,11 @@ export const documentRepo = {
     return { ok, failed };
   },
   async rename(id: string, name: string) {
-    const problem = validDocumentName(name);
-    if (problem) throw new DocumentNameInvalidError(problem);
-    return documentRepo.update(id, { name: name.trim() });
+    return documentRepo.update(id, { name: validDocumentName(name) });
   },
   async move(id: string, folderId: string | null) {
     const row = documents.get(id);
-    if (!row) throw new DocumentNotFoundError("That document is gone.");
+    if (!row) throw new DocumentNotFoundError();
     const next = { ...row, folderId, updatedAt: now() };
     documents.set(id, next);
     return next;
@@ -420,7 +348,7 @@ export const documentRepo = {
   async readBytes(id: string): Promise<Blob> {
     const row = documents.get(id);
     const blob = row && blobs.get(row.sha256);
-    if (!blob) throw new DocumentBytesMissingError("File not on this device — restore a backup");
+    if (!blob) throw new DocumentBytesMissingError();
     return blob;
   },
   async objectUrl(id: string): Promise<string> {

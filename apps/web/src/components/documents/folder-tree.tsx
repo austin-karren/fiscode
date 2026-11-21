@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Folder, FolderOpen, Trash2 } from "lucide-react";
 
-import type { FolderNode } from "../../lib/documents-stub";
+import type { FolderNode } from "@fiscode/db";
 import { flattenTree } from "../../lib/documents-view";
 import { MAIN_ID } from "../../lib/nav";
 

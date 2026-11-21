@@ -1,4 +1,5 @@
-import { documentRepo, type DocumentRow } from "./documents-stub";
+import { documentRepo } from "@fiscode/db";
+import type { DocumentRow } from "@fiscode/csv";
 import { errorLine } from "./documents-view";
 
 export type UploadResult = {

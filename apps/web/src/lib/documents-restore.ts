@@ -1,9 +1,5 @@
-import {
-  documentRepo,
-  folderRepo,
-  type DocumentFolderRow,
-  type DocumentRow,
-} from "./documents-stub";
+import { documentRepo, folderRepo } from "@fiscode/db";
+import type { DocumentFolderRow, DocumentRow } from "@fiscode/csv";
 import { folderPath } from "./documents-view";
 
 // A restore never fails: a taken name comes back as "Name (2)" and a gone parent as the year's

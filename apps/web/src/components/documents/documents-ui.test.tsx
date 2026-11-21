@@ -1,12 +1,20 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  dropBytesForStub,
-  documentRepo,
-  folderRepo,
-  validDocumentName,
-} from "../../lib/documents-stub";
+vi.mock("@fiscode/db", async () => {
+  // SQLite and OPFS don't exist in jsdom: the repos are the in-memory fake.
+  const fake = await import("../../test/fake-documents");
+  return {
+    folderRepo: fake.folderRepo,
+    documentRepo: fake.documentRepo,
+    documentLinkRepo: fake.documentLinkRepo,
+  };
+});
+
+import { validDocumentName } from "@fiscode/core";
+import { documentRepo, folderRepo } from "@fiscode/db";
+
+import { dropBytesForStub } from "../../test/fake-documents";
 import { DocumentSheet } from "./document-sheet";
 import { MoveDialog } from "./move-dialog";
 import { NameDialog } from "./name-dialog";
@@ -34,8 +42,12 @@ describe("name dialog", () => {
     fireEvent.change(field, { target: { value: "receipts" } });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent('A folder named "receipts" is already here.');
-    expect(field).toHaveAccessibleDescription('A folder named "receipts" is already here.');
+    expect(alert).toHaveTextContent(
+      'There is already a folder named "receipts" here. Choose another name.',
+    );
+    expect(field).toHaveAccessibleDescription(
+      'There is already a folder named "receipts" here. Choose another name.',
+    );
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 });
@@ -72,7 +84,14 @@ describe("document rename checks the name on blur and on submit (#84)", () => {
         initial="demo.pdf"
         submitLabel="Rename"
         onSubmit={onSubmit}
-        validate={validDocumentName}
+        validate={(name) => {
+          try {
+            validDocumentName(name);
+            return undefined;
+          } catch (err) {
+            return (err as Error).message;
+          }
+        }}
       />,
     );
     const field = screen.getByLabelText("Name");

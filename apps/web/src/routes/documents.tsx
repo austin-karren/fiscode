@@ -15,16 +15,9 @@ import { NameDialog } from "../components/documents/name-dialog";
 import { MoveDialog } from "../components/documents/move-dialog";
 import { DocumentSheet } from "../components/documents/document-sheet";
 import { FolderTree } from "../components/documents/folder-tree";
-import {
-  ALLOWED_DOCUMENT_MIMES,
-  YEAR_ROOT_KEY,
-  validDocumentName,
-  documentLinkRepo,
-  documentRepo,
-  folderRepo,
-  type DocumentRow,
-  type DocumentFolderRow,
-} from "../lib/documents-stub";
+import { ALLOWED_DOCUMENT_MIMES, YEAR_ROOT_KEY, validDocumentName } from "@fiscode/core";
+import { documentLinkRepo, documentRepo, folderRepo } from "@fiscode/db";
+import type { DocumentRow, DocumentFolderRow } from "@fiscode/csv";
 import { fileKind, folderPath, formatBytes, subtreeOf } from "../lib/documents-view";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { uploadFiles, type UploadResult } from "../lib/documents-upload";
@@ -381,7 +374,7 @@ function DocumentsPage() {
         onOpenChange={(o) => !o && setDialog(null)}
         title="Rename document"
         label="Name"
-        validate={validDocumentName}
+        validate={documentNameProblem}
         initial={dialog?.kind === "rename-doc" ? dialog.doc.name : ""}
         submitLabel="Rename"
         onSubmit={async (name) => {
@@ -440,6 +433,16 @@ function DocumentsPage() {
     </Page>
   );
 }
+
+// core's validDocumentName throws DocumentNameInvalidError; the dialog wants the reason as text.
+const documentNameProblem = (name: string): string | undefined => {
+  try {
+    validDocumentName(name);
+    return undefined;
+  } catch (err) {
+    return err instanceof Error ? err.message : "That name can't be used.";
+  }
+};
 
 const n = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 

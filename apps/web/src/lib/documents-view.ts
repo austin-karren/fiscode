@@ -1,4 +1,5 @@
-import type { FolderNode, DocumentFolderRow } from "./documents-stub";
+import type { FolderNode } from "@fiscode/db";
+import type { DocumentFolderRow } from "@fiscode/csv";
 
 // Display helpers for the Documents screen: sizes, file kinds, and folder paths.
 
