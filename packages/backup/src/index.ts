@@ -88,6 +88,13 @@ export const DEFAULT_SCRYPT_WORK_FACTOR = 18;
 export const MIN_PASSPHRASE_LENGTH = 12;
 
 const AGE_HEADER = "age-encryption.org/v1\n";
+/**
+ * age-encryption's error when no passphrase or identity unwraps the file key: the only failure
+ * that means "wrong passphrase". The library exports no typed error, so this matches its message
+ * (0.3.1, pinned exactly). A test asserts it against the library: on an upgrade it fails first.
+ */
+export const AGE_NO_IDENTITY_MATCHED = /no identity matched any of the file's recipients/;
+
 /** True when the bytes start with age v1's header (an encrypted backup). */
 export const isAge = (bytes: Uint8Array): boolean =>
   bytes.length >= AGE_HEADER.length &&
@@ -124,7 +131,7 @@ export const decryptBackup = async (
     // Only the header unwrap failing means the passphrase is wrong. Anything else (the header's
     // MAC, a payload chunk's authentication, a cut-short or malformed file) means the file is
     // damaged, and the passphrase may well be right.
-    if (err instanceof Error && /no identity matched/.test(err.message)) {
+    if (err instanceof Error && AGE_NO_IDENTITY_MATCHED.test(err.message)) {
       throw new BackupPassphraseError("wrong");
     }
     throw new BackupFileCorruptError();
@@ -211,12 +218,24 @@ export const referencedBlobs = (bundle: Bundle): Map<string, Set<string>> => {
 };
 
 /** A path segment safe in a zip: no separators, no "..", no control characters. */
+// Windows can't create these: the characters, and the device names with or without an extension.
+const WINDOWS_RESERVED_CHARS = /[<>:"|?*]/g;
+const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i;
+
+/**
+ * One path segment that unzips anywhere: control characters and slashes dropped, Windows'
+ * reserved characters as "_", no trailing dots or spaces, and a device name ("CON", "nul.txt")
+ * prefixed with "_". Only the human path changes: a restore uses the manifest's sha256.
+ */
 const safeSegment = (name: string): string => {
   const cleaned = [...name]
     .filter((ch) => ch.charCodeAt(0) >= 32 && ch !== "/" && ch !== "\\")
     .join("")
-    .trim();
-  return cleaned === "" || cleaned === "." || cleaned === ".." ? "_" : cleaned;
+    .replace(WINDOWS_RESERVED_CHARS, "_")
+    .trim()
+    .replace(/[. ]+$/, "");
+  if (cleaned === "") return "_";
+  return WINDOWS_DEVICE_NAME.test(cleaned) ? `_${cleaned}` : cleaned;
 };
 
 /** "name (2).pdf": the number before the extension. */
@@ -420,6 +439,15 @@ const validManifest = (raw: unknown): BackupManifest => {
   if (!Array.isArray(raw.documents) || !raw.documents.every(isFileEntry)) {
     bad("its list of files is damaged");
   }
+  const files = raw.documents as BackupManifestFile[];
+  const paths = new Set<string>();
+  const shas = new Set<string>();
+  for (const f of files) {
+    if (paths.has(f.path)) bad(`it lists "${f.path}" twice`);
+    if (shas.has(f.sha256)) bad(`it lists the same file twice (${f.sha256.slice(0, 12)})`);
+    paths.add(f.path);
+    shas.add(f.sha256);
+  }
   const missing = raw.missing ?? [];
   if (
     !Array.isArray(missing) ||
@@ -428,6 +456,11 @@ const validManifest = (raw: unknown): BackupManifest => {
     )
   ) {
     bad("its list of missing files is damaged");
+  }
+  for (const m of missing as { sha256: string }[]) {
+    if (shas.has(m.sha256)) {
+      bad(`it lists a file as both missing and in the backup (${m.sha256.slice(0, 12)})`);
+    }
   }
   const counts = raw.counts;
   if (!isRecord(counts) || counts.blobs !== (raw.documents as unknown[]).length) {

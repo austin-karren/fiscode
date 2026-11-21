@@ -156,13 +156,16 @@ const main = async (): Promise<number> => {
       return 0;
     }
     case "check-roundtrip": {
+      const encrypted = isEncryptedBackupFile(need(target, "the backup file"));
       const { identical } = await checkRoundtrip(
         need(target, "the backup file"),
         passphraseFor(target!),
       );
       console.log(
         identical
-          ? "identical (decrypted contents)"
+          ? encrypted
+            ? "identical (decrypted contents)"
+            : "identical"
           : "DIFFERENT: the restored profile backs up to other contents",
       );
       return identical ? 0 : 1;

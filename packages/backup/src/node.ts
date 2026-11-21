@@ -299,6 +299,7 @@ export const resolvePassphrase = (
     return text;
   }
   const typed = prompt();
+  if (typed === "") throw new Error("No passphrase entered. Nothing was changed.");
   if (typed === undefined) {
     throw new Error(
       `No passphrase: set FISCODE_BACKUP_PASSPHRASE, create ${file} (chmod 600), or run in a terminal to be asked.`,

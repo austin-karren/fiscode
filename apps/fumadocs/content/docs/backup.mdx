@@ -46,8 +46,13 @@ fiscode-backup-2026-11-21.zip
 - **The whole backup is held in memory** while it is made or read: about twice its size (the
   files, then the zip). That is fine for a personal record; a very large set of documents needs a
   device with the memory for it.
-- **Two backups of the same data are the same bytes** when they're made with the same date and time,
-  so a diff shows only real changes.
+- **Folder and file names are made safe to unzip anywhere,** Windows included. The characters
+  `< > : " | ? *` become `_`, trailing dots and spaces are dropped, and a device name such as `CON`
+  or `nul.txt` gets a leading `_`. Only the name in the zip changes: a restore brings back each
+  document's real name.
+- **Two backups of the same data have the same zip inside** when they're made with the same date
+  and time, so a diff of the decrypted zips shows only real changes. The encrypted files always
+  differ: age encrypts each one with a new random key.
 
 ## Restoring
 
@@ -55,7 +60,8 @@ fiscode asks for the backup's passphrase first.
 
 - fiscode checks every file against the manifest before it changes anything. A damaged or missing
   file, a file the manifest doesn't list, or a damaged manifest refuses the whole backup and names
-  the file.
+  the file. A manifest that lists a file twice, or lists a file as both missing and in the backup,
+  counts as damaged.
 - Into a new, empty browser the restore is exact: the same rows, history and documents. Exporting
   again gives the same CSV, byte for byte.
 - Over data that is already there, fiscode shows what would be replaced and asks first. The restore
