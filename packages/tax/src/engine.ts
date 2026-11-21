@@ -1,13 +1,8 @@
 import type { EntityType, QuarterlyMethod } from "@fiscode/core";
-import { type Cents, cents, clampMinZero, subCents } from "@fiscode/core";
+import { type Cents, cents, clampMinZero, defaultAppliedQuarter, subCents } from "@fiscode/core";
 import { computeStatePrepayment } from "./state-prepayment.ts";
 import { getYearConfig } from "./config/index.ts";
-import {
-  estimatesByDueDate,
-  installmentsRequired,
-  quarterForDate,
-  regularInstallments,
-} from "./installments.ts";
+import { estimatesByDueDate, installmentsRequired, regularInstallments } from "./installments.ts";
 import { computeSafeHarbor } from "./safe-harbor.ts";
 import { strategyFor } from "./strategy/index.ts";
 import type {
@@ -142,7 +137,9 @@ const paymentsFor = (
       paidByDueDate: paid,
       shortfall: clampMinZero(subCents(required, paid)),
       paidAppliedHere: sumOf(
-        federal.filter((e) => (e.appliedQuarter ?? quarterForDate(e.date, dues)) === p.quarter),
+        federal.filter(
+          (e) => (e.appliedQuarter ?? defaultAppliedQuarter(e.date, input.year)) === p.quarter,
+        ),
       ),
     };
   }) as PaymentsResult["federal"]["quarters"];

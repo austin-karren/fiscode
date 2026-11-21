@@ -113,12 +113,3 @@ export const estimatesByDueDate = (
   }
   return out;
 };
-
-/** The quarter a payment counts toward by its date: the first due date on or after it, else 4. */
-export const quarterForDate = (
-  date: string,
-  dueDates: readonly [string, string, string, string],
-): 1 | 2 | 3 | 4 => {
-  const i = dueDates.findIndex((due) => date <= due);
-  return (i === -1 ? 4 : i + 1) as 1 | 2 | 3 | 4;
-};

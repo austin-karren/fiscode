@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cents, dollars } from "@fiscode/core";
+import { cents, dollars, federalDueDates, shiftToBusinessDay } from "@fiscode/core";
+import { getYearConfig } from "./config/index.ts";
 import { config2026 } from "./config/2026.ts";
 import { estimateYear } from "./engine.ts";
 import { estimatesByDueDate, paymentsAfterWithholding } from "./installments.ts";
@@ -275,5 +276,12 @@ describe("R8 prior year not filed: no prior-year safe harbor (Form 2210 line 8)"
     expect(entered.safeHarbor.priorYearBasis).toBe("entered");
     const none = estimateYear({ entity: "sole_prop", method: "even", input: input() });
     expect(none.safeHarbor.priorYearBasis).toBe("not_entered");
+  });
+});
+
+describe("one source for due dates: core federalDueDates matches every year config", () => {
+  it.each([2025, 2026])("%i", (year) => {
+    const cfg = getYearConfig(year);
+    expect(federalDueDates(year)).toEqual(cfg.quarterlyDueDates.map((d) => shiftToBusinessDay(d)));
   });
 });
