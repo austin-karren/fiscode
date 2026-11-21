@@ -34,23 +34,33 @@ type RefusedFile = Extract<ImportFile, { ok: false }>;
 /** How many rejected rows are listed before the rest become a count. */
 const ERROR_LIMIT = 10;
 
-const MODES: readonly ImportMode[] = ["restore", "append"];
+const MODES: readonly ImportMode[] = ["restore", "append", "update"];
 
 // One name per action, used on the option, the button and the toast.
 const MODE_LABELS: Record<ImportMode, string> = {
   restore: "Restore",
   append: "Add rows",
+  update: "Update rows",
 };
 
 const MODE_DESCRIPTIONS: Record<ImportMode, string> = {
   restore: "Replace everything here with this file. Use this for a backup.",
   append: "Keep everything here and add the file's rows that are not here yet.",
+  update:
+    "Take the file's values for rows already here and add its new rows. Nothing is removed. Use this for an amended file from your accountant.",
 };
 
 const BUSY_LABELS: Record<ImportMode, string> = {
   restore: "Restoring…",
   append: "Adding rows…",
+  update: "Updating rows…",
 };
+
+const IMPORT_REASONS = {
+  restore: "import-restore",
+  append: "import-append",
+  update: "import-update",
+} as const satisfies Record<ImportMode, string>;
 
 /** `3 rows`, `1 row`, `0 rows`. */
 const n = (count: number, noun: string, plural = `${noun}s`): string =>
@@ -106,9 +116,10 @@ export function ImportCard({
     const restore = planImport(existing, file.bundle, "restore", file);
     const empty = restore.current.live + restore.current.deleted === 0;
     // An empty app has nothing to keep, so there is no question to ask. A
-    // yearly file cannot be restored from. Otherwise the user chooses: neither
-    // mode is a safe guess for a file we know nothing more about.
-    setMode(empty ? "restore" : restore.refusal ? "append" : null);
+    // yearly file cannot be restored from: over data it is an accountant's
+    // amended file, which is what Update rows is for. Otherwise the user
+    // chooses: no mode is a safe guess for a file we know nothing more about.
+    setMode(empty ? "restore" : restore.refusal ? "update" : null);
     setFailure(null);
     setPending({ fileName: picked.name, file, existing });
   };
@@ -117,6 +128,7 @@ export function ImportCard({
     ? {
         restore: planImport(pending.existing, pending.file.bundle, "restore", pending.file),
         append: planImport(pending.existing, pending.file.bundle, "append", pending.file),
+        update: planImport(pending.existing, pending.file.bundle, "update", pending.file),
       }
     : null;
   const empty = plans !== null && plans.restore.current.live + plans.restore.current.deleted === 0;
@@ -136,14 +148,14 @@ export function ImportCard({
     try {
       const applied = applyImport(pending.existing, pending.file.bundle, plan.mode);
       // One transaction: this resolves only once every row is committed.
-      await importBundle(
-        applied.next,
-        plan.mode === "restore" ? "import-restore" : "import-append",
-      );
+      await importBundle(applied.next, IMPORT_REASONS[plan.mode]);
+      const added = plan.written.live + plan.written.deleted;
       toast.success(
         plan.mode === "restore"
           ? `Restored ${n(plan.written.live, "row")} from ${pending.fileName}.`
-          : `Added ${n(plan.written.live + plan.written.deleted, "row")} from ${pending.fileName}.`,
+          : plan.mode === "update"
+            ? `Updated ${n(plan.changed, "row")} and added ${n(added, "row")} from ${pending.fileName}.`
+            : `Added ${n(added, "row")} from ${pending.fileName}.`,
       );
       setPending(null);
       await router.invalidate();
@@ -262,6 +274,8 @@ export function ImportCard({
                 </p>
               )}
 
+              {plan ? <Warnings plan={plan} /> : null}
+
               {failure ? (
                 <Alert variant="destructive">
                   <CircleAlert />
@@ -325,9 +339,55 @@ function Refusal({ fileName, file }: { fileName: string; file: RefusedFile }) {
   );
 }
 
-/** True for an Add that would write no row and no history entry. */
+/** True for an Add or Update that would write no row and no history entry. */
 const addsNothing = (plan: ImportPlan): boolean =>
-  plan.mode === "append" && plan.written.live + plan.written.deleted + plan.written.history === 0;
+  plan.mode !== "restore" &&
+  plan.changed + plan.written.live + plan.written.deleted + plan.written.history === 0;
+
+/**
+ * What Add rows and Update rows would write that the app would not let you enter, and entity
+ * periods that would overlap. Warnings, not refusals: the file is the user's or their
+ * accountant's, the rows import as written, and Profile shows any overlap to fix.
+ */
+function Warnings({ plan }: { plan: ImportPlan }) {
+  const { outOfRange, overlaps } = plan.warnings;
+  if (outOfRange.count === 0 && overlaps.length === 0) return null;
+  const more = outOfRange.count - outOfRange.rows.length;
+  return (
+    <div className="grid gap-2">
+      {outOfRange.count > 0 ? (
+        <Alert role="alert" aria-label={outOfRange.summary}>
+          <CircleAlert />
+          <AlertTitle>{outOfRange.summary}</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc space-y-1 pl-4 text-left">
+              {outOfRange.rows.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+              {more > 0 ? <li>And {n(more, "more row")}.</li> : null}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {overlaps.length > 0 ? (
+        <Alert role="alert" aria-label="Entity periods would overlap">
+          <CircleAlert />
+          <AlertTitle>Entity periods would overlap</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc space-y-1 pl-4 text-left">
+              {overlaps.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+            <p>
+              They import as the file has them. Fix the dates under Entity periods on your profile.
+            </p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+    </div>
+  );
+}
 
 /** What a mode will do, one checkable sentence per line. */
 const describePlan = (plan: ImportPlan, fileHasNoProfile: boolean): string[] => {
@@ -355,10 +415,38 @@ const describePlan = (plan: ImportPlan, fileHasNoProfile: boolean): string[] => 
       );
     }
     if (addsNothing(plan)) return lines;
-    if (plan.addedEntityPeriods > 0) {
-      const one = plan.addedEntityPeriods === 1;
+    lines.push(
+      `Nothing here is removed: ${n(current.live, "row")} and ${n(current.deleted, "deleted row")} stay.`,
+    );
+    lines.push(history);
+    return lines;
+  }
+
+  if (plan.mode === "update") {
+    if (addsNothing(plan)) {
+      return ["Nothing would change: every row in the file is already here with the same values."];
+    }
+    const one = (k: number) => k === 1;
+    lines.push(`${n(plan.changed, "row")} here will take the file's values.`);
+    lines.push(`${n(written.live, "row")} will be added and show in the app.`);
+    if (written.deleted > 0) {
       lines.push(
-        `${n(plan.addedEntityPeriods, "entity period")} will be added as the file has ${one ? "it" : "them"}, without the check for overlapping periods. Look at Entity periods on your profile afterwards.`,
+        `${n(written.deleted, "deleted row")} will be added as deleted. ${one(written.deleted) ? "It stays" : "They stay"} hidden.`,
+      );
+    }
+    if (plan.unchanged > 0) {
+      lines.push(
+        `${n(plan.unchanged, "row")} in the file ${one(plan.unchanged) ? "is the same as here and stays as it is" : "are the same as here and stay as they are"}.`,
+      );
+    }
+    if (plan.keptDeleted > 0) {
+      lines.push(
+        `${n(plan.keptDeleted, "row")} deleted here ${one(plan.keptDeleted) ? "is" : "are"} in the file. ${one(plan.keptDeleted) ? "It stays" : "They stay"} deleted.`,
+      );
+    }
+    if (plan.keptLive > 0) {
+      lines.push(
+        `${n(plan.keptLive, "row")} the file marks deleted ${one(plan.keptLive) ? "is" : "are"} live here. ${one(plan.keptLive) ? "It stays as it is" : "They stay as they are"}: Update rows never removes a row.`,
       );
     }
     lines.push(

@@ -30,15 +30,25 @@ The yearly file is not a backup. It holds one year, and it leaves out deleted ro
 clients and vehicles. So the app does not let you **Restore** from it once the app holds data:
 that would remove every other year. The dialog says how many rows would be lost.
 
-What you can do with an amended yearly file today:
+Use **Update rows** for an amended file. Choose the file on the dashboard; for a yearly file the
+dialog picks Update rows for you.
 
-- **Rows the accountant added** (each needs an `id` that is not in the app yet): choose the file on the dashboard, then **Add rows**. Rows whose `id` is already in the app are skipped
-  and the dialog counts them.
-- **Entity periods in the file** are added as they are. The app's rule that entity periods must
-  not overlap is checked when you save one on the profile page, not on import. If the file adds
-  an entity period, the dialog says so; look at **Entity periods** on your profile afterwards.
-- **Rows the accountant changed**: make the same change in the app. Add rows never changes a row
-  that is already there, so edits to existing rows in the file are not applied.
+- **Rows the accountant changed** take the file's values. Rows are matched by `id`, so the
+  accountant edits cells but leaves the `id` column as it is.
+- **Rows the accountant added** (each needs an `id` that is not in the app yet) are added.
+- **Rows the file leaves out stay.** Update rows never removes a row, and it never brings back one
+  you deleted: a row deleted in the app stays deleted, and a row the file marks deleted stays as
+  it is in the app.
+- **The dialog counts it all** before anything changes: how many rows change, are added, and stay
+  the same, and how many are kept as they are because of a delete.
+- **Warnings, not refusals.** The dialog lists rows with values the app's forms would not accept
+  (negative amounts, negative miles, $0 where more than $0 is needed, amounts of $100,000,000 or
+  more, whole numbers out of range), by spreadsheet row, and entity periods that would overlap
+  another, naming both. They import as written; fix them in the app afterwards.
+
+**Add rows** still works when you want only the new rows and none of the changes.
+
+The import is one history entry: open **History** and restore the state before it to undo it.
 
 To move everything to another browser or machine, use **Download full CSV** and **Restore**, not
 the yearly file.

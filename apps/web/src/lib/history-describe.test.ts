@@ -265,6 +265,22 @@ describe("describeHistoryRow", () => {
       "Import added 2 rows",
     ],
     [
+      "an Update rows import",
+      row(
+        "__import_snapshot",
+        "revert",
+        bundle([expense, { ...expense, id: "expense_2" }]),
+        bundle([
+          { ...expense, amountCents: 99_00 },
+          { ...expense, id: "expense_2" },
+          { ...expense, id: "expense_3" },
+        ]),
+        "import-update",
+      ),
+      "imported",
+      "Import updated 1 row and added 1 row",
+    ],
+    [
       "a table it does not know",
       row("mystery_table", "update", { id: "x" }, { id: "x" }),
       "edited",

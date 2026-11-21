@@ -229,7 +229,15 @@ export type ImportResult = {
   validationErrors: ImportError[];
   /** How many header rows (rows starting with `record_type`) the file has. */
   tables: number;
+  /**
+   * The spreadsheet row of each accepted row, keyed by `rowLineKey(recordType, id)`, so a
+   * warning about a row can name the row a person sees.
+   */
+  rowLines: Map<string, number>;
 };
+
+/** The key of `ImportResult.rowLines`: a record type and an id. */
+export const rowLineKey = (recordType: string, id: string): string => `${recordType}\u0000${id}`;
 
 export type ImportError = {
   /** Position among the data rows, from 0. -1 for an error about the whole file. */
@@ -346,6 +354,7 @@ export const parseCsv = (raw: string): ImportResult => {
       bundle: emptyBundle(),
       provenance,
       tables: 0,
+      rowLines: new Map(),
       validationErrors: [
         {
           rowIndex: -1,
@@ -435,7 +444,7 @@ export const parseCsv = (raw: string): ImportResult => {
       // both be stored: a restore would fail at the database and an append
       // would keep one and drop the other without a word. Refuse it here,
       // where both row numbers are known.
-      const idKey = `${result.data.record_type}\u0000${result.data.id}`;
+      const idKey = rowLineKey(result.data.record_type, result.data.id);
       const firstLine = seenIds.get(idKey);
       if (firstLine !== undefined) {
         validationErrors.push({
@@ -467,7 +476,7 @@ export const parseCsv = (raw: string): ImportResult => {
       message: "profile.se_start_date is required but missing or empty",
     });
   }
-  return { bundle, provenance, validationErrors, tables };
+  return { bundle, provenance, validationErrors, tables, rowLines: seenIds };
 };
 
 export { rowToBundle };

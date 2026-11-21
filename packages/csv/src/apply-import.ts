@@ -3,9 +3,10 @@ import { emptyBundle } from "./bundle-types.ts";
 
 /**
  * `restore` replaces everything with the file. `append` keeps what is here and
- * adds the file's rows that are not here yet.
+ * adds the file's rows that are not here yet. `update` is `append` that also
+ * takes the file's values for rows already here (an accountant's amended file).
  */
-export type ImportMode = "restore" | "append";
+export type ImportMode = "restore" | "append" | "update";
 
 export type ImportConflict = {
   table: string;
@@ -37,6 +38,9 @@ export const applyImport = (
 ): AppliedImport => {
   if (mode === "restore") {
     return { next: { ...incoming }, conflicts: [], replaced: existing };
+  }
+  if (mode === "update") {
+    return { next: updateBundle(existing, incoming), conflicts: [], replaced: existing };
   }
   const conflicts: ImportConflict[] = [];
   const next: Bundle = {
@@ -80,4 +84,63 @@ const mergeRows = <T extends { id: string }>(
     }
   }
   return merged;
+};
+
+const DATA_TABLES = [
+  "entities",
+  "spouses",
+  "clients",
+  "income",
+  "timeEntries",
+  "vehicles",
+  "mileage",
+  "homeOffice",
+  "expenses",
+  "retirementContributions",
+] as const satisfies readonly (keyof Bundle)[];
+
+/**
+ * Whether `update` takes the file's row for a row already here. Only when both are live:
+ * Update rows never removes a row, so a row the file marks deleted stays live here, and it
+ * never brings one back, so a row deleted here stays deleted.
+ */
+export const updateTakesFileRow = (
+  here: { deletedAt: string | null },
+  file: { deletedAt: string | null },
+): boolean => here.deletedAt === null && file.deletedAt === null;
+
+/**
+ * `update`: rows whose id is here take the file's values (see `updateTakesFileRow`), rows
+ * with new ids are added, rows the file lacks are kept, and nothing is removed. The file's
+ * profile replaces this one when the file has one. History is appended as in `append`.
+ */
+const updateBundle = (existing: Bundle, incoming: Bundle): Bundle => {
+  const next: Bundle = {
+    ...emptyBundle(),
+    profile: incoming.profile ?? existing.profile,
+    history: mergeRows("history", existing.history, incoming.history, []),
+  };
+  type Row = { id: string; deletedAt: string | null };
+  // Every data table holds rows with an id and deletedAt; the merge never looks further.
+  const rowsOf = (b: Bundle, table: (typeof DATA_TABLES)[number]) => b[table] as readonly Row[];
+  for (const table of DATA_TABLES) {
+    (next as Record<string, unknown>)[table] = updateRows(
+      rowsOf(existing, table),
+      rowsOf(incoming, table),
+    );
+  }
+  return next;
+};
+
+const updateRows = <T extends { id: string; deletedAt: string | null }>(
+  existingRows: readonly T[],
+  incomingRows: readonly T[],
+): T[] => {
+  const fromFile = new Map(incomingRows.map((r) => [r.id, r]));
+  const here = new Set(existingRows.map((r) => r.id));
+  const kept = existingRows.map((row) => {
+    const file = fromFile.get(row.id);
+    return file && updateTakesFileRow(row, file) ? file : row;
+  });
+  return [...kept, ...incomingRows.filter((r) => !here.has(r.id))];
 };

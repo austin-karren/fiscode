@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 import { setupTestDb, teardownTestDb } from "../test/setup-db.ts";
 import { emptyBundle, type Bundle } from "../bundle.ts";
-import { exportBundle } from "@fiscode/csv";
+import { applyImport, exportBundle, parseCsv } from "@fiscode/csv";
 import { buildBundle, clientRepo, expenseRepo, historyRepo, importBundle } from "./index.ts";
 
 const FIXED = "2026-06-04T12:00:00.000Z";
@@ -369,5 +369,96 @@ describe("importBundle — history-restore (a past snapshot from the History scr
 
     expect(await fullExport()).toBe(before);
     expect(await snapshots()).toEqual(snapshotsBefore);
+  });
+});
+
+describe("importBundle — import-update (Update rows)", () => {
+  const fullExport = async () =>
+    exportBundle(await buildBundle({ includeDeleted: true }), { scope: "full" });
+  const snapshots = async () =>
+    (await historyRepo.listAll()).filter((h) => h.entity === "__import_snapshot");
+  const everything = () => buildBundle({ includeDeleted: true, includeHistory: true });
+
+  it("writes the merged rows, removes nothing, records one snapshot with the reason", async () => {
+    await importBundle(fullBundle(), "import-restore");
+    const existing = await everything();
+    const file: Bundle = {
+      ...emptyBundle(),
+      income: [{ ...income("in_1", "2026-01-15", 123_45) }, income("in_3", "2026-09-01", 50_00)],
+    };
+    const { next } = applyImport(existing, file, "update");
+    await importBundle(next, "import-update");
+
+    const after = await buildBundle({ includeDeleted: true });
+    expect(after.income.map((i) => [i.id, i.amountCents])).toEqual([
+      ["in_1", 123_45],
+      ["in_2", 250_000],
+      ["in_3", 50_00],
+    ]);
+    expect(after.clients.map((c) => c.id).sort()).toEqual(["cl_1", "cl_2"]);
+    const snaps = await snapshots();
+    expect(snaps.map((s) => s.entityId)).toEqual(["import-update"]);
+  });
+
+  it("is revertable: the snapshot put back by a history restore gives the prior export", async () => {
+    await importBundle(fullBundle(), "import-restore");
+    const prior = await fullExport();
+    const existing = await everything();
+    const file: Bundle = { ...emptyBundle(), income: [income("in_1", "2026-01-15", 1_00)] };
+    await importBundle(applyImport(existing, file, "update").next, "import-update");
+    expect(await fullExport()).not.toBe(prior);
+
+    const [snap] = await snapshots();
+    await importBundle(JSON.parse(snap!.beforeJson!) as Bundle, "history-restore");
+    expect(await fullExport()).toBe(prior);
+  });
+
+  it("is all or nothing", async () => {
+    await importBundle(fullBundle(), "import-restore");
+    const prior = await fullExport();
+    const broken: Bundle = {
+      ...(await everything()),
+      income: [income("in_dup", "2026-02-01", 1), income("in_dup", "2026-02-02", 2)],
+    };
+    await expect(importBundle(broken, "import-update")).rejects.toThrow();
+    expect(await fullExport()).toBe(prior);
+    expect(await snapshots()).toHaveLength(0);
+  });
+
+  it("the same file again changes no row: export -> Update rows -> export differs only by the snapshot", async () => {
+    await importBundle(fullBundle(), "import-restore");
+    const prior = await fullExport();
+    const existing = await everything();
+    const { bundle } = parseCsv(prior);
+    await importBundle(applyImport(existing, bundle, "update").next, "import-update");
+    expect(await fullExport()).toBe(prior);
+    expect(await snapshots()).toHaveLength(1);
+  });
+});
+
+describe("importBundle — a Restore stays exact with out-of-range rows and overlapping periods", () => {
+  it("export -> restore into an empty database -> export gives the same bytes", async () => {
+    const period = (id: string, startDate: string) => ({
+      id,
+      type: "sole_prop",
+      startDate,
+      endDate: null,
+      notes: null,
+      createdAt: FIXED,
+      updatedAt: FIXED,
+      deletedAt: null,
+    });
+    const odd: Bundle = {
+      ...fullBundle(),
+      income: [income("in_neg", "2026-02-01", -45_00), income("in_zero", "2026-02-02", 0)],
+      entities: [period("ent_a", "2026-01-01"), period("ent_b", "2026-06-01")],
+    };
+    const file = exportBundle(odd, { scope: "full" });
+    await importBundle(parseCsv(file).bundle, "import-restore");
+    expect(
+      exportBundle(await buildBundle({ includeDeleted: true, includeHistory: true }), {
+        scope: "full",
+      }),
+    ).toBe(file);
   });
 });

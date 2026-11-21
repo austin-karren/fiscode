@@ -328,6 +328,32 @@ export const countBundleRows = (bundle: Snapshot | undefined): number => {
 
 const rows = (n: number): string => `${n} ${n === 1 ? "row" : "rows"}`;
 
+/** Rows in `after` whose id is in `before` with different values (an Update rows import). */
+const countChangedRows = (before: Snapshot | undefined, after: Snapshot | undefined): number => {
+  if (!before || !after) return 0;
+  let changed = 0;
+  for (const key of DATA_TABLES) {
+    const was = new Map(
+      (Array.isArray(before[key]) ? (before[key] as Snapshot[]) : []).map((r) => [
+        r.id,
+        JSON.stringify(r),
+      ]),
+    );
+    for (const r of Array.isArray(after[key]) ? (after[key] as Snapshot[]) : []) {
+      const prior = was.get(r.id);
+      if (prior !== undefined && prior !== JSON.stringify(r)) changed++;
+    }
+  }
+  if (
+    before.profile &&
+    after.profile &&
+    JSON.stringify(before.profile) !== JSON.stringify(after.profile)
+  ) {
+    changed++;
+  }
+  return changed;
+};
+
 const isDeleted = (row: Snapshot | undefined): boolean =>
   typeof row?.deletedAt === "string" && row.deletedAt !== "";
 
@@ -376,16 +402,21 @@ export function describeHistoryRow(row: HistoryRow, names: NameLookup): HistoryE
     const headline =
       row.entityId === "import-append"
         ? `Import added ${rows(Math.max(added, 0))}`
-        : fromHistory
-          ? `Went back to an earlier state from History (${rows(countBundleRows(after))})`
-          : `Import replaced everything (${rows(countBundleRows(after))})`;
+        : row.entityId === "import-update"
+          ? `Import updated ${rows(countChangedRows(before, after))} and added ${rows(Math.max(added, 0))}`
+          : fromHistory
+            ? `Went back to an earlier state from History (${rows(countBundleRows(after))})`
+            : `Import replaced everything (${rows(countBundleRows(after))})`;
     return {
       ...base,
       kind: IMPORT_KIND,
       kindLabel: HISTORY_KIND_LABELS[IMPORT_KIND]!,
       action: fromHistory ? "restored" : "imported",
       headline,
-      facts: row.entityId === "import-append" ? [] : [`${rows(countBundleRows(before))} before`],
+      facts:
+        row.entityId === "import-append" || row.entityId === "import-update"
+          ? []
+          : [`${rows(countBundleRows(before))} before`],
       summary: headline,
     };
   }
