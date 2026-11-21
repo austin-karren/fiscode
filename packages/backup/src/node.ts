@@ -15,6 +15,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { strFromU8, unzipSync } from "fflate";
 // Subpaths only: "@fiscode/db" loads boot.ts, which needs Vite's import.meta.glob.
 import { __setBlobStoreForTests, type BlobStore } from "@fiscode/db/blob-store";
 import { __resetDbForTests, __setDbForTests } from "@fiscode/db/client";
@@ -215,16 +216,36 @@ export const isEncryptedBackupFile = (path: string): boolean => {
   }
 };
 
+const sameBytes = (a: Uint8Array | undefined, b: Uint8Array | undefined) =>
+  a !== undefined && b !== undefined && a.length === b.length && a.every((x, i) => x === b[i]);
+
+/**
+ * What a restore uses from a backup zip: the CSV's bytes, each stored file's bytes by sha256, and
+ * the shas listed as missing. Not the zip's file names, which are only for people.
+ */
+const restoredContents = (zip: Uint8Array) => {
+  const entries = unzipSync(zip);
+  const manifest = JSON.parse(strFromU8(entries["manifest.json"]!)) as BackupManifest;
+  return {
+    csv: entries[manifest.csv.path],
+    files: new Map(manifest.documents.map((d) => [d.sha256, entries[d.path]])),
+    missing: manifest.missing.map((m) => m.sha256).toSorted(),
+  };
+};
+
 /**
  * Restore a backup into a temporary directory, back it up again with the same `createdAt` and
- * build, and compare the decrypted contents: the zips inside (so the CSV's bytes and every
- * document's sha256). The ciphertext always differs (age's random key and salt), so it isn't
- * compared. True when identical.
+ * build, and compare. The ciphertext always differs (age's random key and salt), so the
+ * decrypted zips are compared:
+ * - `sameZip`: byte for byte the same zip;
+ * - `identical`: the same contents a restore uses (the CSV's bytes, every file's bytes by sha256,
+ *   the missing list). A backup made before the zip's file names changed (#87: Windows-safe
+ *   names) restores exactly but zips under other names: `identical` without `sameZip`.
  */
 export const checkRoundtrip = async (
   path: string,
   passphrase: string | undefined,
-): Promise<{ identical: boolean; manifest: BackupManifest }> => {
+): Promise<{ identical: boolean; sameZip: boolean; manifest: BackupManifest }> => {
   const dir = await mkdtemp(join(tmpdir(), "fiscode-backup-"));
   try {
     const { manifest } = await restoreBackupToDir(path, join(dir, "profile"), passphrase);
@@ -233,9 +254,15 @@ export const checkRoundtrip = async (
       build: manifest.app.build,
     });
     const original = await decryptBackup(new Uint8Array(readFileSync(path)), passphrase);
+    if (sameBytes(original, again.bytes)) return { identical: true, sameZip: true, manifest };
+    const was = restoredContents(original);
+    const now = restoredContents(again.bytes);
     const identical =
-      original.length === again.bytes.length && original.every((b, i) => b === again.bytes[i]);
-    return { identical, manifest };
+      sameBytes(was.csv, now.csv) &&
+      was.files.size === now.files.size &&
+      [...was.files].every(([sha, bytes]) => sameBytes(bytes, now.files.get(sha))) &&
+      was.missing.join() === now.missing.join();
+    return { identical, sameZip: false, manifest };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -299,6 +326,7 @@ export const resolvePassphrase = (
     return text;
   }
   const typed = prompt();
+  if (typed === "") throw new Error("No passphrase entered. Nothing was changed.");
   if (typed === undefined) {
     throw new Error(
       `No passphrase: set FISCODE_BACKUP_PASSPHRASE, create ${file} (chmod 600), or run in a terminal to be asked.`,

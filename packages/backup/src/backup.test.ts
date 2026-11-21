@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } 
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import {
   BackupBytesMissingError,
@@ -28,6 +28,7 @@ import {
 import { setupTestDb, teardownTestDb } from "@fiscode/db/test";
 import {
   createBackup,
+  AGE_NO_IDENTITY_MATCHED,
   decryptBackup,
   encryptBackup,
   planBackupRestore,
@@ -799,10 +800,271 @@ describe("review #85 r4", () => {
     const verify = run("verify", zip);
     expect(verify.stderr).toBe("");
     expect(verify.status).toBe(0);
-    expect(run("check-roundtrip", zip).stdout.trim()).toBe("identical (decrypted contents)");
+    expect(run("check-roundtrip", zip).stdout.trim()).toBe("identical");
     // The encrypted one still needs it.
     const age = join(dir, backup.fileName);
     writeFileSync(age, new Uint8Array(await backup.blob.arrayBuffer()));
     expect(run("verify", age).stderr).toMatch(/No passphrase/);
   }, 30_000);
+});
+
+describe("#85 follow-ups (r2 a-c, r5 d-f)", () => {
+  const withManifest = (entries: Record<string, Uint8Array>, m: unknown) =>
+    rezip({ ...entries, "manifest.json": strToU8(JSON.stringify(m)) });
+  const manifestOf = (entries: Record<string, Uint8Array>) =>
+    JSON.parse(strFromU8(entries["manifest.json"]!)) as BackupManifest;
+
+  it("(a) human paths are safe on Windows: no reserved characters, device names or trailing dots", async () => {
+    await importBundle(exampleBundle() as never, "import-restore");
+    const con = await folderRepo.create({ name: "CON" });
+    const names = [
+      'Receipt: "Q1" <draft>?.pdf',
+      "a|b*c.pdf",
+      "nul.txt",
+      "aux",
+      "com1.pdf",
+      "LPT9.tar.gz",
+      "ends with dot.",
+      "ends with space ",
+      "console.pdf", // not reserved: only the exact device name is
+    ];
+    for (const name of names) {
+      await documentRepo.upload(file(name, `bytes of ${name}`), { folderId: con.id });
+    }
+    const { manifest } = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    const live = manifest.documents.map((d) => d.path).filter((p) => !p.includes("/.versions/"));
+    expect(live).toHaveLength(names.length);
+    const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i;
+    for (const path of live) {
+      for (const segment of path.split("/")) {
+        expect(segment).not.toMatch(/[<>:"|?*]/);
+        expect(segment).not.toMatch(RESERVED);
+        expect(segment).not.toMatch(/[. ]$/);
+      }
+    }
+    expect(live).toContain("documents/_CON/Receipt_ _Q1_ _draft__.pdf");
+    expect(live).toContain("documents/_CON/_nul.txt");
+    expect(live).toContain("documents/_CON/console.pdf");
+    // Still restores exactly: paths are for people, the manifest's sha256 is what restores.
+    const read = await openBackup(
+      (await createBackup({ createdAt: CREATED, passphrase: PASS, scryptWorkFactor: WF })).blob,
+    );
+    expect(read.ok).toBe(true);
+  });
+
+  it("(a) two names that become the same safe name are still told apart", async () => {
+    await importBundle(exampleBundle() as never, "import-restore");
+    await documentRepo.upload(file("a?b.pdf", "one"));
+    await documentRepo.upload(file("a*b.pdf", "two"));
+    const { manifest } = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    expect(
+      manifest.documents
+        .map((d) => d.path)
+        .filter((p) => p.startsWith("documents/Unfiled/"))
+        .toSorted(),
+    ).toEqual(["documents/Unfiled/a_b (2).pdf", "documents/Unfiled/a_b.pdf"]);
+  });
+
+  it("(c) a manifest that lists a path or a sha twice is refused", async () => {
+    await seed();
+    const entries = await zipEntries(
+      (await createBackup({ createdAt: CREATED, passphrase: PASS, scryptWorkFactor: WF })).blob,
+    );
+    const m = manifestOf(entries);
+    const first = m.documents[0]!;
+    const twicePath = {
+      ...m,
+      documents: [...m.documents, first],
+      counts: { ...m.counts, blobs: m.documents.length + 1 },
+    };
+    await expect(openBackup(withManifest(entries, twicePath))).rejects.toBeInstanceOf(
+      BackupManifestError,
+    );
+    await expect(openBackup(withManifest(entries, twicePath))).rejects.toThrow(/twice/);
+    const twiceSha = {
+      ...m,
+      documents: [...m.documents, { ...first, path: "documents/elsewhere.pdf" }],
+      counts: { ...m.counts, blobs: m.documents.length + 1 },
+    };
+    await expect(
+      openBackup(
+        withManifest({ ...entries, "documents/elsewhere.pdf": entries[first.path]! }, twiceSha),
+      ),
+    ).rejects.toThrow(/twice/);
+  });
+
+  it("(b) a sha listed as both missing and in the zip is refused as contradictory", async () => {
+    await seed();
+    const entries = await zipEntries(
+      (await createBackup({ createdAt: CREATED, passphrase: PASS, scryptWorkFactor: WF })).blob,
+    );
+    const m = manifestOf(entries);
+    const both = { ...m, missing: [{ sha256: m.documents[0]!.sha256, documentIds: [] }] };
+    await expect(openBackup(withManifest(entries, both))).rejects.toBeInstanceOf(
+      BackupManifestError,
+    );
+    await expect(openBackup(withManifest(entries, both))).rejects.toThrow(/both missing and/);
+  });
+
+  it("(d) age-encryption's wrong-passphrase error is the one decryptBackup recognizes", async () => {
+    // decryptBackup tells "wrong" from "damaged" by this message (the library exports no typed
+    // error). If an upgrade changes it, this fails first: update AGE_NO_IDENTITY_MATCHED.
+    const { Decrypter } = await import("age-encryption");
+    const encrypted = await encryptBackup(strToU8("demo"), PASS, WF);
+    const d = new Decrypter();
+    d.addPassphrase("not-the-passphrase");
+    const message = await d.decrypt(encrypted).then(
+      () => "decrypted",
+      (err: Error) => err.message,
+    );
+    expect(message).toMatch(AGE_NO_IDENTITY_MATCHED);
+    await expect(decryptBackup(encrypted, "not-the-passphrase")).rejects.toBeInstanceOf(
+      BackupPassphraseError,
+    );
+  });
+
+  it("(e) check-roundtrip says 'identical' for a plain zip, 'identical (decrypted contents)' for .age", async () => {
+    await seed();
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    const dir = mkdtempSync(join(tmpdir(), "fiscode-backup-fu-"));
+    try {
+      const age = join(dir, backup.fileName);
+      const zip = join(dir, "fiscode-backup-2026-11-21.zip");
+      writeFileSync(age, new Uint8Array(await backup.blob.arrayBuffer()));
+      writeFileSync(zip, await plain(backup.blob));
+      const bin = fileURLToPath(new URL("../bin/fiscode-backup.ts", import.meta.url));
+      const run = (path: string) =>
+        spawnSync("bun", [bin, "check-roundtrip", path], {
+          encoding: "utf8",
+          env: { ...process.env, FISCODE_BACKUP_PASSPHRASE: PASS },
+        });
+      expect(run(zip).stdout.trim()).toBe("identical");
+      expect(run(age).stdout.trim()).toBe("identical (decrypted contents)");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("(f) an empty answer at the prompt (Enter or Ctrl-D) says no passphrase was entered", () => {
+    const env = {
+      FISCODE_BACKUP_PASSPHRASE_FILE: join(tmpdir(), "fiscode-no-such-passphrase-file"),
+    };
+    expect(() => resolvePassphrase(env, () => "")).toThrow(/No passphrase entered/);
+    expect(() => resolvePassphrase(env, () => "")).not.toThrow(/Enter its passphrase/);
+  });
+});
+
+describe("review #87 r1", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "fiscode-backup-87-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("(1) a backup made before Windows-safe names round-trips as 'identical contents', exit 0", async () => {
+    await importBundle(exampleBundle() as never, "import-restore");
+    const con = await folderRepo.create({ name: "CON" });
+    await documentRepo.upload(file("a:b.pdf", "demo a:b"), { folderId: con.id });
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    // Rewrite it as ccf749afe (#85) wrote it: the names as they are, in the zip and the manifest.
+    const entries = unzipSync(await plain(backup.blob));
+    const m = JSON.parse(strFromU8(entries["manifest.json"]!)) as BackupManifest;
+    const old = (p: string) => (p === "documents/_CON/a_b.pdf" ? "documents/CON/a:b.pdf" : p);
+    expect(m.documents.map((d) => d.path)).toContain("documents/_CON/a_b.pdf");
+    const rewritten: Record<string, Uint8Array> = {
+      "manifest.json": strToU8(
+        JSON.stringify({ ...m, documents: m.documents.map((d) => ({ ...d, path: old(d.path) })) }),
+      ),
+    };
+    for (const [name, bytes] of Object.entries(entries)) {
+      if (name !== "manifest.json") rewritten[old(name)] = bytes;
+    }
+    const oldAge = join(dir, "pre-87.zip.age");
+    writeFileSync(oldAge, await encryptBackup(zipSync(rewritten), PASS, WF));
+    const now = join(dir, backup.fileName);
+    writeFileSync(now, new Uint8Array(await backup.blob.arrayBuffer()));
+    teardownTestDb(sqlite);
+
+    expect(await checkRoundtrip(oldAge, PASS)).toMatchObject({ identical: true, sameZip: false });
+    expect(await checkRoundtrip(now, PASS)).toMatchObject({ identical: true, sameZip: true });
+    const bin = fileURLToPath(new URL("../bin/fiscode-backup.ts", import.meta.url));
+    const r = spawnSync("bun", [bin, "check-roundtrip", oldAge], {
+      encoding: "utf8",
+      env: { ...process.env, FISCODE_BACKUP_PASSPHRASE: PASS },
+    });
+    expect(r.stdout.trim()).toBe("identical contents (file names in the zip were updated)");
+    expect(r.status).toBe(0);
+    sqlite = setupTestDb();
+  }, 30_000);
+
+  it("(2) no document takes a folder's path: the zip extracts with no file where a directory goes", async () => {
+    await importBundle(exampleBundle() as never, "import-restore");
+    const p = await folderRepo.create({ name: "P" });
+    await documentRepo.upload(file("x", "demo x"), { folderId: p.id });
+    const xDot = await folderRepo.create({ name: "x.", parentId: p.id });
+    await documentRepo.upload(file("in-sub.pdf", "demo in sub"), { folderId: xDot.id });
+    const q = await folderRepo.create({ name: "Q" });
+    await documentRepo.upload(file("Sub", "demo Sub"), { folderId: q.id });
+    const sub = await folderRepo.create({ name: "sub", parentId: q.id });
+    await documentRepo.upload(file("y.pdf", "demo y"), { folderId: sub.id });
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    const entries = unzipSync(await plain(backup.blob));
+    const names = Object.keys(entries);
+    expect(names).toContain("documents/P/x (2)");
+    expect(names).toContain("documents/P/x/in-sub.pdf");
+    expect(names).toContain("documents/Q/Sub (2)");
+    expect(names).toContain("documents/Q/sub/y.pdf");
+    // No file is (ignoring case) a directory of another entry...
+    const lower = names.map((n) => n.toLowerCase());
+    for (const f of lower) expect(lower.some((o) => o.startsWith(`${f}/`))).toBe(false);
+    // ...and a real extraction succeeds.
+    const out = join(dir, "x");
+    for (const [name, bytes] of Object.entries(entries)) {
+      mkdirSync(dirname(join(out, name)), { recursive: true });
+      writeFileSync(join(out, name), bytes);
+    }
+  });
+
+  it("(3) the other device names Windows reserves: CONIN$, CONOUT$, COM¹-³, LPT¹-³", async () => {
+    await importBundle(exampleBundle() as never, "import-restore");
+    const names = ["CONIN$", "conout$.txt", "COM¹.txt", "com³", "LPT².pdf", "lpt¹", "COM4.ok"];
+    for (const n of names) await documentRepo.upload(file(n, `demo ${n}`));
+    const { manifest } = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    const live = manifest.documents.map((d) => d.path.replace("documents/Unfiled/", ""));
+    expect(live.toSorted()).toEqual(
+      [
+        "_CONIN$",
+        "_conout$.txt",
+        "_COM¹.txt",
+        "_com³",
+        "_LPT².pdf",
+        "_lpt¹",
+        "_COM4.ok",
+      ].toSorted(),
+    );
+  });
 });
