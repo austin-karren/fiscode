@@ -112,6 +112,19 @@ export const validDocumentName = (raw: string): string => {
   return name;
 };
 
+/**
+ * A folder name free among `siblingNames`: the name itself, or "Name (2)", "Name (3)", ... the
+ * first not taken, matched without case. Used wherever a folder comes back or comes in and must
+ * not refuse (History restore, restoreTree, Add rows / Update rows of another device's folders).
+ */
+export const freeFolderName = (name: string, siblingNames: readonly string[]): string => {
+  const taken = (n: string) =>
+    siblingNames.some((s) => s.localeCompare(n, "en", { sensitivity: "base" }) === 0);
+  let out = name;
+  for (let i = 2; taken(out); i++) out = `${name} (${i})`;
+  return out;
+};
+
 export class FolderNameTakenError extends DocumentError {
   override readonly name = "FolderNameTakenError";
   constructor(folderName: string) {

@@ -16,6 +16,7 @@ import {
   YEAR_DEFAULT_FOLDER_KEYS,
   YEAR_ROOT_KEY,
   validDocumentName,
+  freeFolderName,
   documentMimeFor,
   formatUSD,
   validFolderName,
@@ -303,11 +304,8 @@ const placeFor = (
     );
     parentId = root?.id ?? null;
   }
-  const taken = (name: string) =>
-    live.some((f) => (f.parentId ?? null) === parentId && sameName(f.name, name));
-  let name = folder.name;
-  for (let n = 2; taken(name); n++) name = `${folder.name} (${n})`;
-  return { parentId, name };
+  const siblings = live.filter((f) => (f.parentId ?? null) === parentId).map((f) => f.name);
+  return { parentId, name: freeFolderName(folder.name, siblings) };
 };
 
 const ensuring = new Map<number, Promise<DocumentFolderRow[]>>();
@@ -318,10 +316,19 @@ export const __setEnsureRaceHookForTests = (hook: (() => Promise<void>) | undefi
   ensureRaceHook = hook;
 };
 
-const isUniqueViolation = (err: unknown): boolean =>
-  /UNIQUE constraint failed/i.test(
-    err instanceof Error ? `${err.message} ${String(err.cause ?? "")}` : String(err),
+/**
+ * The unique violation of document_folder_default_key_idx only (another tab made that year's
+ * folder), by index name or by its two columns in SQLite's message. Any other error, a unique
+ * violation elsewhere included, is not ensureYearDefaults' to absorb (review #84 r3).
+ */
+export const isDefaultKeyViolation = (err: unknown): boolean => {
+  const text = err instanceof Error ? `${err.message} ${String(err.cause ?? "")}` : String(err);
+  return (
+    /UNIQUE constraint failed/i.test(text) &&
+    (text.includes("document_folder_default_key_idx") ||
+      /document_folder\.tax_year,\s*document_folder\.default_key/.test(text))
   );
+};
 
 const sameName = (a: string, b: string) => a.localeCompare(b, "en", { sensitivity: "base" }) === 0;
 
@@ -334,7 +341,7 @@ const ensureYearDefaultsNow = async (taxYear: number): Promise<DocumentFolderRow
   try {
     return await ensureYearDefaultsOnce(taxYear);
   } catch (err) {
-    if (!isUniqueViolation(err)) throw err;
+    if (!isDefaultKeyViolation(err)) throw err;
     return ensureYearDefaultsOnce(taxYear);
   }
 };

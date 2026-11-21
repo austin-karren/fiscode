@@ -379,6 +379,36 @@ describe("review #84 r3: two tabs", () => {
     expect(all).toHaveLength(7);
   });
 
+  it("any other unique violation is not swallowed: it reaches the caller", async () => {
+    __setEnsureRaceHookForTests(async () => {
+      __setEnsureRaceHookForTests(undefined);
+      throw new Error("UNIQUE constraint failed: document.id");
+    });
+    await expect(folderRepo.ensureYearDefaults(2026)).rejects.toThrow(
+      "UNIQUE constraint failed: document.id",
+    );
+  });
+
+  it("the default-key violation is recognised by index name or by its columns", async () => {
+    const { isDefaultKeyViolation } = await import("./documents.ts");
+    expect(
+      isDefaultKeyViolation(
+        new Error(
+          "UNIQUE constraint failed: document_folder.tax_year, document_folder.default_key",
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      isDefaultKeyViolation(
+        new Error("UNIQUE constraint failed: index 'document_folder_default_key_idx'"),
+      ),
+    ).toBe(true);
+    expect(isDefaultKeyViolation(new Error("UNIQUE constraint failed: document_folder.id"))).toBe(
+      false,
+    );
+    expect(isDefaultKeyViolation(new Error("disk I/O error"))).toBe(false);
+  });
+
   it("the index refuses a second folder with a year's key", async () => {
     await folderRepo.ensureYearDefaults(2026);
     const at = new Date().toISOString();

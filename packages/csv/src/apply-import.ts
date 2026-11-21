@@ -1,4 +1,5 @@
 import type { Bundle } from "./bundle-types.ts";
+import { freeFolderName } from "@fiscode/core";
 import { emptyBundle } from "./bundle-types.ts";
 import { TABLE_RECORD_TYPES } from "./form-ranges.ts";
 import { rowLineKey } from "./import.ts";
@@ -253,5 +254,21 @@ export const plainWhereKeyHeld = (
     keptAsPlain++;
     return { ...f, defaultKey: null };
   });
-  return { next: { ...next, documentFolders }, keptAsPlain };
+  // A folder kept as plain can share its name with a live sibling (another device's "2026" next
+  // to this one's): it comes in as "Name (2)", the rule restores use (review #84 r3).
+  const plain = new Set(
+    documentFolders.filter((f, i) => f !== next.documentFolders[i]).map((f) => f.id),
+  );
+  const named = documentFolders.map((f) => {
+    if (!plain.has(f.id) || f.deletedAt !== null) return f;
+    const siblings = documentFolders
+      .filter(
+        (o) =>
+          o.id !== f.id && o.deletedAt === null && (o.parentId ?? null) === (f.parentId ?? null),
+      )
+      .map((o) => o.name);
+    const name = freeFolderName(f.name, siblings);
+    return name === f.name ? f : { ...f, name };
+  });
+  return { next: { ...next, documentFolders: named }, keptAsPlain };
 };

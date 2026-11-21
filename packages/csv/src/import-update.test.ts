@@ -519,3 +519,39 @@ describe("another device's document folders (review #84 r4)", () => {
     expect(planImport(here(), other(), "restore").keptAsPlainFolders).toBe(0);
   });
 });
+
+describe("review #84 r3: a folder kept as plain whose name is taken gets 'Name (2)' (walk step 10)", () => {
+  const folder = (
+    id: string,
+    name: string,
+    defaultKey: string | null,
+    parentId: string | null = null,
+  ) => ({
+    id: id as never,
+    parentId,
+    name,
+    taxYear: 2027,
+    sortOrder: 0,
+    defaultKey,
+    createdAt: FIXED,
+    updatedAt: FIXED,
+    deletedAt: null as string | null,
+  });
+  it.each(["append", "update"] as const)("%s", (mode) => {
+    const here: Bundle = { ...app(), documentFolders: [folder("df_here", "2027", "year-root")] };
+    const theirs: Bundle = {
+      ...emptyBundle(),
+      documentFolders: [
+        folder("df_other", "2027", "year-root"),
+        folder("df_other_exp", "Expenses", "expenses", "df_other"),
+      ],
+    };
+    const { next } = applyImport(here, theirs, mode);
+    const roots = next.documentFolders.filter((f) => f.parentId === null).map((f) => f.name);
+    expect(roots.toSorted()).toEqual(["2027", "2027 (2)"]);
+    // Its child keeps its name: under the renamed root it has no clash.
+    expect(next.documentFolders.find((f) => f.id === "df_other_exp")!.name).toBe("Expenses");
+    // Only the root's key is held here; the incoming Expenses keeps its key (no 2027 Expenses here).
+    expect(planImport(here, theirs, mode).keptAsPlainFolders).toBe(1);
+  });
+});
