@@ -23,6 +23,7 @@ import { optionalMoneyAmount } from "../lib/field-schemas";
 import { restoreRow, softDeleteWithUndo } from "../lib/soft-delete";
 import { SectionTitle } from "../components/section-title";
 import { recordLabel } from "../lib/record-label";
+import { submitForm } from "../lib/submit-form";
 
 const clientSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -113,7 +114,7 @@ function ClientsPage() {
       <EnterToSubmitForm
         onSubmit={(e) => {
           e.preventDefault();
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <Card>
@@ -184,12 +185,11 @@ function ClientsPage() {
           <CardFooter className="justify-end">
             <form.Subscribe
               selector={(s) => ({
-                canSubmit: s.canSubmit,
                 isSubmitting: s.isSubmitting,
               })}
             >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+              {({ isSubmitting }) => (
+                <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Adding..." : "Add"}
                 </Button>
               )}

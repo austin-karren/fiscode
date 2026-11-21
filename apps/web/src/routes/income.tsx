@@ -31,6 +31,7 @@ import { INCOME_KIND_LABELS, labelFor } from "@fiscode/core";
 import { SectionTitle } from "../components/section-title";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { recordLabel } from "../lib/record-label";
+import { submitForm } from "../lib/submit-form";
 
 const KIND_OPTIONS = [
   { value: "recurring", label: "Recurring" },
@@ -155,7 +156,7 @@ function IncomePage() {
       <EnterToSubmitForm
         onSubmit={(e) => {
           e.preventDefault();
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <Card ref={addCard}>
@@ -261,12 +262,11 @@ function IncomePage() {
           <CardFooter className="justify-end">
             <form.Subscribe
               selector={(s) => ({
-                canSubmit: s.canSubmit,
                 isSubmitting: s.isSubmitting,
               })}
             >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+              {({ isSubmitting }) => (
+                <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Adding..." : "Add"}
                 </Button>
               )}

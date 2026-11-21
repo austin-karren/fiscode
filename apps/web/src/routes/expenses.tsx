@@ -50,6 +50,7 @@ import { SectionTitle } from "../components/section-title";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { recordLabel } from "../lib/record-label";
 import { placedInServiceFor } from "../lib/equipment";
+import { submitForm } from "../lib/submit-form";
 
 const CATEGORIES = Object.entries(EXPENSE_CATEGORY_LABELS);
 
@@ -179,7 +180,7 @@ function ExpensesPage() {
       <EnterToSubmitForm
         onSubmit={(e) => {
           e.preventDefault();
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <Card ref={addCard}>
@@ -381,12 +382,11 @@ function ExpensesPage() {
           <CardFooter className="justify-end">
             <form.Subscribe
               selector={(s) => ({
-                canSubmit: s.canSubmit,
                 isSubmitting: s.isSubmitting,
               })}
             >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+              {({ isSubmitting }) => (
+                <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Adding..." : "Add"}
                 </Button>
               )}

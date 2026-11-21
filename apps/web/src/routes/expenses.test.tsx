@@ -65,6 +65,23 @@ describe("expense amount", () => {
     expect(await screen.findByText("Enter an amount, like 12.50")).toBeInTheDocument();
   });
 
+  it("saves a corrected amount at once: a stale error neither disables Add nor blocks it", async () => {
+    create.mockClear();
+    render(<ExpensesPage />);
+    const input = screen.getByLabelText("Amount");
+    fireEvent.change(input, { target: { value: "-50" } });
+    fireEvent.blur(input);
+    await screen.findByText("Enter an amount, like 12.50");
+    // Corrected, still focused: no blur yet, so the old error is still on the field.
+    fireEvent.change(input, { target: { value: "12.50" } });
+    const add = screen.getByRole("button", { name: "Add" });
+    expect(add).toBeEnabled();
+    fireEvent.click(add);
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ amountCents: 1250 })),
+    );
+  });
+
   it("saves a plain amount in cents", async () => {
     submit("12.50");
     await waitFor(() =>
