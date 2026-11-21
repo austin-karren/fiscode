@@ -74,6 +74,9 @@ export const Route = createFileRoute("/")({
     const payments = stubPayments({
       year,
       floor: result.safeHarbor.floor,
+      noInstallmentsRequired: result.quarterly.noInstallmentsRequired === true,
+      // Federal only (Form 2210 line 6): the spouse's on a joint return, as the quarterly card counts.
+      spouseFederalWithholding: result.estimate.federalWithholding,
       // Today's minimum already nets the spouse's Utah withholding; the stub nets only the
       // taxpayer's own box 17 and Utah payments from it. The engine's line 5 replaces this.
       utahMinimumBeforePayments: result.statePrepayment?.minimum,
@@ -225,7 +228,7 @@ function Dashboard() {
         </CardContent>
       </Card>
 
-      <PaidVsTarget payments={payments} today={today} />
+      <PaidVsTarget payments={payments} today={today} noneRequired={noPayment} />
 
       <Card>
         <CardHeader>
@@ -258,7 +261,9 @@ function Dashboard() {
               }
             >
               {result.safeHarbor.firstYear
-                ? "not entered"
+                ? priorYearBasis === "not_filed"
+                  ? "not filed"
+                  : "not entered"
                 : formatUSD(result.safeHarbor.priorYearTarget!)}
             </Field>
             <Field label="Floor (lower of two)" tooltip={GLOSSARY.safeHarborFloor}>

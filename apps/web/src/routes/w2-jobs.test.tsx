@@ -1,11 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const { loaded } = vi.hoisted(() => ({ loaded: { jobs: [] as unknown[] } }));
+
 // The router's history doesn't exist in jsdom: it is replaced at the package boundary. The rows
 // come from the DF-07 stub's in-memory repo.
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
-  useLoaderData: () => ({ jobs: [], year: 2026 }),
+  useLoaderData: () => ({ jobs: loaded.jobs, year: 2026 }),
   useRouter: () => ({ invalidate: vi.fn(async () => {}) }),
 }));
 
@@ -40,5 +42,30 @@ describe("adding a W-2", () => {
       wagesCents: 850_000,
       federalWithholdingCents: 0,
     });
+  });
+
+  it("names a job's dates without '?' when one end is blank", async () => {
+    await w2JobRepo.create({
+      taxYear: 2026,
+      employer: "Demo Open Co",
+      startDate: "2026-01-01",
+      endDate: null,
+      wagesCents: 0,
+      federalWithholdingCents: 0,
+      ssWagesCents: 0,
+      ssTipsCents: 0,
+      ssTaxWithheldCents: 0,
+      medicareWagesCents: 0,
+      stateWagesCents: 0,
+      stateWithholdingCents: 0,
+      notes: null,
+    });
+    const jobs = await w2JobRepo.list();
+    loaded.jobs = jobs;
+    render(<W2JobsPage />);
+    const row = screen.getByText("Demo Open Co").closest("tr")!;
+    expect(row).toHaveTextContent("From Jan 1, 2026");
+    expect(row).not.toHaveTextContent("?");
+    loaded.jobs = [];
   });
 });

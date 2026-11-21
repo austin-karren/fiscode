@@ -49,10 +49,15 @@ function W2JobsPage() {
     refocus();
   };
 
+  // Either end may be blank: say what is known, never "?".
   const dates = (j: (typeof jobs)[number]) =>
-    j.startDate || j.endDate
-      ? `${j.startDate ? formatDate(j.startDate) : "?"} – ${j.endDate ? formatDate(j.endDate) : "?"}`
-      : "—";
+    j.startDate && j.endDate
+      ? `${formatDate(j.startDate)} – ${formatDate(j.endDate)}`
+      : j.startDate
+        ? `From ${formatDate(j.startDate)}`
+        : j.endDate
+          ? `Until ${formatDate(j.endDate)}`
+          : "—";
 
   return (
     <Page

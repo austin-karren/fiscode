@@ -96,7 +96,11 @@ export const w2ValuesFrom = (row: W2JobRow): W2Values => ({
   endDate: row.endDate ? isoToDate(row.endDate) : undefined,
   notes: row.notes ?? "",
   ...(Object.fromEntries(
-    W2_BOXES.map(([f]) => [f, ((row[COLUMN[f]] as number) / 100).toFixed(2)]),
+    // A $0 box shows blank (with its $0.00 placeholder), as on the add form.
+    W2_BOXES.map(([f]) => {
+      const c = row[COLUMN[f]] as number;
+      return [f, c === 0 ? "" : (c / 100).toFixed(2)];
+    }),
   ) as Record<BoxField, string>),
 });
 

@@ -73,7 +73,8 @@ export type PaymentsResult = {
     | undefined;
 };
 
-// Labels belong in @fiscode/core's label maps (FINDING for d-data: JURISDICTION_LABELS).
+// @fiscode/core exports these four from d-data #79 (JURISDICTION_LABELS, federalDueDates,
+// defaultTaxYear, defaultAppliedQuarter), with these signatures; until it merges they are here.
 export const JURISDICTION_LABELS: Record<Jurisdiction, string> = { federal: "Federal", UT: "Utah" };
 
 // ─── Repos: the makeCrudRepo API, in memory ─────────────────────────────────
@@ -150,8 +151,17 @@ export const federalDueDates = (taxYear: number): [IsoDate, IsoDate, IsoDate, Is
     IsoDate,
   ];
 
+/** The year a payment dated `date` is for by default: on or before the January due date, last year. */
+export const defaultTaxYear = (date: string): number => {
+  const year = Number(date.slice(0, 4));
+  return date <= `${year}-01-15` ? year - 1 : year;
+};
+
 /** The quarter a payment dated `date` goes to by default: the first due date on or after it. */
-export const defaultAppliedQuarter = (date: string, taxYear: number): Quarter => {
+export const defaultAppliedQuarter = (
+  date: string,
+  taxYear: number = defaultTaxYear(date),
+): Quarter => {
   const i = federalDueDates(taxYear).findIndex((due) => date <= due);
   return (i === -1 ? 4 : i + 1) as Quarter;
 };
@@ -163,7 +173,9 @@ export const defaultAppliedQuarter = (date: string, taxYear: number): Quarter =>
  */
 export function stubPayments({
   year,
-  floor,
+  floor: safeHarborFloor,
+  noInstallmentsRequired = false,
+  spouseFederalWithholding = 0,
   utahMinimumBeforePayments,
   utahDueDate,
   jobs,
@@ -171,11 +183,16 @@ export function stubPayments({
 }: {
   year: number;
   floor: number;
+  /** The $1,000 rule: the target is 0 (#79). */
+  noInstallmentsRequired?: boolean;
+  /** The spouse's federal withholding on a joint return: withholding is own box 2 plus this (R4). */
+  spouseFederalWithholding?: number;
   utahMinimumBeforePayments: number | undefined;
   utahDueDate: IsoDate | undefined;
   jobs: W2JobRow[];
   payments: EstimatedPaymentRow[];
 }): PaymentsResult {
+  const floor = noInstallmentsRequired ? 0 : safeHarborFloor;
   const live = <T extends Dated & { taxYear: number }>(rows: T[]) =>
     rows.filter((r) => r.deletedAt === null && r.taxYear === year);
   const ownJobs = live(jobs);
@@ -183,7 +200,7 @@ export function stubPayments({
   const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
   const fedPays = pays.filter((p) => p.jurisdiction === "federal");
   const utPays = pays.filter((p) => p.jurisdiction === "UT");
-  const withholding = sum(ownJobs.map((j) => j.federalWithholdingCents));
+  const withholding = sum(ownJobs.map((j) => j.federalWithholdingCents)) + spouseFederalWithholding;
   const estimates = sum(fedPays.map((p) => p.amountCents));
   const dues = federalDueDates(year);
   const quarters = dues.map((dueDate, i) => {

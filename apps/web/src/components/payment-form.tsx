@@ -7,6 +7,7 @@ import { z } from "zod";
 import { moneyAmount } from "../lib/field-schemas";
 import {
   defaultAppliedQuarter,
+  defaultTaxYear,
   JURISDICTION_LABELS,
   type EstimatedPaymentRow,
   type Jurisdiction,
@@ -18,6 +19,8 @@ import { SelectWithLabels } from "./forms/select-with-labels";
 import { TSFormField } from "./forms/ts-form-field";
 
 // One estimated tax payment's form, shared by the Payments add card and its Edit dialog.
+
+export { defaultTaxYear };
 
 export const paymentSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -35,12 +38,6 @@ type PaymentValues = {
   taxYear: string;
   appliedQuarter: "auto" | "1" | "2" | "3" | "4";
   notes: string;
-};
-
-/** The year a payment dated `iso` is for by default: Jan 1-15 pays last year's Q4. */
-export const defaultTaxYear = (iso: string): number => {
-  const year = Number(iso.slice(0, 4));
-  return iso.slice(5) <= "01-15" ? year - 1 : year;
 };
 
 export const paymentDefaults = (today: Date): PaymentValues => ({
@@ -68,8 +65,11 @@ export const paymentInsertFrom = (value: PaymentValues) => {
     amountCents: parsed.amount,
     jurisdiction: parsed.jurisdiction,
     taxYear: Number(parsed.taxYear),
+    // Utah has one prepayment date, not quarters: no quarter is stored for it.
     appliedQuarter:
-      parsed.appliedQuarter === "auto" ? null : (Number(parsed.appliedQuarter) as Quarter),
+      parsed.jurisdiction === "UT" || parsed.appliedQuarter === "auto"
+        ? null
+        : (Number(parsed.appliedQuarter) as Quarter),
     notes: parsed.notes.trim() || null,
   };
 };
@@ -199,8 +199,16 @@ export function PaymentFields({
           );
         }}
       </form.Subscribe>
-      <form.Subscribe selector={(s) => ({ date: s.values.date, taxYear: s.values.taxYear })}>
-        {({ date, taxYear }) => {
+      <form.Subscribe
+        selector={(s) => ({
+          date: s.values.date,
+          taxYear: s.values.taxYear,
+          utah: s.values.jurisdiction === "UT",
+        })}
+      >
+        {({ date, taxYear, utah }) => {
+          // Utah's prepayment has one due date and no quarters.
+          if (utah) return null;
           const auto = date ? defaultAppliedQuarter(dateToIso(date), Number(taxYear)) : 1;
           return (
             <TSFormField form={form} name="appliedQuarter" requirement="required">

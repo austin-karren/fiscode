@@ -591,3 +591,63 @@ describe("didn't file a 2025 return (DF-07)", () => {
     expect(screen.queryByText("No 2025 return filed")).not.toBeInTheDocument();
   });
 });
+
+describe("paid so far agrees with the quarterly card (REVIEW #80 r1 F1)", () => {
+  it("counts the spouse's federal withholding with the taxpayer's own", () => {
+    const p = stubPayments({
+      year: 2026,
+      floor: 600_000,
+      spouseFederalWithholding: 630_000,
+      utahMinimumBeforePayments: undefined,
+      utahDueDate: undefined,
+      jobs: [],
+      payments: [],
+    });
+    expect(p.federal.withholding).toBe(630_000);
+    expect(p.federal.totalPaid).toBe(630_000);
+  });
+
+  it("under the $1,000 rule: target 0, 'No payment required', and no shortfall", () => {
+    const payments = stubPayments({
+      year: 2026,
+      floor: 600_000,
+      noInstallmentsRequired: true,
+      utahMinimumBeforePayments: undefined,
+      utahDueDate: undefined,
+      jobs: [],
+      payments: [],
+    });
+    expect(payments.federal.target).toBe(0);
+    const savedP = loaderData.payments;
+    const q = loaderData.result.quarterly as { noInstallmentsRequired?: boolean };
+    loaderData.payments = payments;
+    q.noInstallmentsRequired = true;
+    try {
+      render(<Dashboard />);
+      expect(screen.getByText(/^Federal:/).closest("p")).toHaveTextContent(
+        "No payment required: under $1,000 owed after withholding.",
+      );
+      expect(screen.queryByText(/still due\./)).not.toBeInTheDocument();
+      for (const n of [1, 2, 3, 4]) {
+        expect(screen.getByText(new RegExp(`^Q${n}, due`)).closest("tr")).toHaveTextContent(/—$/);
+      }
+    } finally {
+      loaderData.payments = savedP;
+      delete q.noInstallmentsRequired;
+    }
+  });
+});
+
+describe("safe harbor card when the return wasn't filed (REVIEW #80 r1 F2)", () => {
+  it("says 'not filed', not 'not entered'", () => {
+    const saved = loaderData.priorYearBasis;
+    loaderData.priorYearBasis = "not_filed";
+    try {
+      render(<Dashboard />);
+      expect(screen.getByText("not filed")).toBeInTheDocument();
+      expect(screen.queryByText("not entered")).not.toBeInTheDocument();
+    } finally {
+      loaderData.priorYearBasis = saved;
+    }
+  });
+});

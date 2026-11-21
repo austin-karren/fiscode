@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { defaultAppliedQuarter } from "../lib/w2-payments-stub";
 import { defaultTaxYear, paymentInsertFrom, paymentSchema } from "./payment-form";
-import { w2InsertFrom, w2Schema, w2Defaults } from "./w2-job-form";
+import { w2Defaults, w2InsertFrom, w2Schema, w2ValuesFrom } from "./w2-job-form";
 
 const payment = (over: Record<string, unknown> = {}) => ({
   date: new Date(2026, 3, 10),
@@ -108,5 +108,32 @@ describe("W-2 form", () => {
       stateWithholdingCents: 38_000,
       notes: null,
     });
+  });
+});
+
+describe("REVIEW #80 r1 notes", () => {
+  it("saves no quarter for a Utah payment (one prepayment date, no quarters)", () => {
+    expect(
+      paymentInsertFrom(payment({ jurisdiction: "UT", appliedQuarter: "3" })).appliedQuarter,
+    ).toBeNull();
+  });
+
+  it("opens a W-2's $0 boxes blank in the Edit dialog, and its others in dollars", () => {
+    const row = {
+      ...w2InsertFrom({ ...w2Defaults(2026), employer: "Demo Corp", wages: "8500" }),
+      id: "w2_demo",
+      createdAt: "",
+      updatedAt: "",
+      deletedAt: null,
+    };
+    const values = w2ValuesFrom(row);
+    expect(values.wages).toBe("8500.00");
+    expect(values.ssTips).toBe("");
+    expect(values.federalWithholding).toBe("");
+  });
+
+  it("defaults the quarter from the date alone, like core's (tax year from the date)", () => {
+    expect(defaultAppliedQuarter("2027-01-10")).toBe(4); // 2026's Q4
+    expect(defaultAppliedQuarter("2026-05-01")).toBe(2);
   });
 });

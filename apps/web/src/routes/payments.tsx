@@ -127,7 +127,9 @@ function PaymentsPage() {
                     {JURISDICTION_LABELS[p.jurisdiction]}
                   </DataTable.Cell>
                   <DataTable.Cell label="For">
-                    {p.taxYear} Q{p.appliedQuarter ?? defaultAppliedQuarter(p.date, p.taxYear)}
+                    {p.jurisdiction === "UT"
+                      ? p.taxYear
+                      : `${p.taxYear} Q${p.appliedQuarter ?? defaultAppliedQuarter(p.date, p.taxYear)}`}
                   </DataTable.Cell>
                   <DataTable.Cell label="Note">{p.notes ?? "—"}</DataTable.Cell>
                   <DataTable.Cell label="Amount" align="right">

@@ -48,4 +48,17 @@ describe("adding a payment", () => {
     fireEvent.blur(screen.getByLabelText("Amount"));
     expect(await screen.findByText("Enter an amount, like 12.50")).toBeInTheDocument();
   });
+
+  it("hides 'Applied to' for a Utah payment", async () => {
+    render(<PaymentsPage />);
+    expect(screen.getByRole("combobox", { name: /Applied to/ })).toBeInTheDocument();
+    const paidTo = screen.getByRole("combobox", { name: "Paid to" });
+    paidTo.focus();
+    fireEvent.keyDown(paidTo, { key: "ArrowDown" });
+    const utah = await screen.findByRole("option", { name: "Utah" });
+    utah.focus();
+    fireEvent.keyDown(utah, { key: "Enter" });
+    await waitFor(() => expect(paidTo).toHaveTextContent("Utah"));
+    expect(screen.queryByRole("combobox", { name: /Applied to/ })).not.toBeInTheDocument();
+  });
 });

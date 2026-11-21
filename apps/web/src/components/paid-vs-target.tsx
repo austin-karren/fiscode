@@ -13,7 +13,16 @@ const usd = (c: number) => formatUSD(cents(c));
 // What has been paid against what is due, per jurisdiction, from the engine's `payments`
 // (withholding counts one-fourth on each due date; estimates count on the day paid). It shows
 // shortfalls only: there is no penalty calculation yet, and it says so.
-export function PaidVsTarget({ payments, today }: { payments: PaymentsResult; today: string }) {
+export function PaidVsTarget({
+  payments,
+  today,
+  noneRequired,
+}: {
+  payments: PaymentsResult;
+  today: string;
+  /** The $1,000 rule (quarterly.noInstallmentsRequired): nothing is due, so nothing is short. */
+  noneRequired: boolean;
+}) {
   const { federal, state } = payments;
   return (
     <Card>
@@ -21,16 +30,27 @@ export function PaidVsTarget({ payments, today }: { payments: PaymentsResult; to
         <CardTitle>
           <SectionTitle>
             Paid so far
-            {federal.safeHarborMet ? <Badge variant="secondary">On track</Badge> : null}
+            {federal.safeHarborMet || noneRequired ? (
+              <Badge variant="secondary">On track</Badge>
+            ) : null}
           </SectionTitle>
         </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <p className="text-sm">
-          <span className="font-medium">Federal:</span> {usd(federal.totalPaid)} paid of{" "}
-          {usd(federal.target)} ({usd(federal.withholding)} withheld, {usd(federal.estimates)} in
-          payments). <span className="font-medium">{usd(federal.remaining)} still due.</span>
-        </p>
+        {noneRequired ? (
+          <p className="text-sm">
+            <span className="font-medium">Federal:</span> {usd(federal.totalPaid)} paid (
+            {usd(federal.withholding)} withheld, {usd(federal.estimates)} in payments).{" "}
+            <span className="font-medium">No payment required:</span> under $1,000 owed after
+            withholding.
+          </p>
+        ) : (
+          <p className="text-sm">
+            <span className="font-medium">Federal:</span> {usd(federal.totalPaid)} paid of{" "}
+            {usd(federal.target)} ({usd(federal.withholding)} withheld, {usd(federal.estimates)} in
+            payments). <span className="font-medium">{usd(federal.remaining)} still due.</span>
+          </p>
+        )}
         <DataTable>
           <DataTable.Head>
             <DataTable.Row>
@@ -57,7 +77,7 @@ export function PaidVsTarget({ payments, today }: { payments: PaymentsResult; to
                   {usd(q.paidByDueDate)}
                 </DataTable.Cell>
                 <DataTable.Cell label="Short" align="right">
-                  {q.shortfall > 0 ? usd(q.shortfall) : "—"}
+                  {q.shortfall > 0 && !noneRequired ? usd(q.shortfall) : "—"}
                 </DataTable.Cell>
               </DataTable.Row>
             ))}
