@@ -12,6 +12,9 @@ import {
   type ProfileRow,
   type RetirementContributionRow,
   type W2JobRow,
+  type DocumentFolderRow,
+  type DocumentRow,
+  type DocumentLinkRow,
   type EstimatedPaymentRow,
   type SpouseRow,
   type TimeEntryRow,
@@ -248,6 +251,45 @@ const rowToBundle = (rows: CsvRow[]): Bundle => {
           updatedAt: r.updated_at ?? "",
           deletedAt: strOrNull(r.deleted_at),
         } satisfies EstimatedPaymentRow);
+        break;
+      case "document_folder":
+        b.documentFolders.push({
+          id: r.id,
+          parentId: strOrNull(r.parent_id),
+          name: r.name ?? "",
+          taxYear: numOrNull(r.tax_year),
+          sortOrder: num(r.sort_order),
+          defaultKey: strOrNull(r.default_key),
+          createdAt: r.created_at ?? "",
+          updatedAt: r.updated_at ?? "",
+          deletedAt: strOrNull(r.deleted_at),
+        } satisfies DocumentFolderRow);
+        break;
+      case "document":
+        b.documents.push({
+          id: r.id,
+          folderId: strOrNull(r.folder_id),
+          name: r.name ?? "",
+          mime: r.mime ?? "",
+          sizeBytes: num(r.size_bytes),
+          sha256: r.sha256 ?? "",
+          addedAt: r.added_at ?? "",
+          notes: strOrNull(r.notes),
+          createdAt: r.created_at ?? "",
+          updatedAt: r.updated_at ?? "",
+          deletedAt: strOrNull(r.deleted_at),
+        } satisfies DocumentRow);
+        break;
+      case "document_link":
+        b.documentLinks.push({
+          id: r.id,
+          documentId: r.document_id ?? "",
+          recordType: r.linked_record_type ?? "",
+          recordId: r.linked_record_id ?? "",
+          createdAt: r.created_at ?? "",
+          updatedAt: r.updated_at ?? "",
+          deletedAt: strOrNull(r.deleted_at),
+        } satisfies DocumentLinkRow);
         break;
       case "history":
         b.history.push({
@@ -531,6 +573,27 @@ export const parseCsv = (raw: string): ImportResult => {
       line: profileLine,
       recordType: "profile",
       message: "profile.se_start_date is required but missing or empty",
+    });
+  }
+  // A tax year has one folder per default key, ever (the database's unique index on
+  // document_folder (tax_year, default_key)). The app's own exports can't hold two; a file that
+  // does was edited by hand, and importing it would fail at the database. Refuse it here, naming
+  // both rows (review #84 r3).
+  const keyLine = new Map<string, number>();
+  for (const f of bundle.documentFolders) {
+    if (f.defaultKey === null || f.taxYear === null) continue;
+    const key = `${f.taxYear}\u0000${f.defaultKey}`;
+    const line = seenIds.get(rowLineKey("document_folder", f.id)) ?? 0;
+    const first = keyLine.get(key);
+    if (first === undefined) {
+      keyLine.set(key, line);
+      continue;
+    }
+    validationErrors.push({
+      rowIndex: line - 1,
+      line,
+      recordType: "document_folder",
+      message: `default_key: "${f.defaultKey}" for ${f.taxYear} is also used on row ${first}. A tax year has one folder per default key`,
     });
   }
   return { bundle, provenance, validationErrors, tables, rowLines: seenIds, columns };

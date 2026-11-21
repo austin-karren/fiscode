@@ -407,6 +407,10 @@ function Warnings({ plan }: { plan: ImportPlan }) {
   );
 }
 
+/** Folders from another device's year set: kept, without their default key. */
+const plainFoldersLine = (count: number): string =>
+  `${n(count, "folder")} kept as ${count === 1 ? "a plain folder" : "plain folders"}: this profile already has that year's default folders.`;
+
 /** What a mode will do, one checkable sentence per line. */
 const describePlan = (plan: ImportPlan, fileHasNoProfile: boolean): string[] => {
   const { current, written, removed, skipped } = plan;
@@ -433,6 +437,7 @@ const describePlan = (plan: ImportPlan, fileHasNoProfile: boolean): string[] => 
       );
     }
     if (addsNothing(plan)) return lines;
+    if (plan.keptAsPlainFolders > 0) lines.push(plainFoldersLine(plan.keptAsPlainFolders));
     lines.push(
       `Nothing here is removed: ${n(current.live, "row")} and ${n(current.deleted, "deleted row")} stay.`,
     );
@@ -467,6 +472,7 @@ const describePlan = (plan: ImportPlan, fileHasNoProfile: boolean): string[] => 
         `${n(plan.keptLive, "row")} the file marks deleted ${one(plan.keptLive) ? "is" : "are"} live here. ${one(plan.keptLive) ? "It stays as it is" : "They stay as they are"}: Update rows never removes a row.`,
       );
     }
+    if (plan.keptAsPlainFolders > 0) lines.push(plainFoldersLine(plan.keptAsPlainFolders));
     lines.push(
       `Nothing here is removed: ${n(current.live, "row")} and ${n(current.deleted, "deleted row")} stay.`,
     );

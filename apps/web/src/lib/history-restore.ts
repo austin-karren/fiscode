@@ -10,6 +10,9 @@ import {
   mileageRepo,
   profileRepo,
   retirementRepo,
+  folderRepo,
+  documentRepo,
+  documentLinkRepo,
   spouseRepo,
   timeRepo,
   vehicleRepo,
@@ -60,6 +63,9 @@ const REPOS: Record<string, AnyCrudRepo> = {
   home_office: homeOfficeRepo,
   expense: expenseRepo,
   retirement_contribution: retirementRepo,
+  document_folder: folderRepo,
+  document: documentRepo,
+  document_link: documentLinkRepo,
 };
 
 const BUNDLE_KEY: Record<string, keyof Bundle> = {
@@ -73,6 +79,9 @@ const BUNDLE_KEY: Record<string, keyof Bundle> = {
   home_office: "homeOffice",
   expense: "expenses",
   retirement_contribution: "retirementContributions",
+  document_folder: "documentFolders",
+  document: "documents",
+  document_link: "documentLinks",
 };
 
 /** The record a history row is about, as it is now (deleted rows included). */
@@ -196,7 +205,8 @@ const sameState = (snapshot: Snapshot, bundle: Bundle): boolean => {
   const profileThen = (snapshot.profile ?? undefined) as Snapshot | undefined;
   if (!sameRow(profileNow, profileThen)) return false;
   return STATE_TABLES.every((key) => {
-    const now = bundle[key] as unknown as StoredRow[];
+    // A table the bundle doesn't carry (a bundle built before it existed) reads as empty.
+    const now = (bundle[key] ?? []) as unknown as StoredRow[];
     const then = Array.isArray(snapshot[key]) ? (snapshot[key] as StoredRow[]) : [];
     if (now.length !== then.length) return false;
     const thenById = new Map(then.map((r) => [r.id, r]));

@@ -62,6 +62,9 @@ const makeBundle = (overrides: Partial<Bundle> = {}): Bundle => ({
   retirementContributions: [],
   w2Jobs: [],
   estimatedPayments: [],
+  documentFolders: [],
+  documents: [],
+  documentLinks: [],
   ...overrides,
 });
 

@@ -88,6 +88,18 @@ const label = (key: Key, name: string = key): DerivedColumn => ({
   derive: (row) => LABELS[`${row.record_type}.${key}`]?.[row[key] ?? ""] ?? "",
 });
 
+/** A document's size for a person ("1.2 MB"); ignored on import (`size_bytes` is stored). */
+const sizeLabel: DerivedColumn = {
+  name: "size",
+  derive: (row) => {
+    const n = Number(row.size_bytes ?? "");
+    if (row.size_bytes === undefined || row.size_bytes === "" || !Number.isFinite(n)) return "";
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  },
+};
+
 const clientName: DerivedColumn = {
   name: "client_name",
   derive: (row, lookup) => lookup.clientNames.get(row.client_id ?? "") ?? "",
@@ -339,6 +351,51 @@ export const SECTIONS: readonly Section[] = [
       int("tax_year"),
       int("applied_quarter"),
       text("notes"),
+      text("id"),
+      ...TAIL,
+    ],
+  },
+  {
+    recordType: "document_folder",
+    title: "Document folders",
+    columns: [
+      RECORD_TYPE,
+      text("name"),
+      text("parent_id"),
+      int("tax_year"),
+      int("sort_order"),
+      text("default_key"),
+      text("id"),
+      ...TAIL,
+    ],
+  },
+  {
+    // The bytes are not in the file: they are on the device, by sha256. A restore from this CSV
+    // brings the rows back; the files need a backup that includes them.
+    recordType: "document",
+    title: "Documents",
+    columns: [
+      RECORD_TYPE,
+      text("name"),
+      text("folder_id"),
+      text("mime"),
+      sizeLabel,
+      int("size_bytes"),
+      text("sha256"),
+      text("added_at"),
+      text("notes"),
+      text("id"),
+      ...TAIL,
+    ],
+  },
+  {
+    recordType: "document_link",
+    title: "Document links",
+    columns: [
+      RECORD_TYPE,
+      text("document_id"),
+      text("linked_record_type"),
+      text("linked_record_id"),
       text("id"),
       ...TAIL,
     ],

@@ -282,6 +282,43 @@ describe("describeHistoryRow", () => {
       "Import updated 1 row and added 1 row",
     ],
     [
+      "an uploaded document",
+      row("document", "insert", undefined, {
+        id: "doc_1",
+        name: "Demo receipt.pdf",
+        folderId: null,
+        mime: "application/pdf",
+        sizeBytes: 2048,
+        sha256: "a".repeat(64),
+        notes: null,
+        deletedAt: null,
+      }),
+      "added",
+      "Added document: Demo receipt.pdf",
+    ],
+    [
+      "a new document folder",
+      row("document_folder", "insert", undefined, {
+        id: "df_1",
+        name: "Tax forms",
+        deletedAt: null,
+      }),
+      "added",
+      "Added document folder: Tax forms",
+    ],
+    [
+      "a document attached to an expense",
+      row("document_link", "insert", undefined, {
+        id: "dl_1",
+        documentId: "doc_1",
+        recordType: "expense",
+        recordId: "ex_1",
+        deletedAt: null,
+      }),
+      "added",
+      "Added document link: attached to an expense",
+    ],
+    [
       "a table it does not know",
       row("mystery_table", "update", { id: "x" }, { id: "x" }),
       "edited",

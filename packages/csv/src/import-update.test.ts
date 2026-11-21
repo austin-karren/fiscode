@@ -455,3 +455,147 @@ describe("columns are per row, not per record type (review #78 r2)", () => {
     expect(planImport(existing, read.bundle, "update", read).warnings.outOfRange.count).toBe(0);
   });
 });
+
+describe("another device's document folders (review #84 r4)", () => {
+  const folder = (
+    id: string,
+    name: string,
+    defaultKey: string | null,
+    parentId: string | null = null,
+  ) => ({
+    id: id as never,
+    parentId,
+    name,
+    taxYear: 2026,
+    sortOrder: 0,
+    defaultKey,
+    createdAt: FIXED,
+    updatedAt: FIXED,
+    deletedAt: null as string | null,
+  });
+  const here = (): Bundle => ({
+    ...app(),
+    documentFolders: [
+      folder("df_here", "2026", "year-root"),
+      folder("df_here_exp", "Expenses", "expenses", "df_here"),
+    ],
+  });
+  const other = (): Bundle => ({
+    ...emptyBundle(),
+    documentFolders: [
+      folder("df_other", "2026", "year-root"),
+      folder("df_other_exp", "Expenses", "expenses", "df_other"),
+      folder("df_other_mine", "Trips", null, "df_other"),
+    ],
+  });
+
+  it.each(["append", "update"] as const)(
+    "%s: folders whose year key is held here keep their rows as plain folders; no duplicate keys",
+    (mode) => {
+      const { next } = applyImport(here(), other(), mode);
+      const keys = next.documentFolders
+        .filter((f) => f.defaultKey !== null)
+        .map((f) => `${f.taxYear}:${f.defaultKey}`);
+      expect(new Set(keys).size).toBe(keys.length);
+      expect(next.documentFolders.map((f) => f.id).toSorted()).toEqual(
+        ["df_here", "df_here_exp", "df_other", "df_other_exp", "df_other_mine"].toSorted(),
+      );
+      expect(next.documentFolders.find((f) => f.id === "df_other")!.defaultKey).toBeNull();
+      expect(next.documentFolders.find((f) => f.id === "df_here")!.defaultKey).toBe("year-root");
+      expect(planImport(here(), other(), mode).keptAsPlainFolders).toBe(2);
+    },
+  );
+
+  it("a key held by a deleted folder here also counts as held", () => {
+    const h = here();
+    h.documentFolders[0] = { ...h.documentFolders[0]!, deletedAt: FIXED };
+    const { next } = applyImport(h, other(), "append");
+    expect(next.documentFolders.find((f) => f.id === "df_other")!.defaultKey).toBeNull();
+  });
+
+  it("Restore replaces everything: keys kept as the file has them; nothing counted", () => {
+    const { next } = applyImport(here(), other(), "restore");
+    expect(next.documentFolders.find((f) => f.id === "df_other")!.defaultKey).toBe("year-root");
+    expect(planImport(here(), other(), "restore").keptAsPlainFolders).toBe(0);
+  });
+});
+
+describe("review #84 r3: a folder kept as plain whose name is taken gets 'Name (2)' (walk step 10)", () => {
+  const folder = (
+    id: string,
+    name: string,
+    defaultKey: string | null,
+    parentId: string | null = null,
+  ) => ({
+    id: id as never,
+    parentId,
+    name,
+    taxYear: 2027,
+    sortOrder: 0,
+    defaultKey,
+    createdAt: FIXED,
+    updatedAt: FIXED,
+    deletedAt: null as string | null,
+  });
+  it.each(["append", "update"] as const)("%s", (mode) => {
+    const here: Bundle = { ...app(), documentFolders: [folder("df_here", "2027", "year-root")] };
+    const theirs: Bundle = {
+      ...emptyBundle(),
+      documentFolders: [
+        folder("df_other", "2027", "year-root"),
+        folder("df_other_exp", "Expenses", "expenses", "df_other"),
+      ],
+    };
+    const { next } = applyImport(here, theirs, mode);
+    const roots = next.documentFolders.filter((f) => f.parentId === null).map((f) => f.name);
+    expect(roots.toSorted()).toEqual(["2027", "2027 (2)"]);
+    // Its child keeps its name: under the renamed root it has no clash.
+    expect(next.documentFolders.find((f) => f.id === "df_other_exp")!.name).toBe("Expenses");
+    // Only the root's key is held here; the incoming Expenses keeps its key (no 2027 Expenses here).
+    expect(planImport(here, theirs, mode).keptAsPlainFolders).toBe(1);
+  });
+});
+
+describe("review #84 r4 nit: Update rows twice with another device's file changes nothing the second time", () => {
+  const folder = (
+    id: string,
+    name: string,
+    defaultKey: string | null,
+    parentId: string | null = null,
+  ) => ({
+    id: id as never,
+    parentId,
+    name,
+    taxYear: 2026,
+    sortOrder: 0,
+    defaultKey,
+    createdAt: FIXED,
+    updatedAt: FIXED,
+    deletedAt: null as string | null,
+  });
+  it("second run: 0 changed, 0 added, the same bundle", () => {
+    const here: Bundle = {
+      ...app(),
+      documentFolders: [
+        folder("df_here", "2026", "year-root"),
+        folder("df_here_exp", "Expenses", "expenses", "df_here"),
+      ],
+    };
+    const theirs: Bundle = {
+      ...emptyBundle(),
+      documentFolders: [
+        folder("df_other", "2026", "year-root"),
+        folder("df_other_exp", "Expenses", "expenses", "df_other"),
+        folder("df_trips", "Trips", null, "df_other"),
+      ],
+    };
+    const first = applyImport(here, theirs, "update").next;
+    expect(first.documentFolders.find((f) => f.id === "df_other")!.name).toBe("2026 (2)");
+    const plan = planImport(first, theirs, "update");
+    expect(plan.changed).toBe(0);
+    expect(plan.written).toEqual({ live: 0, deleted: 0, history: 0 });
+    expect(applyImport(first, theirs, "update").next).toEqual(first);
+    // Add rows the second time adds nothing either (the ids are here).
+    expect(planImport(first, theirs, "append").written.live).toBe(0);
+  });
+});
