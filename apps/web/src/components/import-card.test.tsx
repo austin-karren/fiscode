@@ -247,7 +247,7 @@ describe("import card: an app that holds data", () => {
     const restore = within(dialog).getByRole("radio", { name: "Restore" });
     expect(restore).toHaveAttribute("aria-disabled", "true");
     expect(restore).toHaveAccessibleDescription(
-      "Not for a yearly file: it would remove 2 rows that aren't in it. Use Update rows instead.",
+      "Not for a yearly file: 2 rows would be lost. Use Update rows.",
     );
     // A yearly file over data is an accountant's amended file: Update rows is the mode for it.
     expect(within(dialog).getByRole("radio", { name: "Update rows" })).toBeChecked();
@@ -266,7 +266,7 @@ describe("import card: an app that holds data", () => {
     const restore = within(dialog).getByRole("radio", { name: "Restore" });
     expect(restore).toHaveAttribute("aria-disabled", "true");
     expect(restore).toHaveAccessibleDescription(
-      "Not for a yearly file: it holds 2026 only. Use Update rows for an amended file.",
+      "Not for a yearly file (2026 only): use Update rows.",
     );
   });
 

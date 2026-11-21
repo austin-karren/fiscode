@@ -361,9 +361,10 @@ function refusalCopy(plan: ImportPlan, file: ReadableFile): string {
   if (file.scope !== "yearly") return plan.refusal ?? "";
   const lost = plan.removed.live + plan.removed.deleted;
   const year = file.year === undefined ? "one year" : String(file.year);
+  // One line in the card at 1440 (#52).
   return lost === 0
-    ? `Not for a yearly file: it holds ${year} only. Use Update rows for an amended file.`
-    : `Not for a yearly file: it would remove ${n(lost, "row")} that ${lost === 1 ? "isn't" : "aren't"} in it. Use Update rows instead.`;
+    ? `Not for a yearly file (${year} only): use Update rows.`
+    : `Not for a yearly file: ${n(lost, "row")} would be lost. Use Update rows.`;
 }
 
 function Warnings({ plan }: { plan: ImportPlan }) {
