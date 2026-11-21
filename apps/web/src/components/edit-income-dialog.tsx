@@ -26,6 +26,7 @@ import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { archivedSuffix, pickableParents } from "./parent-name";
 import { useToday } from "../lib/use-today";
 import { noChangesToSave, useEditDialog } from "../hooks/use-edit-dialog";
+import { LinkedDocuments } from "./documents/linked-documents";
 import { recordLabel } from "../lib/record-label";
 
 const KIND_OPTIONS = [
@@ -191,6 +192,7 @@ export function EditIncomeDialog({
               )}
             </TSFormField>
           </div>
+          <LinkedDocuments recordType="income" recordId={income.id} onChanged={onSaved} />
           <DialogFooter className="mt-4">
             <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
             <form.Subscribe

@@ -8,11 +8,13 @@ const { create } = vi.hoisted(() => ({ create: vi.fn(async () => undefined) }));
 vi.mock("@fiscode/db", () => ({
   expenseRepo: { list: async () => [], create, update: vi.fn(), softDelete: vi.fn() },
   profileRepo: { get: async () => null },
+  documentLinkRepo: { forRecord: async () => [], countsFor: async () => ({}) },
 }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useLoaderData: () => loaded,
+  useLocation: () => "",
   useRouter: () => ({ invalidate: vi.fn() }),
 }));
 
@@ -20,7 +22,11 @@ import { GLOSSARY } from "../lib/tax-glossary";
 import { Route } from "./expenses";
 
 // What the loader returns; a test may give it rows.
-const loaded: { expenses: unknown[]; profile: unknown } = { expenses: [], profile: null };
+const loaded: { expenses: unknown[]; profile: unknown; linkCounts: Record<string, number> } = {
+  expenses: [],
+  profile: null,
+  linkCounts: {},
+};
 
 const ExpensesPage = Route.options.component!;
 

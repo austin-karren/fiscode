@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useLoaderData, useLocation, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
@@ -19,7 +19,7 @@ import {
   FieldLabel,
   FieldTitle,
 } from "@fiscode/ui/components/field";
-import { expenseRepo, profileRepo } from "@fiscode/db";
+import { expenseRepo, profileRepo, documentLinkRepo } from "@fiscode/db";
 import { cents, EXPENSE_CATEGORY_LABELS, formatUSD } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { Receipt } from "lucide-react";
@@ -27,6 +27,8 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { Page } from "../components/page";
+import { AttachDialog } from "../components/documents/attach-dialog";
+import { rowAnchor } from "../lib/documents-links";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
 import { DatePicker, dateToIso, isoToDate } from "../components/forms/date-picker";
@@ -66,15 +68,24 @@ const expenseFormSchema = z.object({
 const fs = expenseFormSchema.shape;
 
 export const Route = createFileRoute("/expenses")({
-  loader: async () => ({
-    expenses: await expenseRepo.list(),
-    profile: await profileRepo.get(),
-  }),
+  loader: async () => {
+    const expensesRows = await expenseRepo.list();
+    return {
+      expenses: expensesRows,
+      // Documents per row, in one query for the screen.
+      linkCounts: await documentLinkRepo.countsFor(
+        "expense",
+        expensesRows.map((r) => r.id),
+      ),
+      profile: await profileRepo.get(),
+    };
+  },
   component: ExpensesPage,
 });
 
 function ExpensesPage() {
-  const { expenses, profile } = useLoaderData({ from: "/expenses" });
+  const { expenses, profile, linkCounts } = useLoaderData({ from: "/expenses" });
+  const hash = useLocation({ select: (l) => l.hash });
   const router = useRouter();
 
   const today = useToday();
@@ -406,7 +417,11 @@ function ExpensesPage() {
               .slice()
               .sort((a, b) => (a.date > b.date ? -1 : 1))
               .map((x) => (
-                <DataTable.Row key={x.id}>
+                <DataTable.Row
+                  key={x.id}
+                  id={rowAnchor(x.id)}
+                  className={hash === rowAnchor(x.id) ? "bg-accent" : ""}
+                >
                   <DataTable.Cell label="Date">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="whitespace-nowrap">{formatDate(x.date)}</span>
@@ -459,6 +474,14 @@ function ExpensesPage() {
                         categories={CATEGORIES}
                         onSaved={() => router.invalidate()}
                         seStartDate={profile?.seStartDate}
+                      />
+                      <AttachDialog
+                        recordType="expense"
+                        recordId={x.id}
+                        recordDate={x.date}
+                        recordLabel={recordLabel.expense(x)}
+                        count={linkCounts[x.id] ?? 0}
+                        onChanged={() => router.invalidate()}
                       />
                       <Button variant="ghost" size="sm" onClick={() => duplicate(x)}>
                         Duplicate

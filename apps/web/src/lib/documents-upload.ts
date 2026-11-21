@@ -8,6 +8,8 @@ export type UploadResult = {
   line: string;
   /** When the bytes were already here: the document that first had them. */
   sameAs?: DocumentRow;
+  /** The document this file became, when it was added. */
+  doc?: DocumentRow;
 };
 
 /**
@@ -27,13 +29,14 @@ export async function uploadFiles(
     const first = known.get(d.sha256);
     if (!first) {
       known.set(d.sha256, d);
-      return { name: d.name, ok: true, line: `Added ${d.name}.` };
+      return { name: d.name, ok: true, line: `Added ${d.name}.`, doc: d };
     }
     return {
       name: d.name,
       ok: true,
       line: `Added ${d.name}: the same file as ${first.name} in ${pathOf(first.folderId)}.`,
       sameAs: first,
+      doc: d,
     };
   });
   return [...added, ...failed.map((f) => ({ name: f.name, ok: false, line: errorLine(f.error) }))];

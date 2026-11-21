@@ -25,6 +25,7 @@ import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { archivedSuffix, pickableParents } from "./parent-name";
 import { useToday } from "../lib/use-today";
 import { noChangesToSave, useEditDialog } from "../hooks/use-edit-dialog";
+import { LinkedDocuments } from "./documents/linked-documents";
 import { recordLabel } from "../lib/record-label";
 
 const editSchema = z.object({
@@ -164,6 +165,7 @@ export function EditMileageDialog({
               )}
             </TSFormField>
           </div>
+          <LinkedDocuments recordType="mileage" recordId={mileage.id} onChanged={onSaved} />
           <DialogFooter className="mt-4">
             <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
             <form.Subscribe

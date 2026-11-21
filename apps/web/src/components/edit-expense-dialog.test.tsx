@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // SQLite over OPFS does not exist in jsdom; the repo is replaced at the
 // package boundary.
-vi.mock("@fiscode/db", () => ({ expenseRepo: { update: vi.fn() } }));
+vi.mock("@fiscode/db", () => ({
+  expenseRepo: { update: vi.fn() },
+  documentLinkRepo: { forRecord: async () => [], countsFor: async () => ({}) },
+}));
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 
 import { expenseRepo } from "@fiscode/db";

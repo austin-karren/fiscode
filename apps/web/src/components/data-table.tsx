@@ -44,11 +44,21 @@ function TBody({ children }: { children: ReactNode }) {
   );
 }
 
-function TR({ children, className = "" }: { children: ReactNode; className?: string }) {
+function TR({
+  children,
+  className = "",
+  id,
+}: {
+  children: ReactNode;
+  className?: string;
+  /** A link target ("#row-<id>"): the row is marked while it's the page's target. */
+  id?: string;
+}) {
   return (
     <tr
       role="row"
-      className={`border-b border-border/40 last:border-b-0 @max-2xl:block @max-2xl:py-2 ${className}`}
+      id={id}
+      className={`scroll-mt-20 border-b border-border/40 last:border-b-0 @max-2xl:block @max-2xl:py-2 ${className}`}
     >
       {children}
     </tr>

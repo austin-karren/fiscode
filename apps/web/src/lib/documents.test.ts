@@ -44,8 +44,18 @@ describe("uploading documents (stub)", () => {
       () => "Demo upload",
     );
     expect(results).toEqual([
-      { name: "demo-receipt.pdf", ok: true, line: "Added demo-receipt.pdf." },
-      { name: "demo-notes.txt", ok: true, line: "Added demo-notes.txt." },
+      {
+        name: "demo-receipt.pdf",
+        ok: true,
+        line: "Added demo-receipt.pdf.",
+        doc: expect.objectContaining({ name: "demo-receipt.pdf" }),
+      },
+      {
+        name: "demo-notes.txt",
+        ok: true,
+        line: "Added demo-notes.txt.",
+        doc: expect.objectContaining({ name: "demo-notes.txt" }),
+      },
       {
         name: "demo-letter.docx",
         ok: false,

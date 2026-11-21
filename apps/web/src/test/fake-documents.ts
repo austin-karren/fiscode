@@ -14,6 +14,7 @@ import {
   FolderNotFoundError,
   FolderTooDeepError,
   MAX_DOCUMENT_BYTES,
+  RecordNotFoundError,
   YEAR_DEFAULT_FOLDER_KEYS,
   YEAR_ROOT_KEY,
   validDocumentName,
@@ -368,8 +369,15 @@ export const dropBytesForStub = (sha256: string) => blobs.delete(sha256);
 
 // ─── documentLinkRepo ───────────────────────────────────────────────────────
 
+/** Stub only: records the real repo would find deleted, so `link` refuses them. */
+const goneRecords = new Set<string>();
+export const deleteRecordForStub = (recordId: string) => goneRecords.add(recordId);
+
 export const documentLinkRepo = {
   async link(documentId: string, recordType: string, recordId: string): Promise<DocumentLinkRow> {
+    if (!documents.get(documentId) || documents.get(documentId)?.deletedAt)
+      throw new DocumentNotFoundError();
+    if (goneRecords.has(recordId)) throw new RecordNotFoundError();
     const same = live(links.values()).find(
       (l) => l.documentId === documentId && l.recordType === recordType && l.recordId === recordId,
     );
@@ -392,6 +400,18 @@ export const documentLinkRepo = {
     if (!row || row.deletedAt) return false;
     links.set(linkId, { ...row, deletedAt: now() });
     return true;
+  },
+  async revertTo(id: string, snapshot: DocumentLinkRow) {
+    if (!links.has(id)) return undefined;
+    links.set(id, { ...snapshot, updatedAt: now() });
+    return links.get(id);
+  },
+  async forRecord(recordType: string, recordId: string) {
+    return live(links.values())
+      .filter((l) => l.recordType === recordType && l.recordId === recordId)
+      .map((l) => ({ ...l, document: documents.get(l.documentId)! }))
+      .filter((l) => l.document && l.document.deletedAt === null)
+      .toSorted((a, b) => a.document.name.localeCompare(b.document.name));
   },
   async forDocument(documentId: string) {
     return live(links.values())

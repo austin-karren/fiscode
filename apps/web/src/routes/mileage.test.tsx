@@ -7,11 +7,13 @@ vi.mock("@fiscode/db", () => ({
   mileageRepo: { list: async () => [], create: vi.fn(), softDelete: vi.fn() },
   vehicleRepo: { listIncludingDeleted: async () => [] },
   profileRepo: { get: async () => null },
+  documentLinkRepo: { forRecord: async () => [], countsFor: async () => ({}) },
 }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
-  useLoaderData: () => ({ mileage: [], vehicles: [], profile: null }),
+  useLoaderData: () => ({ mileage: [], vehicles: [], profile: null, linkCounts: {} }),
+  useLocation: () => "",
   useRouter: () => ({ invalidate: vi.fn() }),
 }));
 

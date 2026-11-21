@@ -34,6 +34,7 @@ import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { useToday } from "../lib/use-today";
 import { noChangesToSave, useEditDialog } from "../hooks/use-edit-dialog";
+import { LinkedDocuments } from "./documents/linked-documents";
 import { recordLabel } from "../lib/record-label";
 import { placedInServiceFor } from "../lib/equipment";
 
@@ -286,6 +287,7 @@ export function EditExpenseDialog({
               }
             </form.Subscribe>
           </div>
+          <LinkedDocuments recordType="expense" recordId={expense.id} onChanged={onSaved} />
           <DialogFooter className="mt-4">
             <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
             <form.Subscribe
