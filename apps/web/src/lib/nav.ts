@@ -1,5 +1,6 @@
 import {
   Briefcase,
+  Building2,
   Car,
   Clock,
   CloudDownload,
@@ -8,6 +9,7 @@ import {
   Gauge,
   History,
   Home,
+  Landmark,
   Receipt,
   UserCircle2,
 } from "lucide-react";
@@ -29,6 +31,8 @@ export const NAV_GROUPS = [
       { to: "/expenses", label: "Expenses", icon: Receipt },
       { to: "/mileage", label: "Mileage", icon: Car },
       { to: "/time", label: "Time", icon: Clock },
+      { to: "/w2-jobs", label: "W-2 jobs", icon: Building2 },
+      { to: "/payments", label: "Payments", icon: Landmark },
     ],
   },
   {

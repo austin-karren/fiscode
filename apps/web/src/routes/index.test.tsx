@@ -67,6 +67,16 @@ const loaderData = {
     seStartDate: "2026-03-02",
     excludedBeforeSeStart: { income: 1, expense: 0, mileage: 0 },
   },
+  // DF-07 (stub until d-data's engine): nothing paid, no return entered.
+  payments: stubPayments({
+    year: 2026,
+    floor: 0,
+    utahMinimumBeforePayments: undefined,
+    utahDueDate: undefined,
+    jobs: [],
+    payments: [],
+  }) as PaymentsResult,
+  priorYearBasis: "not_entered" as PriorYearBasis,
 };
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
@@ -80,6 +90,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 import { exampleBundle } from "@fiscode/csv";
 import { estimateBundleYear } from "@fiscode/tax";
 
+import { stubPayments, type PaymentsResult, type PriorYearBasis } from "../lib/w2-payments-stub";
 import { Route } from "./index";
 
 const Dashboard = Route.options.component!;
@@ -458,5 +469,125 @@ describe("equipment ticked Startup", () => {
   it("shows nothing when no equipment is ticked Startup", () => {
     render(<Dashboard />);
     expect(screen.queryByText(/ticked Startup/)).not.toBeInTheDocument();
+  });
+});
+
+describe("paid so far (DF-07, stub outputs)", () => {
+  // Demo: a W-2 Jan 1 - Feb 18 ($950.50 federal, $380 Utah withheld), federal payments of $1,200
+  // on Apr 10 and Jun 10, and $300 to Utah; a $6,000 federal target, a $1,000 Utah minimum.
+  const FIXED = "2026-06-04T12:00:00.000Z";
+  const dated = { createdAt: FIXED, updatedAt: FIXED, deletedAt: null };
+  const job = {
+    ...dated,
+    id: "w2_demo",
+    taxYear: 2026,
+    employer: "Demo Corp",
+    startDate: "2026-01-01",
+    endDate: "2026-02-18",
+    wagesCents: 850_000,
+    federalWithholdingCents: 95_050,
+    ssWagesCents: 850_000,
+    ssTipsCents: 0,
+    ssTaxWithheldCents: 0,
+    medicareWagesCents: 850_000,
+    stateWagesCents: 850_000,
+    stateWithholdingCents: 38_000,
+    notes: null,
+  };
+  const pay = (id: string, date: string, amountCents: number, jurisdiction: "federal" | "UT") => ({
+    ...dated,
+    id,
+    date,
+    amountCents,
+    jurisdiction,
+    taxYear: 2026,
+    appliedQuarter: null,
+    notes: null,
+  });
+  const demo = () =>
+    stubPayments({
+      year: 2026,
+      floor: 600_000,
+      utahMinimumBeforePayments: 100_000,
+      utahDueDate: "2027-04-15" as never,
+      jobs: [job],
+      payments: [
+        pay("p1", "2026-04-10", 120_000, "federal"),
+        pay("p2", "2026-06-10", 120_000, "federal"),
+        pay("p3", "2026-06-10", 30_000, "UT"),
+      ],
+    });
+  const withPayments = (payments: PaymentsResult, run: () => void) => {
+    const saved = loaderData.payments;
+    loaderData.payments = payments;
+    try {
+      run();
+    } finally {
+      loaderData.payments = saved;
+    }
+  };
+
+  it("shows each quarter's due-by, paid-by and shortfall, and the federal and Utah totals", () => {
+    withPayments(demo(), () => {
+      render(<Dashboard />);
+      const row = (q: number) => screen.getByText(new RegExp(`^Q${q}, due`)).closest("tr")!;
+      // Q1: $1,500 due by Apr 15; $237.63 withheld share + $1,200 paid = $1,437.63; $62.37 short.
+      expect(row(1)).toHaveTextContent("$1,500.00");
+      expect(row(1)).toHaveTextContent("$1,437.63");
+      expect(row(1)).toHaveTextContent("$62.37");
+      // Q2: $3,000 due; $475.25 + $2,400 = $2,875.25; $124.75 short.
+      expect(row(2)).toHaveTextContent("$2,875.25");
+      expect(row(2)).toHaveTextContent("$124.75");
+      expect(screen.getByText(/^Federal:/).closest("p")).toHaveTextContent(
+        "Federal: $3,350.50 paid of $6,000.00 ($950.50 withheld, $2,400.00 in payments). $2,649.50 still due.",
+      );
+      expect(screen.getByText(/^Utah:/).closest("p")).toHaveTextContent(
+        "Utah: $680.00 paid ($380.00 withheld, $300.00 in payments). $320.00 still due by Apr 15, 2027.",
+      );
+      expect(screen.getByText(/doesn't calculate an underpayment penalty yet/)).toBeInTheDocument();
+      expect(screen.queryByText("On track")).not.toBeInTheDocument();
+    });
+  });
+
+  it("mutes quarters already past", () => {
+    withPayments(demo(), () => {
+      render(<Dashboard />);
+      // This file runs on July 1, 2026: Q1 (Apr 15) and Q2 (Jun 15) are past; Q3 is not.
+      expect(screen.getByText(/^Q1, due/).closest("tr")).toHaveClass("text-muted-foreground");
+      expect(screen.getByText(/^Q2, due/).closest("tr")).toHaveClass("text-muted-foreground");
+      expect(screen.getByText(/^Q3, due/).closest("tr")).not.toHaveClass("text-muted-foreground");
+    });
+  });
+
+  it("says 'On track' when no quarter is short", () => {
+    const met = demo();
+    met.federal.safeHarborMet = true;
+    withPayments(met, () => {
+      render(<Dashboard />);
+      expect(screen.getByText("On track")).toBeInTheDocument();
+    });
+  });
+});
+
+describe("didn't file a 2025 return (DF-07)", () => {
+  it("shows the 90% alert, and not the request for a return", () => {
+    const saved = loaderData.priorYearBasis;
+    const d = loaderData.derived as { priorYearFiguresApplied?: boolean };
+    loaderData.priorYearBasis = "not_filed";
+    d.priorYearFiguresApplied = false;
+    try {
+      render(<Dashboard />);
+      const alert = screen.getByText("No 2025 return filed").closest("[data-slot=alert]");
+      expect(alert).toHaveTextContent(/target is 90% of this year's tax/);
+      expect(screen.queryByText(/Filed a 2025 return/)).not.toBeInTheDocument();
+    } finally {
+      loaderData.priorYearBasis = saved;
+      delete d.priorYearFiguresApplied;
+    }
+  });
+
+  it("shows no 90% alert when the return is just not entered", () => {
+    render(<Dashboard />);
+    expect(screen.queryByText("No 2025 return filed")).not.toBeInTheDocument();
   });
 });

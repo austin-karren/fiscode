@@ -64,6 +64,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   useRouter: () => ({ invalidate }),
 }));
 
+import { priorYearNotFiledFor, priorYearNotFiledStore } from "../lib/w2-payments-stub";
 import { Route } from "./profile";
 import { expectNoRawValues } from "../test/raw-values";
 
@@ -409,6 +410,29 @@ describe("last year's return (prior-year safe harbor)", () => {
     );
     // Each is optional, and says so.
     expect(screen.getByLabelText("Your 2025 AGI (optional)")).toBeInTheDocument();
+  });
+
+  it("'I didn't file a 2025 return' hides the three figures and saves them blank, stamped 2025", async () => {
+    try {
+      render(<ProfilePage />);
+      expect(screen.getByLabelText(/^Your 2025 total tax/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("checkbox", { name: /I didn't file a 2025 return/ }));
+      expect(screen.queryByLabelText(/^Your 2025 total tax/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/^Your 2025 AGI/)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+      await waitFor(() => expect(upsert).toHaveBeenCalled());
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          priorYearTotalTaxCents: null,
+          priorYearAgiCents: null,
+          priorYearStateTaxCents: null,
+          priorYearFiguresYear: 2025,
+        }),
+      );
+      expect(priorYearNotFiledFor(2026)).toBe(true);
+    } finally {
+      priorYearNotFiledStore.year = null;
+    }
   });
 
   it("shows the Utah field only when the state is Utah", () => {

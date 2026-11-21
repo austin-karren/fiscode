@@ -20,6 +20,14 @@ import {
 import { Badge } from "@fiscode/ui/components/badge";
 import { CircleAlert } from "lucide-react";
 import { StartupIgnoredNotice } from "../components/startup-ignored-notice";
+import { PaidVsTarget } from "../components/paid-vs-target";
+import {
+  estimatedPaymentRepo,
+  priorYearNotFiledFor,
+  stubPayments,
+  w2JobRepo,
+  type PriorYearBasis,
+} from "../lib/w2-payments-stub";
 
 import { EntityUnsupportedAlert } from "../components/entity-unsupported-alert";
 import { GLOSSARY } from "../lib/tax-glossary";
@@ -62,12 +70,30 @@ export const Route = createFileRoute("/")({
     const profile = bundle.profile!;
     const year = yearOf(todayIso());
     const { result, derived } = estimateBundleYear(bundle, year);
+    // DF-07 outputs from the stub until d-data's engine ships them on `result`.
+    const payments = stubPayments({
+      year,
+      floor: result.safeHarbor.floor,
+      // Today's minimum already nets the spouse's Utah withholding; the stub nets only the
+      // taxpayer's own box 17 and Utah payments from it. The engine's line 5 replaces this.
+      utahMinimumBeforePayments: result.statePrepayment?.minimum,
+      utahDueDate: result.statePrepayment?.dueDate,
+      jobs: await w2JobRepo.listIncludingDeleted(),
+      payments: await estimatedPaymentRepo.listIncludingDeleted(),
+    });
+    const priorYearBasis: PriorYearBasis = priorYearNotFiledFor(year)
+      ? "not_filed"
+      : result.safeHarbor.firstYear
+        ? "not_entered"
+        : "entered";
     return {
       bundle,
       profile,
       year,
       result,
       derived,
+      payments,
+      priorYearBasis,
       hasExact: getYearConfig(year).year === year,
     };
   },
@@ -75,7 +101,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
-  const { profile, year, result, derived, hasExact } = useLoaderData({
+  const { profile, year, result, derived, hasExact, payments, priorYearBasis } = useLoaderData({
     from: "/",
   });
   const today = todayIso();
@@ -104,7 +130,12 @@ function Dashboard() {
       <OfficeAreaAlert rejected={derived.homeOfficeAreaRejected} />
       <Section179Notice count={derived.equipmentAssumedSection179} />
       <StartupIgnoredNotice count={derived.startupIgnoredForEquipment} />
-      <PriorYearReturnNotice applied={derived.priorYearFiguresApplied} year={year} />
+      {/* "Didn't file" answers the question the notice asks. */}
+      {priorYearBasis === "not_filed" ? (
+        <NotFiledAlert year={year} />
+      ) : (
+        <PriorYearReturnNotice applied={derived.priorYearFiguresApplied} year={year} />
+      )}
 
       {/* One primary figure, the year's total; the three taxes it adds up
           recede beside it. */}
@@ -193,6 +224,8 @@ function Dashboard() {
           ) : null}
         </CardContent>
       </Card>
+
+      <PaidVsTarget payments={payments} today={today} />
 
       <Card>
         <CardHeader>
@@ -386,6 +419,21 @@ function Section179Notice({ count }: { count: number }) {
         {count === 1 ? "is" : "are"} deducted in full this year, which assumes a Section 179
         election. Tick §179 candidate in <Link to="/expenses">Expenses</Link> to confirm, and check
         it with your accountant.
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+// "I didn't file a <year-1> return" (Profile): the prior-year safe harbor isn't available, so the
+// target is 90% of this year's tax (i2210 line 8). Shown only for that answer, never assumed.
+function NotFiledAlert({ year }: { year: number }) {
+  return (
+    <Alert variant="warning">
+      <CircleAlert />
+      <AlertTitle>No {year - 1} return filed</AlertTitle>
+      <AlertDescription>
+        The pay-as-you-go target is 90% of this year's tax. Owing the full balance at filing is
+        allowed, but underpayment penalty risk applies if you pay too little through the year.
       </AlertDescription>
     </Alert>
   );
