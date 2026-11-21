@@ -45,7 +45,7 @@ export const applyImport = (
   }
   if (mode === "update") {
     return {
-      next: updateBundle(existing, incoming, file.columns),
+      next: plainWhereKeyHeld(existing, updateBundle(existing, incoming, file.columns)).next,
       conflicts: [],
       replaced: existing,
     };
@@ -93,7 +93,7 @@ export const applyImport = (
     // both sides already hold is the same entry, not a conflict to report.
     history: mergeRows("history", existing.history, incoming.history, []),
   };
-  return { next, conflicts, replaced: existing };
+  return { next: plainWhereKeyHeld(existing, next).next, conflicts, replaced: existing };
 };
 
 const mergeRows = <T extends { id: string }>(
@@ -228,4 +228,30 @@ export const withFileFields = <T extends object>(
   const out: Record<string, unknown> = { ...(here as Record<string, unknown>) };
   for (const [k, v] of Object.entries(file)) if (fields.has(k)) out[k] = v;
   return out as T;
+};
+
+/**
+ * Add rows / Update rows: a folder coming from the file whose (tax year, default key) is held here
+ * by a different folder, live or deleted, keeps its row but drops its key, so it becomes a plain
+ * folder. The database allows one folder per key per year (another device's backup has its own
+ * year folders). Restore replaces everything and doesn't need this. Returns the count, for the plan.
+ */
+export const plainWhereKeyHeld = (
+  existing: Bundle,
+  next: Bundle,
+): { next: Bundle; keptAsPlain: number } => {
+  const holder = new Map<string, string>();
+  for (const f of existing.documentFolders) {
+    if (f.defaultKey !== null && f.taxYear !== null)
+      holder.set(`${f.taxYear}\u0000${f.defaultKey}`, f.id);
+  }
+  let keptAsPlain = 0;
+  const documentFolders = next.documentFolders.map((f) => {
+    if (f.defaultKey === null || f.taxYear === null) return f;
+    const held = holder.get(`${f.taxYear}\u0000${f.defaultKey}`);
+    if (held === undefined || held === f.id) return f;
+    keptAsPlain++;
+    return { ...f, defaultKey: null };
+  });
+  return { next: { ...next, documentFolders }, keptAsPlain };
 };

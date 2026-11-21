@@ -455,3 +455,67 @@ describe("columns are per row, not per record type (review #78 r2)", () => {
     expect(planImport(existing, read.bundle, "update", read).warnings.outOfRange.count).toBe(0);
   });
 });
+
+describe("another device's document folders (review #84 r4)", () => {
+  const folder = (
+    id: string,
+    name: string,
+    defaultKey: string | null,
+    parentId: string | null = null,
+  ) => ({
+    id: id as never,
+    parentId,
+    name,
+    taxYear: 2026,
+    sortOrder: 0,
+    defaultKey,
+    createdAt: FIXED,
+    updatedAt: FIXED,
+    deletedAt: null as string | null,
+  });
+  const here = (): Bundle => ({
+    ...app(),
+    documentFolders: [
+      folder("df_here", "2026", "year-root"),
+      folder("df_here_exp", "Expenses", "expenses", "df_here"),
+    ],
+  });
+  const other = (): Bundle => ({
+    ...emptyBundle(),
+    documentFolders: [
+      folder("df_other", "2026", "year-root"),
+      folder("df_other_exp", "Expenses", "expenses", "df_other"),
+      folder("df_other_mine", "Trips", null, "df_other"),
+    ],
+  });
+
+  it.each(["append", "update"] as const)(
+    "%s: folders whose year key is held here keep their rows as plain folders; no duplicate keys",
+    (mode) => {
+      const { next } = applyImport(here(), other(), mode);
+      const keys = next.documentFolders
+        .filter((f) => f.defaultKey !== null)
+        .map((f) => `${f.taxYear}:${f.defaultKey}`);
+      expect(new Set(keys).size).toBe(keys.length);
+      expect(next.documentFolders.map((f) => f.id).toSorted()).toEqual(
+        ["df_here", "df_here_exp", "df_other", "df_other_exp", "df_other_mine"].toSorted(),
+      );
+      expect(next.documentFolders.find((f) => f.id === "df_other")!.defaultKey).toBeNull();
+      expect(next.documentFolders.find((f) => f.id === "df_here")!.defaultKey).toBe("year-root");
+      expect(planImport(here(), other(), mode).keptAsPlainFolders).toBe(2);
+    },
+  );
+
+  it("a key held by a deleted folder here also counts as held", () => {
+    const h = here();
+    h.documentFolders[0] = { ...h.documentFolders[0]!, deletedAt: FIXED };
+    const { next } = applyImport(h, other(), "append");
+    expect(next.documentFolders.find((f) => f.id === "df_other")!.defaultKey).toBeNull();
+  });
+
+  it("Restore replaces everything: keys kept as the file has them; nothing counted", () => {
+    const { next } = applyImport(here(), other(), "restore");
+    expect(next.documentFolders.find((f) => f.id === "df_other")!.defaultKey).toBe("year-root");
+    expect(planImport(here(), other(), "restore").keptAsPlainFolders).toBe(0);
+  });
+});

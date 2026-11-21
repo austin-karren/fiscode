@@ -562,3 +562,47 @@ const dropColumns = (csv: string, names: string[]): string => {
     })
     .join("\r\n");
 };
+
+describe("import card: another device's document folders (review #84 r4)", () => {
+  it("Add rows says how many folders are kept as plain folders", async () => {
+    const at = FIXED;
+    const folder = (
+      id: string,
+      name: string,
+      defaultKey: string | null,
+      parentId: string | null = null,
+    ) => ({
+      id,
+      parentId,
+      name,
+      taxYear: 2026,
+      sortOrder: 0,
+      defaultKey,
+      createdAt: at,
+      updatedAt: at,
+      deletedAt: null,
+    });
+    buildBundle.mockResolvedValue({
+      ...appState(),
+      documentFolders: [folder("df_here", "2026", "year-root")],
+    });
+    render(<ImportCard />);
+    choose(
+      exportBundle(
+        {
+          ...backup(),
+          documentFolders: [
+            folder("df_other", "2026", "year-root"),
+            folder("df_trips", "Trips", null, "df_other"),
+          ],
+        },
+        { scope: "full" },
+      ),
+    );
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Add rows/ }));
+    expect(dialog).toHaveTextContent(
+      "1 folder kept as a plain folder: this profile already has that year's default folders.",
+    );
+  });
+});

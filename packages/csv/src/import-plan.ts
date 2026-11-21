@@ -1,5 +1,11 @@
 import { describeEntityPeriod, findEntityOverlap } from "@fiscode/core";
-import { fieldsOf, updateTakesFileRow, withFileFields, type ImportMode } from "./apply-import.ts";
+import {
+  fieldsOf,
+  plainWhereKeyHeld,
+  updateTakesFileRow,
+  withFileFields,
+  type ImportMode,
+} from "./apply-import.ts";
 import type { Bundle } from "./bundle-types.ts";
 import { formRangeProblems, TABLE_RECORD_TYPES } from "./form-ranges.ts";
 import { parseCsv, rowLineKey, type ImportError } from "./import.ts";
@@ -151,6 +157,11 @@ export type ImportPlan = {
   keptLive: number;
   /** Add rows and Update rows: what the rows they write would trip. Restore never warns. */
   warnings: ImportWarnings;
+  /**
+   * Add rows and Update rows: folders from the file kept as plain folders, because this profile
+   * already has that year's default folders (`plainWhereKeyHeld`).
+   */
+  keptAsPlainFolders: number;
 };
 
 /** How many rows that break a form's range are listed before the rest become a count. */
@@ -228,6 +239,7 @@ export const planImport = (
       keptDeleted: 0,
       keptLive: 0,
       warnings: warningsFor(existing, incoming, mode, file.rowLines, file.columns),
+      keptAsPlainFolders: plainWhereKeyHeld(existing, incoming).keptAsPlain,
     };
   }
 
@@ -287,6 +299,7 @@ export const planImport = (
       keptDeleted,
       keptLive,
       warnings: warningsFor(existing, incoming, mode, file.rowLines, file.columns),
+      keptAsPlainFolders: plainWhereKeyHeld(existing, incoming).keptAsPlain,
     };
   }
 
@@ -323,6 +336,7 @@ export const planImport = (
     keptDeleted: 0,
     keptLive: 0,
     warnings: NO_WARNINGS,
+    keptAsPlainFolders: 0,
   };
 };
 

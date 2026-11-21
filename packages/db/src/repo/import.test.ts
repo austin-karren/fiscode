@@ -3,7 +3,14 @@ import type Database from "better-sqlite3";
 import { setupTestDb, teardownTestDb } from "../test/setup-db.ts";
 import { emptyBundle, type Bundle } from "../bundle.ts";
 import { applyImport, exportBundle, parseCsv } from "@fiscode/csv";
-import { buildBundle, clientRepo, expenseRepo, historyRepo, importBundle } from "./index.ts";
+import {
+  buildBundle,
+  clientRepo,
+  expenseRepo,
+  folderRepo,
+  historyRepo,
+  importBundle,
+} from "./index.ts";
 
 const FIXED = "2026-06-04T12:00:00.000Z";
 
@@ -513,5 +520,48 @@ describe("importBundle — document rows (v6)", () => {
     expect(round.documentFolders).toEqual(withDocs.documentFolders);
     expect(round.documents).toEqual(withDocs.documents);
     expect(round.documentLinks).toEqual(withDocs.documentLinks);
+  });
+});
+
+describe("importBundle — another device's document folders via Add rows (review #84 r4)", () => {
+  it("succeeds: the incoming year folders become plain folders; no duplicate keys", async () => {
+    await folderRepo.ensureYearDefaults(2026);
+    const existing = await buildBundle({ includeDeleted: true, includeHistory: true });
+    const at = "2026-06-04T12:00:00.000Z";
+    const theirs: Bundle = {
+      ...emptyBundle(),
+      documentFolders: [
+        {
+          id: "df_other",
+          parentId: null,
+          name: "2026",
+          taxYear: 2026,
+          sortOrder: 0,
+          defaultKey: "year-root",
+          createdAt: at,
+          updatedAt: at,
+          deletedAt: null,
+        },
+        {
+          id: "df_other_exp",
+          parentId: "df_other",
+          name: "Expenses",
+          taxYear: 2026,
+          sortOrder: 0,
+          defaultKey: "expenses",
+          createdAt: at,
+          updatedAt: at,
+          deletedAt: null,
+        },
+      ],
+    };
+    await importBundle(applyImport(existing, theirs, "append").next, "import-append");
+    const after = await buildBundle({ includeDeleted: true });
+    expect(after.documentFolders).toHaveLength(9);
+    const keys = after.documentFolders
+      .filter((f) => f.defaultKey)
+      .map((f) => `${f.taxYear}:${f.defaultKey}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(after.documentFolders.find((f) => f.id === "df_other")!.defaultKey).toBeNull();
   });
 });
