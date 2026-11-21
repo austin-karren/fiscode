@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
 import { Button } from "@fiscode/ui/components/button";
@@ -52,26 +52,32 @@ export function BackupCard({
 }) {
   const [dialog, setDialog] = useState<"backup" | "restore" | null>(null);
   const close = (open: boolean) => !open && setDialog(null);
+  const restoreButton = useRef<HTMLButtonElement>(null);
+  // Arriving by a "restore a backup" link (#backup): focus lands on Restore, not the page body.
+  useEffect(() => {
+    if (window.location.hash === `#${BACKUP_CARD_ID}`) restoreButton.current?.focus();
+  }, []);
   return (
     <Card id={BACKUP_CARD_ID} className="scroll-mt-20">
       <CardHeader>
         <CardTitle>
           <SectionTitle>
-            {variant === "setup" ? "Restore from a full backup" : "Back up everything"}
+            {variant === "setup" ? "Restore an encrypted backup" : "Encrypted backup"}
           </SectionTitle>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">
           {variant === "setup"
-            ? "A full backup (.zip.age) brings back every row, your history and your document files."
-            : "One encrypted file with every row, your history and your document files. Restore it here or on another device."}
+            ? "An encrypted backup (.zip.age) from Back up everything brings back every row, your history and your document files."
+            : "One encrypted file (.zip.age) with every row, your history and your document files. Restore it here or on another device."}
         </p>
         <div className="flex flex-wrap gap-2">
           {variant === "dashboard" ? (
             <Button onClick={() => setDialog("backup")}>Back up everything</Button>
           ) : null}
           <Button
+            ref={restoreButton}
             variant={variant === "dashboard" ? "outline" : "default"}
             onClick={() => setDialog("restore")}
           >
@@ -137,7 +143,11 @@ function BackupBody({ onDone }: { onDone: () => void }) {
       ? `Use at least ${MIN_PASSPHRASE_LENGTH} characters (${v.length} so far).`
       : undefined;
   const checkSecond = (v = second) =>
-    v !== first ? "The two passphrases don't match." : undefined;
+    v === ""
+      ? "Enter the passphrase again."
+      : v !== first
+        ? "The two passphrases don't match."
+        : undefined;
 
   const submit = async () => {
     const next = { first: checkFirst(), second: checkSecond() };
@@ -148,9 +158,18 @@ function BackupBody({ onDone }: { onDone: () => void }) {
     }
     setFailure(undefined);
     try {
-      const { blob, fileName } = await createBackup({ passphrase: first, onProgress: setProgress });
+      const { blob, fileName, manifest } = await createBackup({
+        passphrase: first,
+        onProgress: setProgress,
+      });
       downloadBlob(blob, fileName);
-      toast.success(`Backed up to ${fileName}.`);
+      const without = new Set(manifest.missing.flatMap((m) => m.documentIds)).size;
+      toast.success(`Backed up to ${fileName}.`, {
+        description:
+          without > 0
+            ? `${without} ${without === 1 ? "document has" : "documents have"} no file on this device and ${without === 1 ? "is" : "are"} backed up without it.`
+            : undefined,
+      });
       onDone();
     } catch (err) {
       setProgress(undefined);
@@ -193,7 +212,13 @@ function BackupBody({ onDone }: { onDone: () => void }) {
           disabled={busy}
           aria-invalid={errors.first ? true : undefined}
           aria-describedby={`${id}-strength ${id}-lost${errors.first ? ` ${id}-first-error` : ""}`}
-          onChange={(e) => setFirst(e.target.value)}
+          onChange={(e) => {
+            setFirst(e.target.value);
+            // A "too short" error goes once the value is long enough: it shouldn't sit beside
+            // "Strong". Nothing new is flagged on change.
+            if (errors.first && e.target.value.length >= MIN_PASSPHRASE_LENGTH)
+              setErrors((x) => ({ ...x, first: undefined }));
+          }}
           onBlur={() => setErrors((x) => ({ ...x, first: checkFirst() }))}
         />
         <p id={`${id}-lost`} className="text-xs text-muted-foreground">
@@ -259,6 +284,20 @@ function RestoreBody({ confirm, onDone }: { confirm: boolean; onDone: () => void
   const input = useRef<HTMLInputElement>(null);
   const id = useId();
   const busy = progress !== undefined;
+  const passInput = useRef<HTMLInputElement>(null);
+  const restoreButton = useRef<HTMLButtonElement>(null);
+  const problemAlert = useRef<HTMLDivElement>(null);
+
+  // After each async step, focus goes where the user acts next, never to the page body: the
+  // passphrase (selected, to retype) after a wrong one, the alert after a refused file, and
+  // Restore on the confirm step.
+  useEffect(() => {
+    if (step.at === "passphrase" && step.problem) {
+      passInput.current?.focus();
+      passInput.current?.select();
+    } else if (step.at === "pick" && step.problem) problemAlert.current?.focus();
+    else if (step.at === "confirm") restoreButton.current?.focus();
+  }, [step]);
 
   const write = async (fileName: string, ready: Ready) => {
     try {
@@ -346,7 +385,7 @@ function RestoreBody({ confirm, onDone }: { confirm: boolean; onDone: () => void
             }}
           />
           {step.problem ? (
-            <Alert variant="destructive">
+            <Alert ref={problemAlert} tabIndex={-1} variant="destructive" className="outline-none">
               <CircleAlert />
               <AlertTitle>This backup can't be restored</AlertTitle>
               <AlertDescription>{step.problem}</AlertDescription>
@@ -383,6 +422,7 @@ function RestoreBody({ confirm, onDone }: { confirm: boolean; onDone: () => void
           <div className="grid gap-1.5">
             <Label htmlFor={`${id}-pass`}>Passphrase</Label>
             <Input
+              ref={passInput}
               id={`${id}-pass`}
               type="password"
               autoComplete="current-password"
@@ -434,7 +474,7 @@ function RestoreBody({ confirm, onDone }: { confirm: boolean; onDone: () => void
       {step.at === "confirm" ? (
         <>
           <ul className="grid list-disc gap-1 pl-4 text-sm">
-            {describePlan(step.plan, !step.ready.bundle.profile).map((line) => (
+            {describePlan(step.plan, !step.ready.bundle.profile, "restore").map((line) => (
               <li key={line}>{line}</li>
             ))}
             <li>
@@ -472,6 +512,7 @@ function RestoreBody({ confirm, onDone }: { confirm: boolean; onDone: () => void
               Cancel
             </DialogClose>
             <Button
+              ref={restoreButton}
               type="button"
               disabled={busy}
               onClick={() => void write(step.fileName, step.ready)}

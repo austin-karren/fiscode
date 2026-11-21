@@ -11,9 +11,9 @@ export function BackupNudge() {
       </CardHeader>
       <CardContent>
         <p className="text-sm text-muted-foreground">
-          fiscode is local-only. After any meaningful change, download the latest CSV and upload it
-          to a cloud drive as off-device insurance. There is no built-in cloud integration by
-          design.
+          fiscode is local-only. After any meaningful change, use Back up everything and keep the
+          file on a cloud drive or another device as off-device insurance. It holds your rows,
+          history and document files. There is no built-in cloud integration by design.
         </p>
       </CardContent>
     </Card>

@@ -85,7 +85,7 @@ describe("Back up everything", () => {
       return {
         blob: new Blob(["x"]),
         fileName: "fiscode-backup-2026-11-20.zip.age",
-        manifest: {} as never,
+        manifest: { missing: [{ sha256: "x", documentIds: ["d1", "d2"] }] } as never,
       };
     });
     const dialog = await open();
@@ -95,7 +95,13 @@ describe("Back up everything", () => {
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Back up" }));
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith("Backed up to fiscode-backup-2026-11-20.zip.age."),
+      expect(toast.success).toHaveBeenCalledWith(
+        "Backed up to fiscode-backup-2026-11-20.zip.age.",
+        {
+          // REVIEW #88 r1 nit: documents without a file here are named at backup time.
+          description: "2 documents have no file on this device and are backed up without it.",
+        },
+      ),
     );
     expect(vi.mocked(createBackup).mock.calls[0]![0].passphrase).toBe(PASS);
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -130,12 +136,18 @@ describe("Restore from backup", () => {
         "That passphrase doesn't open this backup. Check it and try again. Nothing was changed.",
       ),
     ).toBeVisible();
-    fireEvent.change(within(dialog).getByLabelText("Passphrase"), { target: { value: PASS } });
+    // REVIEW #88 r1 F1: focus returns to the field, its text selected to retype.
+    const again = within(dialog).getByLabelText<HTMLInputElement>("Passphrase");
+    await waitFor(() => expect(again).toHaveFocus());
+    expect([again.selectionStart, again.selectionEnd]).toEqual([0, "not the one".length]);
+    fireEvent.change(again, { target: { value: PASS } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Open backup" }));
     expect(
       await within(dialog).findByText("2 document files (2 KB) will be written to this device."),
     ).toBeVisible();
     expect(within(dialog).getByText("You can undo this restore from History.")).toBeVisible();
+    expect(within(dialog).getByText(/the state before this restore\.$/)).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "Restore" })).toHaveFocus();
     expect(within(dialog).getByText("demo-receipt.pdf")).toBeVisible();
     expect(vi.mocked(readBackup).mock.calls[1]![1]?.passphrase).toBe(PASS);
     fireEvent.click(within(dialog).getByRole("button", { name: "Restore" }));
@@ -153,7 +165,9 @@ describe("Restore from backup", () => {
       target: { value: PASS },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Open backup" }));
-    expect(await within(dialog).findByText(/Try another copy of the backup\.$/)).toBeVisible();
+    const line = await within(dialog).findByText(/Try another copy of the backup\.$/);
+    // REVIEW #88 r1 F1: focus goes to the alert, not the page body.
+    await waitFor(() => expect(line.closest("[tabindex]")).toHaveFocus());
     expect(within(dialog).getByRole("button", { name: "Choose backup file" })).toBeVisible();
     expect(within(dialog).queryByLabelText("Passphrase")).not.toBeInTheDocument();
   });
@@ -182,6 +196,31 @@ describe("Restore from backup", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Open backup" }));
     await waitFor(() => expect(restoreBackup).toHaveBeenCalled());
     expect(planBackupRestore).not.toHaveBeenCalled();
+  });
+});
+
+describe("backup passphrase nits (REVIEW #88 r1)", () => {
+  it("asks for the second entry when it's empty, and drops 'too short' once long enough", async () => {
+    render(<BackupCard />);
+    fireEvent.click(screen.getByRole("button", { name: "Back up everything" }));
+    const dialog = await screen.findByRole("dialog");
+    const field = within(dialog).getByLabelText("Passphrase");
+    fireEvent.change(field, { target: { value: "short1" } });
+    fireEvent.blur(field);
+    expect(within(dialog).getByText("Use at least 12 characters (6 so far).")).toBeVisible();
+    fireEvent.change(field, { target: { value: PASS } });
+    expect(within(dialog).queryByText(/so far/)).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Back up" }));
+    expect(await within(dialog).findByText("Enter the passphrase again.")).toBeVisible();
+  });
+});
+
+describe("arriving by a #backup link (REVIEW #88 r1 F1)", () => {
+  it("puts focus on Restore from backup", () => {
+    window.location.hash = "#backup";
+    render(<BackupCard />);
+    expect(screen.getByRole("button", { name: "Restore from backup" })).toHaveFocus();
+    window.location.hash = "";
   });
 });
 
