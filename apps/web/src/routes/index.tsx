@@ -20,6 +20,7 @@ import {
 import { Badge } from "@fiscode/ui/components/badge";
 import { CircleAlert } from "lucide-react";
 import { StartupIgnoredNotice } from "../components/startup-ignored-notice";
+import { PaidVsTarget } from "../components/paid-vs-target";
 
 import { EntityUnsupportedAlert } from "../components/entity-unsupported-alert";
 import { GLOSSARY } from "../lib/tax-glossary";
@@ -62,12 +63,18 @@ export const Route = createFileRoute("/")({
     const profile = bundle.profile!;
     const year = yearOf(todayIso());
     const { result, derived } = estimateBundleYear(bundle, year);
+    // DF-07 (d-data #79): paid against what is due, and why the prior-year safe harbor applies.
+    const payments = result.payments;
+    const priorYearBasis =
+      result.safeHarbor.priorYearBasis ?? (result.safeHarbor.firstYear ? "not_entered" : "entered");
     return {
       bundle,
       profile,
       year,
       result,
       derived,
+      payments,
+      priorYearBasis,
       hasExact: getYearConfig(year).year === year,
     };
   },
@@ -75,7 +82,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
-  const { profile, year, result, derived, hasExact } = useLoaderData({
+  const { profile, year, result, derived, hasExact, payments, priorYearBasis } = useLoaderData({
     from: "/",
   });
   const today = todayIso();
@@ -104,7 +111,12 @@ function Dashboard() {
       <OfficeAreaAlert rejected={derived.homeOfficeAreaRejected} />
       <Section179Notice count={derived.equipmentAssumedSection179} />
       <StartupIgnoredNotice count={derived.startupIgnoredForEquipment} />
-      <PriorYearReturnNotice applied={derived.priorYearFiguresApplied} year={year} />
+      {/* "Didn't file" answers the question the notice asks. */}
+      {priorYearBasis === "not_filed" ? (
+        <NotFiledAlert year={year} />
+      ) : (
+        <PriorYearReturnNotice applied={derived.priorYearFiguresApplied} year={year} />
+      )}
 
       {/* One primary figure, the year's total; the three taxes it adds up
           recede beside it. */}
@@ -194,6 +206,8 @@ function Dashboard() {
         </CardContent>
       </Card>
 
+      <PaidVsTarget payments={payments} today={today} noneRequired={noPayment} />
+
       <Card>
         <CardHeader>
           <CardTitle>
@@ -225,7 +239,9 @@ function Dashboard() {
               }
             >
               {result.safeHarbor.firstYear
-                ? "not entered"
+                ? priorYearBasis === "not_filed"
+                  ? "not filed"
+                  : "not entered"
                 : formatUSD(result.safeHarbor.priorYearTarget!)}
             </Field>
             <Field label="Floor (lower of two)" tooltip={GLOSSARY.safeHarborFloor}>
@@ -386,6 +402,21 @@ function Section179Notice({ count }: { count: number }) {
         {count === 1 ? "is" : "are"} deducted in full this year, which assumes a Section 179
         election. Tick §179 candidate in <Link to="/expenses">Expenses</Link> to confirm, and check
         it with your accountant.
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+// "I didn't file a <year-1> return" (Profile): the prior-year safe harbor isn't available, so the
+// target is 90% of this year's tax (i2210 line 8). Shown only for that answer, never assumed.
+function NotFiledAlert({ year }: { year: number }) {
+  return (
+    <Alert variant="warning">
+      <CircleAlert />
+      <AlertTitle>No {year - 1} return filed</AlertTitle>
+      <AlertDescription>
+        The pay-as-you-go target is 90% of this year's tax. Owing the full balance at filing is
+        allowed, but underpayment penalty risk applies if you pay too little through the year.
       </AlertDescription>
     </Alert>
   );

@@ -84,6 +84,7 @@ const profileSchema = z.object({
   priorYearTotalTax: optionalMoneyAmountOrZero,
   priorYearAgi: optionalMoneyAmountOrZero,
   priorYearStateTax: optionalMoneyAmountOrZero,
+  priorYearNotFiled: z.boolean(),
 });
 
 const entitySchema = z.object({
@@ -190,6 +191,9 @@ function ProfileFormPanel({
       priorYearTotalTax: figuresStale ? "" : amountInput(profile.priorYearTotalTaxCents),
       priorYearAgi: figuresStale ? "" : amountInput(profile.priorYearAgiCents),
       priorYearStateTax: figuresStale ? "" : amountInput(profile.priorYearStateTaxCents),
+      // Stamped with the year it is for, like the figures: it counts only for last year's return.
+      priorYearNotFiled:
+        profile.priorYearNotFiled === true && profile.priorYearFiguresYear === priorYear,
     },
     // Cast because zod's optional Date doesn't line up with TanStack Form's
     // exactOptional handling.
@@ -209,7 +213,16 @@ function ProfileFormPanel({
         usesRetirement: parsed.usesRetirement,
         quarterlyMethod: parsed.quarterlyMethod,
         prepLeadDays: parsed.prepLeadDays,
-        ...priorYearFiguresToSave(parsed),
+        // Not filed: the figures don't apply and save as blank, stamped with the year.
+        ...(parsed.priorYearNotFiled
+          ? {
+              priorYearTotalTaxCents: null,
+              priorYearAgiCents: null,
+              priorYearStateTaxCents: null,
+              priorYearFiguresYear: priorYear,
+              priorYearNotFiled: true,
+            }
+          : { ...priorYearFiguresToSave(parsed), priorYearNotFiled: false }),
       });
       const newStart = dateToIso(value.seStartDate!);
       if (moveEntityStart && entityStartToMove(newStart) && !entityMoveBlocked(newStart)) {
@@ -515,89 +528,118 @@ function ProfileFormPanel({
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField
-              form={profileForm}
-              name="priorYearTotalTax"
-              requirement="optional"
-              validators={{ onBlur: profileSchema.shape.priorYearTotalTax }}
-            >
+            {/* "I didn't file a <year-1> return": no prior-year safe harbor, and the
+                three figures don't apply, so they hide and save as blank. */}
+            <TSFormField form={profileForm} name="priorYearNotFiled">
               {(field) => (
-                <FormItem>
-                  <LabelWithTooltip
-                    tooltip={`Your ${priorYear} Form 1040 line 24, minus refundable credits (lines 27a–32). Leave blank if ${priorYear} wasn't a full 12-month return, or if you didn't file.`}
-                  >
-                    Your {priorYear} total tax
-                  </LabelWithTooltip>
+                <FormItem className="flex flex-row items-center gap-2 @md:col-span-2">
                   <FormControl>
-                    <Input
-                      inputMode="decimal"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
+                    <FieldCheckbox
+                      checked={field.state.value}
+                      onCheckedChange={(v) => field.handleChange(v)}
                       onBlur={field.handleBlur}
-                      placeholder="Not entered"
                     />
                   </FormControl>
-                  <FormMessage />
+                  <LabelWithTooltip
+                    tooltip={`Tick this only if you had no ${priorYear} return to file (no W-2 job, no other income). Then the target is 90% of this year's tax.`}
+                    className="text-sm font-normal"
+                  >
+                    I didn't file a {priorYear} return
+                  </LabelWithTooltip>
                 </FormItem>
               )}
             </TSFormField>
-            <TSFormField
-              form={profileForm}
-              name="priorYearAgi"
-              requirement="optional"
-              validators={{ onBlur: profileSchema.shape.priorYearAgi }}
-            >
-              {(field) => (
-                <FormItem>
-                  <LabelWithTooltip
-                    tooltip={`Your ${priorYear} Form 1040 line 11b. Left blank, the estimate assumes it was over $150,000 ($75,000 if married filing separately) and uses 110%.`}
-                  >
-                    Your {priorYear} AGI
-                  </LabelWithTooltip>
-                  <FormControl>
-                    <Input
-                      inputMode="decimal"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      placeholder="Not entered"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            </TSFormField>
-            {/* fiscode's state engine is Utah only: the field shows for Utah. */}
-            <profileForm.Subscribe selector={(st) => st.values.state === "UT"}>
-              {(isUtah) =>
-                isUtah ? (
-                  <TSFormField
-                    form={profileForm}
-                    name="priorYearStateTax"
-                    requirement="optional"
-                    validators={{ onBlur: profileSchema.shape.priorYearStateTax }}
-                  >
-                    {(field) => (
-                      <FormItem>
-                        <LabelWithTooltip
-                          tooltip={`Your Utah tax liability for ${priorYear} (TC-546 line 4).`}
-                        >
-                          Your {priorYear} Utah tax
-                        </LabelWithTooltip>
-                        <FormControl>
-                          <Input
-                            inputMode="decimal"
-                            value={field.state.value}
-                            onChange={(e) => field.handleChange(e.target.value)}
-                            onBlur={field.handleBlur}
-                            placeholder="Not entered"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  </TSFormField>
-                ) : null
+            <profileForm.Subscribe selector={(st) => st.values.priorYearNotFiled}>
+              {(notFiled) =>
+                notFiled ? null : (
+                  <>
+                    <TSFormField
+                      form={profileForm}
+                      name="priorYearTotalTax"
+                      requirement="optional"
+                      validators={{ onBlur: profileSchema.shape.priorYearTotalTax }}
+                    >
+                      {(field) => (
+                        <FormItem>
+                          <LabelWithTooltip
+                            tooltip={`Your ${priorYear} Form 1040 line 24, minus refundable credits (lines 27a–32). Leave blank if ${priorYear} wasn't a full 12-month return, or if you didn't file.`}
+                          >
+                            Your {priorYear} total tax
+                          </LabelWithTooltip>
+                          <FormControl>
+                            <Input
+                              inputMode="decimal"
+                              value={field.state.value}
+                              onChange={(e) => field.handleChange(e.target.value)}
+                              onBlur={field.handleBlur}
+                              placeholder="Not entered"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    </TSFormField>
+                    <TSFormField
+                      form={profileForm}
+                      name="priorYearAgi"
+                      requirement="optional"
+                      validators={{ onBlur: profileSchema.shape.priorYearAgi }}
+                    >
+                      {(field) => (
+                        <FormItem>
+                          <LabelWithTooltip
+                            tooltip={`Your ${priorYear} Form 1040 line 11b. Left blank, the estimate assumes it was over $150,000 ($75,000 if married filing separately) and uses 110%.`}
+                          >
+                            Your {priorYear} AGI
+                          </LabelWithTooltip>
+                          <FormControl>
+                            <Input
+                              inputMode="decimal"
+                              value={field.state.value}
+                              onChange={(e) => field.handleChange(e.target.value)}
+                              onBlur={field.handleBlur}
+                              placeholder="Not entered"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    </TSFormField>
+                    {/* fiscode's state engine is Utah only: the field shows for Utah. */}
+                    <profileForm.Subscribe selector={(st) => st.values.state === "UT"}>
+                      {(isUtah) =>
+                        isUtah ? (
+                          <TSFormField
+                            form={profileForm}
+                            name="priorYearStateTax"
+                            requirement="optional"
+                            validators={{ onBlur: profileSchema.shape.priorYearStateTax }}
+                          >
+                            {(field) => (
+                              <FormItem>
+                                <LabelWithTooltip
+                                  tooltip={`Your Utah tax liability for ${priorYear} (TC-546 line 4).`}
+                                >
+                                  Your {priorYear} Utah tax
+                                </LabelWithTooltip>
+                                <FormControl>
+                                  <Input
+                                    inputMode="decimal"
+                                    value={field.state.value}
+                                    onChange={(e) => field.handleChange(e.target.value)}
+                                    onBlur={field.handleBlur}
+                                    placeholder="Not entered"
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          </TSFormField>
+                        ) : null
+                      }
+                    </profileForm.Subscribe>
+                  </>
+                )
               }
             </profileForm.Subscribe>
             {figuresStale ? (

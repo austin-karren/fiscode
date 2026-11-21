@@ -16,11 +16,13 @@ import { Route as HistoryRouteImport } from './routes/history'
 import { Route as HomeOfficeRouteImport } from './routes/home-office'
 import { Route as IncomeRouteImport } from './routes/income'
 import { Route as MileageRouteImport } from './routes/mileage'
+import { Route as PaymentsRouteImport } from './routes/payments'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as TaxDataRouteImport } from './routes/tax-data'
 import { Route as TimeRouteImport } from './routes/time'
 import { Route as VehiclesRouteImport } from './routes/vehicles'
+import { Route as W2JobsRouteImport } from './routes/w2-jobs'
 import { Route as YearEndRouteImport } from './routes/year-end'
 
 const IndexRoute = IndexRouteImport.update({
@@ -58,6 +60,11 @@ const MileageRoute = MileageRouteImport.update({
   path: '/mileage',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PaymentsRoute = PaymentsRouteImport.update({
+  id: '/payments',
+  path: '/payments',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -83,6 +90,11 @@ const VehiclesRoute = VehiclesRouteImport.update({
   path: '/vehicles',
   getParentRoute: () => rootRouteImport,
 } as any)
+const W2JobsRoute = W2JobsRouteImport.update({
+  id: '/w2-jobs',
+  path: '/w2-jobs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const YearEndRoute = YearEndRouteImport.update({
   id: '/year-end',
   path: '/year-end',
@@ -97,11 +109,13 @@ export interface FileRoutesByFullPath {
   '/home-office': typeof HomeOfficeRoute
   '/income': typeof IncomeRoute
   '/mileage': typeof MileageRoute
+  '/payments': typeof PaymentsRoute
   '/profile': typeof ProfileRoute
   '/setup': typeof SetupRoute
   '/tax-data': typeof TaxDataRoute
   '/time': typeof TimeRoute
   '/vehicles': typeof VehiclesRoute
+  '/w2-jobs': typeof W2JobsRoute
   '/year-end': typeof YearEndRoute
 }
 export interface FileRoutesByTo {
@@ -112,11 +126,13 @@ export interface FileRoutesByTo {
   '/home-office': typeof HomeOfficeRoute
   '/income': typeof IncomeRoute
   '/mileage': typeof MileageRoute
+  '/payments': typeof PaymentsRoute
   '/profile': typeof ProfileRoute
   '/setup': typeof SetupRoute
   '/tax-data': typeof TaxDataRoute
   '/time': typeof TimeRoute
   '/vehicles': typeof VehiclesRoute
+  '/w2-jobs': typeof W2JobsRoute
   '/year-end': typeof YearEndRoute
 }
 export interface FileRoutesById {
@@ -128,11 +144,13 @@ export interface FileRoutesById {
   '/home-office': typeof HomeOfficeRoute
   '/income': typeof IncomeRoute
   '/mileage': typeof MileageRoute
+  '/payments': typeof PaymentsRoute
   '/profile': typeof ProfileRoute
   '/setup': typeof SetupRoute
   '/tax-data': typeof TaxDataRoute
   '/time': typeof TimeRoute
   '/vehicles': typeof VehiclesRoute
+  '/w2-jobs': typeof W2JobsRoute
   '/year-end': typeof YearEndRoute
 }
 export interface FileRouteTypes {
@@ -145,11 +163,13 @@ export interface FileRouteTypes {
     | '/home-office'
     | '/income'
     | '/mileage'
+    | '/payments'
     | '/profile'
     | '/setup'
     | '/tax-data'
     | '/time'
     | '/vehicles'
+    | '/w2-jobs'
     | '/year-end'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -160,11 +180,13 @@ export interface FileRouteTypes {
     | '/home-office'
     | '/income'
     | '/mileage'
+    | '/payments'
     | '/profile'
     | '/setup'
     | '/tax-data'
     | '/time'
     | '/vehicles'
+    | '/w2-jobs'
     | '/year-end'
   id:
     | '__root__'
@@ -175,11 +197,13 @@ export interface FileRouteTypes {
     | '/home-office'
     | '/income'
     | '/mileage'
+    | '/payments'
     | '/profile'
     | '/setup'
     | '/tax-data'
     | '/time'
     | '/vehicles'
+    | '/w2-jobs'
     | '/year-end'
   fileRoutesById: FileRoutesById
 }
@@ -191,11 +215,13 @@ export interface RootRouteChildren {
   HomeOfficeRoute: typeof HomeOfficeRoute
   IncomeRoute: typeof IncomeRoute
   MileageRoute: typeof MileageRoute
+  PaymentsRoute: typeof PaymentsRoute
   ProfileRoute: typeof ProfileRoute
   SetupRoute: typeof SetupRoute
   TaxDataRoute: typeof TaxDataRoute
   TimeRoute: typeof TimeRoute
   VehiclesRoute: typeof VehiclesRoute
+  W2JobsRoute: typeof W2JobsRoute
   YearEndRoute: typeof YearEndRoute
 }
 
@@ -250,6 +276,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MileageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/payments': {
+      id: '/payments'
+      path: '/payments'
+      fullPath: '/payments'
+      preLoaderRoute: typeof PaymentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile': {
       id: '/profile'
       path: '/profile'
@@ -285,6 +318,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VehiclesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/w2-jobs': {
+      id: '/w2-jobs'
+      path: '/w2-jobs'
+      fullPath: '/w2-jobs'
+      preLoaderRoute: typeof W2JobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/year-end': {
       id: '/year-end'
       path: '/year-end'
@@ -303,11 +343,13 @@ const rootRouteChildren: RootRouteChildren = {
   HomeOfficeRoute: HomeOfficeRoute,
   IncomeRoute: IncomeRoute,
   MileageRoute: MileageRoute,
+  PaymentsRoute: PaymentsRoute,
   ProfileRoute: ProfileRoute,
   SetupRoute: SetupRoute,
   TaxDataRoute: TaxDataRoute,
   TimeRoute: TimeRoute,
   VehiclesRoute: VehiclesRoute,
+  W2JobsRoute: W2JobsRoute,
   YearEndRoute: YearEndRoute,
 }
 export const routeTree = rootRouteImport
