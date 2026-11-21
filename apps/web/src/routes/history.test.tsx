@@ -401,6 +401,22 @@ describe("restore from history", () => {
     expect(db.importBundle).toHaveBeenLastCalledWith({ ...emptyBundle, ...now }, "history-restore");
   });
 
+  it("calls a backup's restore a restore, not an import (d-data #90)", async () => {
+    const before = { ...emptyBundle, expenses: [expenseAt(8950)] };
+    const after = { ...emptyBundle, expenses: [expenseAt(9900)], clients: [client] };
+    const now = { expenses: [expenseAt(12000)], clients: [client] };
+    await show([historyRow("__import_snapshot", "revert", before, after, "backup-restore")], now);
+
+    const headline = (await screen.findByText(/^Restored from .* \(2 rows\)$/)).textContent!;
+    const dialog = await confirmRestore(headline);
+    expect(dialog).toHaveTextContent("Go back to before this restore?");
+    expect(dialog).toHaveTextContent(
+      "This puts everything back to how it was just before this restore (1 row). Everything added or changed since then is replaced.",
+    );
+    expect(dialog).not.toHaveTextContent("import");
+    expect(await screen.findByText("Back to before the restore.")).toBeInTheDocument();
+  });
+
   it("says so and changes nothing more when a restore fails", async () => {
     db.expenseRepo.revertTo.mockRejectedValueOnce(new Error("demo failure"));
     await show([historyRow("expense", "update", expenseAt(8950), expenseAt(9900), "expense_1")], {

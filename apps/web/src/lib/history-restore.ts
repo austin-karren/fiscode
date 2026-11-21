@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 
 import {
+  BACKUP_RESTORE_REASON,
   countBundleRows,
   HISTORY_RESTORE_REASON,
   parseSnapshot,
@@ -137,7 +138,9 @@ export function planRestore(
   if (!before) return undefined;
 
   if (row.entity === "__import_snapshot") {
-    return sameState(before, bundle) ? undefined : planImportRestore(before);
+    return sameState(before, bundle)
+      ? undefined
+      : planImportRestore(before, row.entityId === BACKUP_RESTORE_REASON ? "restore" : "import");
   }
 
   const repo = REPOS[row.entity];
@@ -214,11 +217,15 @@ const sameState = (snapshot: Snapshot, bundle: Bundle): boolean => {
   });
 };
 
-function planImportRestore(before: Record<string, unknown>): RestorePlan {
+/** `what` names the event the snapshot was taken before: an import, or a backup's restore. */
+function planImportRestore(
+  before: Record<string, unknown>,
+  what: "import" | "restore",
+): RestorePlan {
   const count = countBundleRows(before);
   return {
-    title: "Go back to before this import?",
-    description: `This puts everything back to how it was just before this import (${count} ${
+    title: `Go back to before this ${what}?`,
+    description: `This puts everything back to how it was just before this ${what} (${count} ${
       count === 1 ? "row" : "rows"
     }). Everything added or changed since then is replaced.`,
     discardsNewer: true,
@@ -227,7 +234,7 @@ function planImportRestore(before: Record<string, unknown>): RestorePlan {
       const current = await buildBundle({ includeDeleted: true });
       await importBundle({ ...emptyBundle(), ...before, history: [] }, HISTORY_RESTORE_REASON);
       onChange();
-      toast("Back to before the import.", {
+      toast(`Back to before the ${what}.`, {
         duration: 8000,
         action: {
           label: "Undo",
