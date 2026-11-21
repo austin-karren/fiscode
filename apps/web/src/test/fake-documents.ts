@@ -65,7 +65,7 @@ const subtreeIds = (id: string): string[] => [
     .flatMap((f) => subtreeIds(f.id)),
 ];
 
-const sha256Hex = async (blob: Blob) => {
+export const sha256Hex = async (blob: Blob) => {
   const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 };

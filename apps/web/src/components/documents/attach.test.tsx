@@ -8,6 +8,7 @@ vi.mock("@fiscode/db", async () => {
     folderRepo: fake.folderRepo,
     documentRepo: fake.documentRepo,
     documentLinkRepo: fake.documentLinkRepo,
+    sha256Hex: fake.sha256Hex,
   };
 });
 vi.mock("sonner", () => ({
@@ -210,5 +211,69 @@ describe("Unlink in the middle of the list (REVIEW #86 r2 F1)", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Unlink demo-c.txt" })).toHaveFocus(),
     );
+  });
+});
+
+describe("uploading a file that's already stored (dedupe follow-up)", () => {
+  const upload = (dialog: HTMLElement, files: File[]) =>
+    fireEvent.change(dialog.querySelector<HTMLInputElement>('input[type="file"]')!, {
+      target: { files },
+    });
+
+  it("links the existing document instead of adding a copy", async () => {
+    const first = await documentRepo.upload(
+      new File(["dedupe demo bytes"], "demo-dedupe.txt", { type: "text/plain" }),
+    );
+    const before = (await documentRepo.list()).length;
+    const onChanged = vi.fn();
+    const dialog = await openAttach("ex_dedupe", onChanged);
+    await within(dialog).findByText("2026 / Expenses");
+    upload(dialog, [new File(["dedupe demo bytes"], "scan.txt", { type: "text/plain" })]);
+    expect(
+      await within(dialog).findByText(
+        "scan.txt: Already in Documents, linked as demo-dedupe.txt (Unfiled).",
+      ),
+    ).toBeVisible();
+    expect((await documentRepo.list()).length).toBe(before);
+    const links = await documentLinkRepo.forRecord("expense", "ex_dedupe");
+    expect(links.map((l) => l.documentId)).toEqual([first.id]);
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("says so when it's already attached to this row, and adds no link", async () => {
+    const doc = await documentRepo.upload(
+      new File(["already linked bytes"], "demo-linked-twice.txt", { type: "text/plain" }),
+    );
+    await documentLinkRepo.link(doc.id, "expense", "ex_twice");
+    const onChanged = vi.fn();
+    const dialog = await openAttach("ex_twice", onChanged);
+    await within(dialog).findByText("2026 / Expenses");
+    // The dialog has read this row's links once the Choose existing list knows them.
+    await waitFor(async () =>
+      expect((await documentLinkRepo.forRecord("expense", "ex_twice")).length).toBe(1),
+    );
+    upload(dialog, [
+      new File(["already linked bytes"], "demo-linked-twice.txt", { type: "text/plain" }),
+    ]);
+    expect(
+      await within(dialog).findByText("demo-linked-twice.txt: already attached to this row."),
+    ).toBeVisible();
+    expect((await documentLinkRepo.forRecord("expense", "ex_twice")).length).toBe(1);
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it("adds one copy when the same new file is in one batch twice", async () => {
+    const before = (await documentRepo.list()).length;
+    const dialog = await openAttach("ex_batch");
+    await within(dialog).findByText("2026 / Expenses");
+    upload(dialog, [
+      new File(["batch twin"], "demo-twin-a.txt", { type: "text/plain" }),
+      new File(["batch twin"], "demo-twin-b.txt", { type: "text/plain" }),
+    ]);
+    expect(await within(dialog).findByText("Added demo-twin-a.txt and attached it.")).toBeVisible();
+    expect(
+      within(dialog).getByText("demo-twin-b.txt: already attached to this row as demo-twin-a.txt."),
+    ).toBeVisible();
+    expect((await documentRepo.list()).length).toBe(before + 1);
   });
 });
