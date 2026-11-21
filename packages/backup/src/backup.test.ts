@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
@@ -294,6 +296,23 @@ describe("backup: headless (node.ts, the script's functions)", () => {
 
     sqlite = setupTestDb(); // for afterEach
   });
+
+  it("the real script runs under Bun (no Vite-only code on its import path): verify and check-roundtrip", async () => {
+    await seed();
+    const backup = await createBackup({ createdAt: CREATED });
+    const zip = join(dir, backup.fileName);
+    writeFileSync(zip, new Uint8Array(await backup.blob.arrayBuffer()));
+    const bin = fileURLToPath(new URL("../bin/fiscode-backup.ts", import.meta.url));
+    const run = (...args: string[]) => spawnSync("bun", [bin, ...args], { encoding: "utf8" });
+    const verify = run("verify", zip);
+    expect(verify.stderr).toBe("");
+    expect(verify.status).toBe(0);
+    expect(verify.stdout).toMatch(/^ok: /);
+    const roundtrip = run("check-roundtrip", zip);
+    expect(roundtrip.stdout.trim()).toBe("identical");
+    expect(roundtrip.status).toBe(0);
+    expect(run("verify", join(dir, "nope.zip")).status).toBe(1);
+  }, 30_000);
 
   it("refuses to restore into a directory that isn't empty", async () => {
     await importBundle(exampleBundle() as never, "import-restore");

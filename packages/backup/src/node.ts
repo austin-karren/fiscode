@@ -5,14 +5,11 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  __resetDbForTests,
-  __setBlobStoreForTests,
-  __setDbForTests,
-  buildBundle,
-  tables,
-  type BlobStore,
-} from "@fiscode/db";
+// Subpaths only: "@fiscode/db" loads boot.ts, which needs Vite's import.meta.glob.
+import { __setBlobStoreForTests, type BlobStore } from "@fiscode/db/blob-store";
+import { __resetDbForTests, __setDbForTests } from "@fiscode/db/client";
+import { buildBundle } from "@fiscode/db/repo";
+import { tables } from "@fiscode/db/schema";
 import { buildBackupZip, readBackup, restoreBackupInto, type BackupManifest } from "./index.ts";
 
 // The headless side of backups (contract: drafts/contract-backup.md), for d-dogfood's private

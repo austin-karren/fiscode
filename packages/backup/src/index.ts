@@ -15,7 +15,10 @@ import {
   type ImportFile,
   type ImportPlan,
 } from "@fiscode/csv";
-import { buildBundle, getBlobStore, importBundle, sha256Hex, type BlobStore } from "@fiscode/db";
+// Subpaths, not "@fiscode/db": its index loads boot.ts, which needs Vite (import.meta.glob), and
+// the headless script runs under plain Bun.
+import { getBlobStore, sha256Hex, type BlobStore } from "@fiscode/db/blob-store";
+import { buildBundle, importBundle } from "@fiscode/db/repo";
 import { strToU8, strFromU8, unzipSync, zipSync, type Zippable } from "fflate";
 
 // The full backup bundle (contract: d-data drafts/contract-backup.md, with d-data's rulings).
