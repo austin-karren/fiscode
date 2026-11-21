@@ -26,13 +26,17 @@ fiscode-backup-2026-11-21.zip
   version imports older ones.
 - **Each file is stored once.** Two documents with the same bytes share one entry; the manifest
   says which documents use it.
+- **The whole backup is held in memory** while it is made or read: about twice its size (the
+  files, then the zip). That is fine for a personal record; a very large set of documents needs a
+  device with the memory for it.
 - **Two backups of the same data are the same bytes** when they're made with the same date and time,
   so a diff shows only real changes.
 
 ## Restoring
 
 - fiscode checks every file against the manifest before it changes anything. A damaged or missing
-  file refuses the whole backup and names the file.
+  file, a file the manifest doesn't list, or a damaged manifest refuses the whole backup and names
+  the file.
 - Into a new, empty browser the restore is exact: the same rows, history and documents. Exporting
   again gives the same CSV, byte for byte.
 - Over data that is already there, fiscode shows what would be replaced and asks first. The restore
@@ -46,12 +50,12 @@ fiscode-backup-2026-11-21.zip
 `packages/backup/bin/fiscode-backup.ts` works on backup files without a browser. Run it with Bun
 from the repository:
 
-| Command                                                       | What it does                                                                                                                             |
-| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `verify <backup.zip>`                                         | Every check a restore makes. Exits 1 and names the problem.                                                                              |
-| `restore <backup.zip> --to <dir>`                             | Restores into a new, empty directory: `fiscode.sqlite` and `documents/blobs/…`, the layout the browser uses.                             |
-| `backup --from <dir> --out <backup.zip> [--created-at <iso>]` | A backup of such a directory.                                                                                                            |
-| `check-roundtrip <backup.zip>`                                | Restores into a temporary directory, backs up again with the same date and time, and compares the bytes. Exits 0 when they are the same. |
-| `summary <backup.zip>`                                        | Counts, dates, schema and the document paths, as JSON.                                                                                   |
+| Command                                                       | What it does                                                                                                                                                                                           |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `verify <backup.zip> [--allow-missing]`                       | Every check a restore makes. Exits 1 and names the problem; exits 3 when the backup lists files as missing (the device that made it didn't have them), naming the documents, unless `--allow-missing`. |
+| `restore <backup.zip> --to <dir>`                             | Restores into a new, empty directory: `fiscode.sqlite` and `documents/blobs/…`, the layout the browser uses.                                                                                           |
+| `backup --from <dir> --out <backup.zip> [--created-at <iso>]` | A backup of such a directory.                                                                                                                                                                          |
+| `check-roundtrip <backup.zip>`                                | Restores into a temporary directory, backs up again with the same date and time, and compares the bytes. Exits 0 when they are the same.                                                               |
+| `summary <backup.zip>`                                        | Counts, dates, schema and the document paths, as JSON.                                                                                                                                                 |
 
 The script can't read a browser's storage: a backup always starts in the app.
