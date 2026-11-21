@@ -78,9 +78,9 @@ function Dashboard() {
   const { profile, year, result, derived, hasExact } = useLoaderData({
     from: "/",
   });
-  // A real first year: self-employment began this year, so there is no
-  // prior-year return to use (not merely one left unentered).
-  const realFirstYear = derived ? Number(derived.seStartDate.slice(0, 4)) >= year : false;
+  // Self-employment began this year: there may still be a prior-year return
+  // (from a W-2 job, say), so the safe harbor card points to Profile.
+  const seStartedThisYear = derived ? Number(derived.seStartDate.slice(0, 4)) >= year : false;
   const today = todayIso();
   const upcoming = nextDueQuarter(result.quarterly, today);
   // The $1,000 rule (packages/tax): no federal estimated payment is required.
@@ -211,8 +211,9 @@ function Dashboard() {
             <Field label="90% of current year" tooltip={GLOSSARY.safeHarborCurrent}>
               {formatUSD(result.safeHarbor.currentYearTarget)}
             </Field>
-            {/* The engine's firstYear means "no prior-year figures": a real first
-                year (SE start this year) or last year's return not entered. */}
+            {/* The engine's firstYear means only "no prior-year figures entered".
+                It never decides that someone didn't file: a new SE filer may have
+                a W-2 return, so it reads "not entered" whatever the SE start. */}
             <Field
               label={
                 result.safeHarbor.firstYear
@@ -226,26 +227,24 @@ function Dashboard() {
                   : undefined
               }
             >
-              {!result.safeHarbor.firstYear
-                ? formatUSD(result.safeHarbor.priorYearTarget!)
-                : realFirstYear
-                  ? "n/a (first year)"
-                  : "not entered"}
+              {result.safeHarbor.firstYear
+                ? "not entered"
+                : formatUSD(result.safeHarbor.priorYearTarget!)}
             </Field>
             <Field label="Floor (lower of two)" tooltip={GLOSSARY.safeHarborFloor}>
               {formatUSD(result.safeHarbor.floor)}
             </Field>
           </div>
-          {result.safeHarbor.firstYear && realFirstYear ? (
-            <Alert variant="warning" className="mt-3">
-              <CircleAlert />
-              <AlertTitle>First-year filing</AlertTitle>
-              <AlertDescription>
-                The pay-as-you-go target is 90% of current-year tax. Owing the full balance at
-                filing is allowed, but underpayment penalty risk applies if you pay too little
-                throughout the year.
-              </AlertDescription>
-            </Alert>
+          {result.safeHarbor.firstYear && seStartedThisYear ? (
+            // New to self-employment this year, figures blank: a prior-year
+            // return (from a W-2 job or otherwise) still gives a safe harbor.
+            <p className="mt-3 text-sm text-muted-foreground">
+              Filed a {year - 1} return (W-2 or otherwise)? Enter it on{" "}
+              <Link to="/profile" className="underline underline-offset-2">
+                Profile
+              </Link>{" "}
+              to use the prior-year safe harbor.
+            </p>
           ) : null}
         </CardContent>
       </Card>

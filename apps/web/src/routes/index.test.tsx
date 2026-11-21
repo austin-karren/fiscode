@@ -173,11 +173,11 @@ describe("dashboard titles and warnings", () => {
     expect(screen.getByRole("heading", { name: /Safe harbor \(federal\)/ })).toBeInTheDocument();
   });
 
-  it("shows the first-year note as a warning box, static: not an interrupting alert", () => {
+  it("prompts for a 2025 return as static text, not an interrupting alert (no first-year warning)", () => {
+    // Demo loader data: SE start Mar 2, 2026, no prior-year figures.
     render(<Dashboard />);
-    const note = screen.getByText("First-year filing").closest("[data-slot=alert]");
-    expect(note).toHaveTextContent(/pay-as-you-go target is 90% of current-year tax/);
-    expect(note).not.toHaveAttribute("role");
+    expect(screen.getByText(/^Filed a 2025 return/)).toBeInTheDocument();
+    expect(screen.queryByText("First-year filing")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -349,10 +349,17 @@ describe("why 110% of the prior year", () => {
 });
 
 describe("safe harbor without last year's return", () => {
-  // Engine output for demo data with no prior-year figures, SE start per the case.
-  const run = (seStartDate: string) => {
+  // Engine output for demo data, SE start and 2025 return per the case.
+  const run = (seStartDate: string, priorYearTotalTaxCents: number | null) => {
     const b = exampleBundle();
-    b.profile = { ...b.profile!, seStartDate };
+    b.profile = {
+      ...b.profile!,
+      seStartDate,
+      priorYearTotalTaxCents,
+      priorYearAgiCents: null,
+      priorYearStateTaxCents: null,
+      priorYearFiguresYear: priorYearTotalTaxCents === null ? null : 2025,
+    };
     const { result, derived } = estimateBundleYear(b, 2026);
     const saved = { harbor: loaderData.result.safeHarbor, se: loaderData.derived.seStartDate };
     (loaderData.result as { safeHarbor: unknown }).safeHarbor = result.safeHarbor;
@@ -362,25 +369,48 @@ describe("safe harbor without last year's return", () => {
       loaderData.derived.seStartDate = saved.se;
     };
   };
+  const PROMPT =
+    "Filed a 2025 return (W-2 or otherwise)? Enter it on Profile to use the prior-year safe harbor.";
 
   it("says 'not entered', with no first-year alert, for a business started years earlier", () => {
-    const restore = run("2024-01-01");
+    const restore = run("2024-01-01", null);
     try {
       render(<Dashboard />);
       expect(screen.getByText("not entered")).toBeInTheDocument();
-      expect(screen.queryByText("n/a (first year)")).not.toBeInTheDocument();
       expect(screen.queryByText("First-year filing")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Filed a 2025 return/)).not.toBeInTheDocument();
     } finally {
       restore();
     }
   });
 
-  it("says 'n/a (first year)' with the first-year alert when self-employment began this year", () => {
-    const restore = run("2026-03-02");
+  it("SE start this year, figures blank: 'not entered' and a prompt to enter a 2025 return, never 'first year'", () => {
+    const restore = run("2026-03-02", null);
     try {
       render(<Dashboard />);
-      expect(screen.getByText("n/a (first year)")).toBeInTheDocument();
-      expect(screen.getByText("First-year filing")).toBeInTheDocument();
+      expect(screen.getByText("not entered")).toBeInTheDocument();
+      expect(screen.queryByText(/first year/i)).not.toBeInTheDocument();
+      expect(screen.queryByText("First-year filing")).not.toBeInTheDocument();
+      expect(screen.queryByText(/90% of current-year tax/)).not.toBeInTheDocument();
+      const prompt = screen.getByText(/^Filed a 2025 return/);
+      expect(prompt).toHaveTextContent(PROMPT);
+      expect(within(prompt).getByRole("link", { name: "Profile" })).toHaveAttribute(
+        "href",
+        "/profile",
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it("SE start this year with a 2025 return entered: the prior-year safe harbor shows", () => {
+    const restore = run("2026-03-02", 150_000);
+    try {
+      render(<Dashboard />);
+      const field = screen.getByText("110% of prior year").parentElement!;
+      expect(field).toHaveTextContent("$1,650.00");
+      expect(screen.queryByText("not entered")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Filed a 2025 return/)).not.toBeInTheDocument();
     } finally {
       restore();
     }
