@@ -8,10 +8,11 @@ import {
   countedInYear,
   defaultAppliedQuarter,
   expensesCountedForYear,
+  isPreStartStartupCost,
   labelFor,
 } from "@fiscode/core";
 import { guardText, type Bundle } from "@fiscode/csv";
-import { estimateBundleYear, getYearConfig, mileageRateOn } from "@fiscode/tax";
+import { activeSpouseFor, estimateBundleYear, getYearConfig, mileageRateOn } from "@fiscode/tax";
 
 // The accountant summary: a second, export-only file beside the canonical yearly CSV. It is for
 // reading in Excel, Sheets or Numbers: tidy tables, totals, and the figures fiscode derives
@@ -88,6 +89,10 @@ export const accountantExport = (bundle: Bundle, year: number, today: string): s
         "Rows that count toward the year, as the estimate counts them: dated in the year and on or after the self-employment start. Deleted rows are left out.",
       ],
       [
+        "Leading apostrophe",
+        "A text cell that starts with = + - or @ is written with a leading ' so it can't run as a formula. Delete it if you need the text as typed.",
+      ],
+      [
         "Mileage",
         "Each trip at the standard rate in force on its date. The total is figured once per rate, so it can differ from the sum of the trips by a cent.",
       ],
@@ -95,6 +100,10 @@ export const accountantExport = (bundle: Bundle, year: number, today: string): s
   });
 
   const e = result.estimate;
+  // The spouse block the estimate uses, counted on a joint return only (engine.ts).
+  const activeSpouse = activeSpouseFor(bundle, year);
+  const joint = profile.filingStatus === "mfj";
+  const spouseWages = joint && activeSpouse ? activeSpouse.annualW2WagesCents : 0;
   const summary: [string, number][] = [
     ["Gross 1099 income", derived.gross1099],
     ["Schedule C expenses (incl. section 195 deducted this year)", derived.directExpenses],
@@ -106,6 +115,7 @@ export const accountantExport = (bundle: Bundle, year: number, today: string): s
     ["Deductible half of SE tax (Schedule 1 line 15)", e.se.halfSeTaxDeduction],
     ["Self-employed health insurance (Schedule 1 line 17)", e.selfEmployedHealthInsurance],
     ["Own W-2 wages", derived.ownW2Wages],
+    ["Spouse W-2 wages", spouseWages],
     ["Adjusted gross income", e.agi],
     ["QBI deduction", e.federal.qbiDeduction],
     ["Federal taxable income", e.federal.taxableIncome],
@@ -113,6 +123,8 @@ export const accountantExport = (bundle: Bundle, year: number, today: string): s
     ["State income tax", e.state.stateIncomeTax],
     ["Total liability (federal + state)", e.totalLiability],
     ["Safe-harbor floor (required annual payment)", result.safeHarbor.floor],
+    ["Federal withholding (own + spouse)", result.payments.federal.withholding],
+    ["Federal estimated payments", result.payments.federal.estimates],
     ["Federal paid (withholding + estimates)", result.payments.federal.totalPaid],
     ["Federal remaining to the floor", result.payments.federal.remaining],
   ];
@@ -198,7 +210,28 @@ export const accountantExport = (bundle: Bundle, year: number, today: string): s
           x.startupExpense ? "yes" : "no",
           usd(x.amountCents),
         ]),
-      ["Total", "", "", "", "", "", "", usd(sum(counted.map((x) => x.amountCents)))],
+      [
+        "Health insurance (Schedule 1 line 17)",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        usd(
+          sum(counted.filter((x) => x.category === "health_insurance").map((x) => x.amountCents)),
+        ),
+      ],
+      [
+        "Total (incl. health insurance, Schedule 1 line 17)",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        usd(sum(counted.map((x) => x.amountCents))),
+      ],
     ],
     numeric: new Set(["amount"]),
   });
@@ -226,13 +259,23 @@ export const accountantExport = (bundle: Bundle, year: number, today: string): s
     numeric: new Set(["business_miles", "rate_per_mile", "deduction"]),
   });
 
+  // Each cost paid before the business began (section 195), then the split.
+  const startupRows = bundle.expenses
+    .filter((x) => isPreStartStartupCost(x, se))
+    .toSorted((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   tables.push({
     name: "Start-up costs (section 195)",
-    header: ["item", "amount"],
+    header: ["item", "date", "category", "amount"],
     rows: [
-      ["Paid before the business began", usd(derived.startupCosts.total)],
-      ["Deducted this year", usd(derived.startupCosts.deductedThisYear)],
-      ["Left to deduct after this year", usd(derived.startupCosts.remainingAfterYear)],
+      ...startupRows.map((x) => [
+        x.description ?? labelFor(EXPENSE_CATEGORY_LABELS, x.category),
+        x.date,
+        labelFor(EXPENSE_CATEGORY_LABELS, x.category),
+        usd(x.amountCents),
+      ]),
+      ["Paid before the business began", "", "", usd(derived.startupCosts.total)],
+      ["Deducted this year", "", "", usd(derived.startupCosts.deductedThisYear)],
+      ["Left to deduct after this year", "", "", usd(derived.startupCosts.remainingAfterYear)],
     ],
     numeric: new Set(["amount"]),
   });
@@ -256,6 +299,39 @@ export const accountantExport = (bundle: Bundle, year: number, today: string): s
       ["Total", "", "", ...w2Money.map(([, k]) => usd(sum(w2s.map((w) => w[k]))))],
     ],
     numeric: new Set(w2Money.map(([h]) => h)),
+  });
+
+  // The spouse's W-2 blocks that reach into the year. The estimate counts one (the latest), on a
+  // joint return only; the others show 0 counted.
+  const yStart = `${year}-01-01`;
+  const yEnd = `${year}-12-31`;
+  const spouseBlocks = bundle.spouses
+    .filter(
+      (sp) =>
+        sp.deletedAt === null &&
+        sp.startDate <= yEnd &&
+        (sp.endDate === null || sp.endDate >= yStart),
+    )
+    .toSorted((a, b) => (a.startDate < b.startDate ? -1 : 1));
+  tables.push({
+    name: "Spouse W-2",
+    header: [
+      "start_date",
+      "end_date",
+      "annual_wages",
+      "federal_withholding",
+      "state_withholding",
+      "counted_wages",
+    ],
+    rows: spouseBlocks.map((sp) => [
+      sp.startDate,
+      sp.endDate,
+      usd(sp.annualW2WagesCents),
+      usd(sp.annualFederalWithholdingCents),
+      usd(sp.annualStateWithholdingCents),
+      usd(joint && sp === activeSpouse ? sp.annualW2WagesCents : 0),
+    ]),
+    numeric: new Set(["annual_wages", "federal_withholding", "state_withholding", "counted_wages"]),
   });
 
   const payments = bundle.estimatedPayments

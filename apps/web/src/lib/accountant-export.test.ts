@@ -131,6 +131,7 @@ describe("accountant export: a summary to read, never to import", () => {
       "Mileage",
       "Start-up costs (section 195)",
       "W-2 jobs",
+      "Spouse W-2",
       "Estimated payments",
       "Federal payments by quarter",
     ]);
@@ -183,7 +184,7 @@ describe("accountant export: totals agree with the estimate", () => {
     );
   });
 
-  it("section 195: paid, deducted this year, left to deduct", () => {
+  it("section 195: the summary lines, after any start-up rows (none in the demo)", () => {
     const s = t.get("Start-up costs (section 195)")!;
     expect(s.map((r) => r[1])).toEqual([
       "item",
@@ -227,6 +228,102 @@ describe("accountantExportFileName", () => {
   it("names the year and the date, and says it is a summary", () => {
     expect(accountantExportFileName(2026, "2026-11-21")).toBe(
       "fiscode-2026-accountant-summary-2026-11-21.csv",
+    );
+  });
+});
+
+describe("review #82 r1", () => {
+  it("R1 MFJ: spouse W-2 table and summary lines; AGI and federal paid reconcile", () => {
+    const b = withW2AndPayments(); // MFJ, spouse block 45,000 / 4,500 / 1,800
+    const t = tables(accountantExport(b, 2026, "2026-11-21"));
+    const { result, derived } = estimateBundleYear(b, 2026);
+    const sp = t.get("Spouse W-2")!;
+    expect(sp[0]).toEqual([
+      "Spouse W-2",
+      "start_date",
+      "end_date",
+      "annual_wages",
+      "federal_withholding",
+      "state_withholding",
+      "counted_wages",
+    ]);
+    expect(sp[1]!.slice(3)).toEqual(["45000.00", "4500.00", "1800.00", "45000.00"]);
+    const s = t.get("Estimate summary")!;
+    const line = (label: string) => Number(s.find((r) => r[1] === label)![2]);
+    expect(line("Spouse W-2 wages")).toBe(45_000);
+    expect(line("Federal withholding (own + spouse)")).toBe(5_000);
+    const e = result.estimate;
+    // AGI = own W-2 + spouse W-2 + net profit − half SE tax − SE health insurance.
+    expect(
+      line("Own W-2 wages") +
+        line("Spouse W-2 wages") +
+        line("Net profit (Schedule C line 31)") -
+        line("Deductible half of SE tax (Schedule 1 line 15)") -
+        line("Self-employed health insurance (Schedule 1 line 17)"),
+    ).toBeCloseTo(e.agi / 100, 2);
+    expect(
+      line("Federal withholding (own + spouse)") + line("Federal estimated payments"),
+    ).toBeCloseTo(result.payments.federal.totalPaid / 100, 2);
+    expect(derived.ownW2Wages).toBe(18_000_00);
+  });
+
+  it("R1 not joint: the spouse table shows the block, counted 0", () => {
+    const b = withW2AndPayments();
+    b.profile = { ...b.profile!, filingStatus: "single" };
+    const sp = tables(accountantExport(b, 2026, "2026-11-21")).get("Spouse W-2")!;
+    expect(sp[1]![6]).toBe("0.00");
+  });
+
+  it("R2 section 195: each pre-start start-up row is listed above the summary lines", () => {
+    const b = exampleBundle();
+    b.profile = { ...b.profile!, seStartDate: "2026-02-01" };
+    b.expenses.push({
+      ...b.expenses.find((e) => e.category === "software_subs")!,
+      id: "ex_startup" as never,
+      date: "2026-01-05",
+      description: "Demo LLC filing fee",
+      amountCents: 1_200_00,
+      startupExpense: true,
+    });
+    const s = tables(accountantExport(b, 2026, "2026-11-21")).get("Start-up costs (section 195)")!;
+    expect(s[0]).toEqual(["Start-up costs (section 195)", "item", "date", "category", "amount"]);
+    expect(s[1]!.slice(1)).toEqual([
+      "Demo LLC filing fee",
+      "2026-01-05",
+      "Software & subscriptions",
+      "1200.00",
+    ]);
+    expect(s.slice(2).map((r) => r[1])).toEqual([
+      "Paid before the business began",
+      "Deducted this year",
+      "Left to deduct after this year",
+    ]);
+  });
+
+  it("R3 expenses: the total says it includes health insurance, with a line-17 subtotal", () => {
+    const b = exampleBundle();
+    b.expenses.push({
+      ...b.expenses.find((e) => e.category === "software_subs")!,
+      id: "ex_hi" as never,
+      date: "2026-05-01",
+      category: "health_insurance",
+      description: "Demo premium",
+      amountCents: 300_00,
+    });
+    const ex = tables(accountantExport(b, 2026, "2026-11-21")).get("Expenses")!;
+    const amount = ex[0]!.indexOf("amount");
+    expect(ex.find((r) => r[1] === "Health insurance (Schedule 1 line 17)")?.[amount]).toBe(
+      "300.00",
+    );
+    expect(ex.at(-1)![1]).toBe("Total (incl. health insurance, Schedule 1 line 17)");
+  });
+
+  it("R4 About explains the leading apostrophe", () => {
+    const about = tables(accountantExport(exampleBundle(), 2026, "2026-11-21")).get(
+      "About this file",
+    )!;
+    expect(about.find((r) => r[1] === "Leading apostrophe")?.[2]).toMatch(
+      /A text cell that starts with = \+ - or @ is written with a leading ' so it can't run as a formula\./,
     );
   });
 });

@@ -20,7 +20,7 @@ import { actualHomeOfficeExpenses, limitToTentativeProfit } from "./home-office.
 import { mileageDeduction } from "./mileage.ts";
 import type { AnnualizedInput, EstimatedPaymentInput, OwnW2, TaxInput } from "./types.ts";
 
-type ActiveSpouse = {
+export type ActiveSpouse = {
   annualW2WagesCents: number;
   annualFederalWithholdingCents: number;
   annualStateWithholdingCents: number;
@@ -320,7 +320,8 @@ const latestOverlap = <
   return matches[0];
 };
 
-const activeSpouseFor = (bundle: Bundle, year: number): ActiveSpouse | undefined =>
+/** The spouse block the estimate uses for `year`: the latest live one that overlaps it. */
+export const activeSpouseFor = (bundle: Bundle, year: number): ActiveSpouse | undefined =>
   latestOverlap(bundle.spouses, year);
 
 const activeEntityFor = (bundle: Bundle, year: number) => latestOverlap(bundle.entities, year);
