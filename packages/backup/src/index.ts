@@ -88,7 +88,8 @@ export const DEFAULT_SCRYPT_WORK_FACTOR = 18;
 export const MIN_PASSPHRASE_LENGTH = 12;
 
 const AGE_HEADER = "age-encryption.org/v1\n";
-const isAge = (bytes: Uint8Array): boolean =>
+/** True when the bytes start with age v1's header (an encrypted backup). */
+export const isAge = (bytes: Uint8Array): boolean =>
   bytes.length >= AGE_HEADER.length &&
   strFromU8(bytes.subarray(0, AGE_HEADER.length)) === AGE_HEADER;
 
@@ -119,8 +120,14 @@ export const decryptBackup = async (
   d.addPassphrase(passphrase);
   try {
     return await d.decrypt(bytes);
-  } catch {
-    throw new BackupPassphraseError("wrong");
+  } catch (err) {
+    // Only the header unwrap failing means the passphrase is wrong. Anything else (the header's
+    // MAC, a payload chunk's authentication, a cut-short or malformed file) means the file is
+    // damaged, and the passphrase may well be right.
+    if (err instanceof Error && /no identity matched/.test(err.message)) {
+      throw new BackupPassphraseError("wrong");
+    }
+    throw new BackupFileCorruptError();
   }
 };
 
@@ -219,7 +226,11 @@ const numbered = (name: string, n: number): string => {
 };
 
 /** Where each live document's bytes go for people: documents/<folder path>/<name>. */
-const humanPaths = (bundle: Bundle): Map<string, string> => {
+/**
+ * Every live document's human path (document id → `documents/<folder path>/<name>`), including
+ * a document whose bytes the zip stores under another document's path.
+ */
+export const humanPaths = (bundle: Bundle): Map<string, string> => {
   const folders = new Map(
     bundle.documentFolders.filter((f) => f.deletedAt === null).map((f) => [f.id, f]),
   );
@@ -268,9 +279,10 @@ export const buildBackupZip = async (
   const refs = referencedBlobs(bundle);
   const paths = humanPaths(bundle);
 
-  // Each sha once: at the first live document's path (by id) that has it, else under .versions.
+  // Each sha once: at the first (by path, so ids never decide) live document's path that has
+  // it, else under .versions.
   const shaPath = new Map<string, string>();
-  for (const [docId, path] of [...paths].toSorted(([a], [b]) => (a < b ? -1 : 1))) {
+  for (const [docId, path] of [...paths].toSorted(([, a], [, b]) => (a < b ? -1 : 1))) {
     const sha = bundle.documents.find((d) => d.id === docId)!.sha256;
     if (!shaPath.has(sha)) shaPath.set(sha, path);
   }

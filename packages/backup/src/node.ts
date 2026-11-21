@@ -1,6 +1,16 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -14,6 +24,8 @@ import {
   buildBackupZip,
   decryptBackup,
   encryptBackup,
+  humanPaths,
+  isAge,
   readBackup,
   restoreBackupInto,
   type BackupManifest,
@@ -136,7 +148,7 @@ export const describeMissing = (missing: readonly MissingFile[]): string | undef
 /** Every check a restore makes, without writing. Throws a BackupError or the CSV's refusal. */
 export const verifyBackup = async (
   path: string,
-  passphrase: string,
+  passphrase: string | undefined,
 ): Promise<{ manifest: BackupManifest; missing: MissingFile[] }> => {
   const file = await readBackup(zipFile(path), { passphrase });
   if (!file.ok) throw new Error(refusal(file));
@@ -147,7 +159,7 @@ export const verifyBackup = async (
 export const restoreBackupToDir = async (
   path: string,
   dir: string,
-  passphrase: string,
+  passphrase: string | undefined,
 ): Promise<{ manifest: BackupManifest; missing: MissingFile[] }> => {
   if (existsSync(dir) && (await readdir(dir)).length > 0) {
     throw new Error(`${dir} isn't empty. Restore into a new directory.`);
@@ -164,6 +176,21 @@ export const restoreBackupToDir = async (
   return { manifest: file.manifest, missing: file.missing };
 };
 
+/** The deterministic (unencrypted) backup zip of a profile directory. */
+const zipDir = async (dir: string, options: { createdAt: string; build?: string }) => {
+  if (!existsSync(join(dir, DB_FILE))) throw new Error(`${dir} has no ${DB_FILE}.`);
+  const close = await openProfileDir(dir);
+  try {
+    return await buildBackupZip(
+      await buildBundle({ includeDeleted: true, includeHistory: true }),
+      fsBlobStore(dir),
+      options,
+    );
+  } finally {
+    close();
+  }
+};
+
 /**
  * An encrypted backup of a profile directory: `bytes` is the age file, `zip` the deterministic
  * zip inside it.
@@ -172,18 +199,19 @@ export const backupDir = async (
   dir: string,
   options: { createdAt: string; build?: string; passphrase: string; scryptWorkFactor?: number },
 ): Promise<{ bytes: Uint8Array; zip: Uint8Array; fileName: string; manifest: BackupManifest }> => {
-  if (!existsSync(join(dir, DB_FILE))) throw new Error(`${dir} has no ${DB_FILE}.`);
-  const close = await openProfileDir(dir);
+  const plain = await zipDir(dir, options);
+  const bytes = await encryptBackup(plain.bytes, options.passphrase, options.scryptWorkFactor);
+  return { bytes, zip: plain.bytes, fileName: plain.fileName, manifest: plain.manifest };
+};
+
+/** True when the file starts with age's header: an encrypted backup that needs a passphrase. */
+export const isEncryptedBackupFile = (path: string): boolean => {
+  const fd = openSync(path, "r");
   try {
-    const bundle = await buildBackupZip(
-      await buildBundle({ includeDeleted: true, includeHistory: true }),
-      fsBlobStore(dir),
-      options,
-    );
-    const bytes = await encryptBackup(bundle.bytes, options.passphrase, options.scryptWorkFactor);
-    return { bytes, zip: bundle.bytes, fileName: bundle.fileName, manifest: bundle.manifest };
+    const head = new Uint8Array(32);
+    return isAge(head.subarray(0, readSync(fd, head, 0, head.length, 0)));
   } finally {
-    close();
+    closeSync(fd);
   }
 };
 
@@ -195,20 +223,18 @@ export const backupDir = async (
  */
 export const checkRoundtrip = async (
   path: string,
-  passphrase: string,
+  passphrase: string | undefined,
 ): Promise<{ identical: boolean; manifest: BackupManifest }> => {
   const dir = await mkdtemp(join(tmpdir(), "fiscode-backup-"));
   try {
     const { manifest } = await restoreBackupToDir(path, join(dir, "profile"), passphrase);
-    const again = await backupDir(join(dir, "profile"), {
+    const again = await zipDir(join(dir, "profile"), {
       createdAt: manifest.createdAt,
       build: manifest.app.build,
-      passphrase,
-      scryptWorkFactor: 10, // re-encrypted only to keep the same code path; it's discarded
     });
     const original = await decryptBackup(new Uint8Array(readFileSync(path)), passphrase);
     const identical =
-      original.length === again.zip.length && original.every((b, i) => b === again.zip[i]);
+      original.length === again.bytes.length && original.every((b, i) => b === again.bytes[i]);
     return { identical, manifest };
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -216,11 +242,11 @@ export const checkRoundtrip = async (
 };
 
 /**
- * Counts, dates, schema and the live documents' paths, for a README or a CI log. Which files are
- * live is read from the manifest and the rows (a live document's current bytes), not from the
- * path (review #85 r1).
+ * Counts, dates, schema and every live document by folder path and name, from the rows (so two
+ * documents with the same bytes are both listed: review #85 r4), for a README or a CI log.
+ * `versions` counts the stored files no live document points at.
  */
-export const summarizeBackup = async (path: string, passphrase: string) => {
+export const summarizeBackup = async (path: string, passphrase: string | undefined) => {
   const file = await readBackup(zipFile(path), { passphrase });
   if (!file.ok) throw new Error(refusal(file));
   const m = file.manifest;
@@ -234,7 +260,7 @@ export const summarizeBackup = async (path: string, passphrase: string) => {
     csvSchema: m.app.csvSchema,
     build: m.app.build,
     counts: m.counts,
-    documents: live.map((d) => d.path),
+    documents: [...humanPaths(file.bundle).values()].toSorted(),
     versions: m.documents.length - live.length,
     missing: file.missing.map((x) => ({ sha256: x.sha256, names: x.names })),
   };
@@ -257,7 +283,13 @@ export const resolvePassphrase = (
   if (env.FISCODE_BACKUP_PASSPHRASE) return env.FISCODE_BACKUP_PASSPHRASE;
   const file = env.FISCODE_BACKUP_PASSPHRASE_FILE || defaultPassphraseFile();
   if (existsSync(file)) {
-    if ((statSync(file).mode & 0o077) !== 0) {
+    const stat = statSync(file);
+    if (!stat.isFile()) {
+      throw new Error(
+        `${file} isn't a file. Point FISCODE_BACKUP_PASSPHRASE_FILE at the passphrase file.`,
+      );
+    }
+    if ((stat.mode & 0o077) !== 0) {
       throw new Error(
         `${file} can be read by other users. Run: chmod 600 ${file} (nothing was read from it).`,
       );

@@ -129,7 +129,11 @@ describe("backup: layout and manifest", () => {
     // v2 is shared by two documents and stored once.
     const shas = manifest.documents.map((d) => d.sha256);
     expect(new Set(shas).size).toBe(shas.length);
-    expect(manifest.documents.find((d) => d.documentIds.length === 2)).toBeDefined();
+    // The shared sha's one path is chosen by path, never by id (review #85 r4): the receipt's
+    // "documents/2026/…" sorts before "documents/Unfiled/copy.pdf".
+    const shared = manifest.documents.find((d) => d.documentIds.length === 2)!;
+    expect(shared.path).toMatch(/^documents\/2026\/Expenses\/Demo receipt( \(2\))?\.pdf$/);
+    expect(paths).not.toContain("documents/Unfiled/copy.pdf");
     expect(manifest).toMatchObject({
       format: "fiscode-backup",
       formatVersion: 1,
@@ -515,7 +519,7 @@ describe("review #85 r1: the script reports missing files", () => {
     expect(restore.stdout).toMatch(/files? listed as missing/);
   }, 30_000);
 
-  it("(6) summary tells live files from versions by the manifest, not by the path", async () => {
+  it("(6) summary lists every live document from the rows (shared bytes too), and counts versions", async () => {
     await seed();
     const backup = await createBackup({
       createdAt: CREATED,
@@ -526,12 +530,12 @@ describe("review #85 r1: the script reports missing files", () => {
     writeFileSync(zip, new Uint8Array(await backup.blob.arrayBuffer()));
     teardownTestDb(sqlite);
     const summary = await summarizeBackup(zip, PASS);
-    expect(summary.documents.toSorted()).toEqual(
-      [
-        "documents/2026/Expenses/Demo receipt (2).pdf",
-        "documents/2026/Expenses/Demo receipt.pdf",
-      ].toSorted(),
-    );
+    // copy.pdf shares the receipt's bytes (one zip entry) and is still listed (review #85 r4).
+    expect(summary.documents).toEqual([
+      "documents/2026/Expenses/Demo receipt (2).pdf",
+      "documents/2026/Expenses/Demo receipt.pdf",
+      "documents/Unfiled/copy.pdf",
+    ]);
     expect(summary.versions).toBe(2);
     sqlite = setupTestDb();
   });
@@ -713,4 +717,92 @@ describe("encryption (age, scrypt passphrase)", () => {
       expect(none.status).toBe(1);
     }, 30_000);
   });
+});
+
+describe("review #85 r4", () => {
+  const all = () => buildBundle({ includeDeleted: true, includeHistory: true });
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "fiscode-backup-r4-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  /** Where age's header ends: after the "--- <mac>" line. */
+  const headerEnd = (bytes: Uint8Array) => {
+    const text = strFromU8(bytes.subarray(0, 400));
+    const at = text.indexOf("\n--- ");
+    return at + text.slice(at + 1).indexOf("\n") + 2;
+  };
+
+  it("(1) a damaged file with the RIGHT passphrase is BackupFileCorruptError, not 'wrong'; nothing changes", async () => {
+    await seed();
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    const good = new Uint8Array(await backup.blob.arrayBuffer());
+    const end = headerEnd(good);
+    expect(good.length).toBeGreaterThan(end + 100);
+    const truncated = good.slice(0, good.length - 100);
+    const zeroed = good.slice();
+    zeroed[end + 60] = zeroed[end + 60]! ^ 0xff;
+    const headerOnly = good.slice(0, end);
+    const badMac = good.slice();
+    badMac[end - 5] = badMac[end - 5] === 0x41 ? 0x42 : 0x41; // inside the header MAC
+    const before = await all();
+    for (const bytes of [truncated, zeroed, headerOnly, badMac]) {
+      const read = readBackup(new Blob([bytes as unknown as ArrayBuffer]), { passphrase: PASS });
+      await expect(read).rejects.toBeInstanceOf(BackupFileCorruptError);
+      await expect(
+        readBackup(new Blob([bytes as unknown as ArrayBuffer]), { passphrase: PASS }),
+      ).rejects.toThrow(/damaged.*Nothing was changed/);
+    }
+    // A wrong passphrase is still "wrong", even on a damaged file (the header is checked first).
+    await expect(
+      readBackup(new Blob([truncated as unknown as ArrayBuffer]), {
+        passphrase: "not-the-passphrase",
+      }),
+    ).rejects.toBeInstanceOf(BackupPassphraseError);
+    expect(normalized(await all())).toEqual(normalized(before));
+  });
+
+  it("(3) a passphrase 'file' that is a directory gets its own message", () => {
+    mkdirSync(join(dir, "a-dir"), { mode: 0o755 });
+    expect(() =>
+      resolvePassphrase({ FISCODE_BACKUP_PASSPHRASE_FILE: join(dir, "a-dir") }, () => undefined),
+    ).toThrow(/isn't a file/);
+  });
+
+  it("(5) the script opens a plain .zip without asking for a passphrase", async () => {
+    await seed();
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    const zip = join(dir, "fiscode-backup-2026-11-21.zip");
+    writeFileSync(zip, await plain(backup.blob));
+    const bin = fileURLToPath(new URL("../bin/fiscode-backup.ts", import.meta.url));
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      FISCODE_BACKUP_PASSPHRASE_FILE: join(dir, "none"),
+    };
+    delete env.FISCODE_BACKUP_PASSPHRASE;
+    // No passphrase source and no terminal: a plain zip still verifies and round-trips.
+    const run = (...args: string[]) =>
+      spawnSync("setsid", ["-w", "bun", bin, ...args], {
+        encoding: "utf8",
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    const verify = run("verify", zip);
+    expect(verify.stderr).toBe("");
+    expect(verify.status).toBe(0);
+    expect(run("check-roundtrip", zip).stdout.trim()).toBe("identical (decrypted contents)");
+    // The encrypted one still needs it.
+    const age = join(dir, backup.fileName);
+    writeFileSync(age, new Uint8Array(await backup.blob.arrayBuffer()));
+    expect(run("verify", age).stderr).toMatch(/No passphrase/);
+  }, 30_000);
 });

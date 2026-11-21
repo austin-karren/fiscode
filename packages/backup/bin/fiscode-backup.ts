@@ -10,13 +10,14 @@
 // The passphrase comes from FISCODE_BACKUP_PASSPHRASE, else the file FISCODE_BACKUP_PASSPHRASE_FILE
 // (default ~/.config/fiscode/backup-passphrase, chmod 600), else a prompt that doesn't echo. Never an
 // argument: arguments show in `ps` and in shell history.
-import { closeSync, openSync, readSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import {
   backupDir,
   checkRoundtrip,
   restoreBackupToDir,
   describeMissing,
+  isEncryptedBackupFile,
   resolvePassphrase,
   summarizeBackup,
   verifyBackup,
@@ -38,9 +39,16 @@ const usage = `usage:
   fiscode-backup backup --from <dir> --out <backup.zip.age> [--created-at <iso>]
   fiscode-backup check-roundtrip <backup.zip.age>
   fiscode-backup summary <backup.zip.age>
-Passphrase: FISCODE_BACKUP_PASSPHRASE, else FISCODE_BACKUP_PASSPHRASE_FILE\n(default ~/.config/fiscode/backup-passphrase, chmod 600), else a prompt in a terminal.`;
+Passphrase: FISCODE_BACKUP_PASSPHRASE, else FISCODE_BACKUP_PASSPHRASE_FILE\n(default ~/.config/fiscode/backup-passphrase, chmod 600), else a prompt in a terminal. A plain .zip needs none.`;
 
-/** One line from the terminal with echo off. Undefined when there's no terminal. */
+/**
+ * One line from the terminal with echo off. Undefined when there's no terminal.
+ *
+ * The terminal is put in raw mode (no echo, no line editing, no signals), so Ctrl-C arrives here
+ * as a byte instead of as SIGINT. A signal would kill the process before `finally` could turn
+ * echo back on, and a JS handler can't run while readSync blocks (review #85 r4). Ctrl-C
+ * restores the terminal's saved settings, then exits 130.
+ */
 const promptHidden = (label: string): string | undefined => {
   let fd: number;
   try {
@@ -48,20 +56,45 @@ const promptHidden = (label: string): string | undefined => {
   } catch {
     return undefined;
   }
-  const stty = (arg: string) => spawnSync("stty", [arg], { stdio: [fd, "ignore", "ignore"] });
+  const stty = (...args: string[]) =>
+    spawnSync("stty", args, { stdio: [fd, "pipe", "ignore"], encoding: "utf8" });
+  const saved = stty("-g").stdout.trim();
+  const restore = () => {
+    if (saved) stty(saved);
+    else stty("sane");
+    writeFileSync(fd, "\n");
+  };
+  let interrupted = false;
   try {
     writeFileSync(fd, label);
-    stty("-echo");
+    stty("-echo", "-icanon", "-isig", "min", "1", "time", "0");
     const bytes: number[] = [];
     const one = Buffer.alloc(1);
-    while (readSync(fd, one, 0, 1, null) === 1 && one[0] !== 0x0a) {
-      if (one[0] !== 0x0d) bytes.push(one[0]!);
+    for (;;) {
+      if (readSync(fd, one, 0, 1, null) !== 1) break; // end of input
+      const c = one[0]!;
+      if (c === 0x03) {
+        interrupted = true; // Ctrl-C
+        break;
+      }
+      if (c === 0x0a || c === 0x0d) break; // Enter
+      if (c === 0x04 && bytes.length === 0) break; // Ctrl-D on an empty line
+      if (c === 0x7f || c === 0x08) {
+        // Backspace: drop one whole UTF-8 character.
+        while (bytes.length && (bytes.pop()! & 0xc0) === 0x80);
+        continue;
+      }
+      if (c === 0x15) {
+        bytes.length = 0; // Ctrl-U
+        continue;
+      }
+      bytes.push(c);
     }
     return Buffer.from(bytes).toString("utf8");
   } finally {
-    stty("echo");
-    writeFileSync(fd, "\n");
+    restore();
     closeSync(fd);
+    if (interrupted) process.exit(130);
   }
 };
 
@@ -73,6 +106,10 @@ const passphrase = (confirm: boolean): string =>
     }
     return first;
   });
+
+/** The passphrase to open `path`: none for a plain .zip (already decrypted with the age CLI). */
+const passphraseFor = (path: string): string | undefined =>
+  existsSync(path) && !isEncryptedBackupFile(path) ? undefined : passphrase(false);
 
 const main = async (): Promise<number> => {
   if (args.some((a) => a.startsWith("--passphrase") || a.startsWith("--password"))) {
@@ -86,7 +123,7 @@ const main = async (): Promise<number> => {
     case "verify": {
       const { manifest: m, missing } = await verifyBackup(
         need(target, "the backup file"),
-        passphrase(false),
+        passphraseFor(target!),
       );
       console.log(
         `ok: ${m.counts.rows} rows, ${m.counts.documents} documents, ${m.counts.blobs} files, made ${m.createdAt}`,
@@ -100,7 +137,7 @@ const main = async (): Promise<number> => {
       const { manifest: m, missing } = await restoreBackupToDir(
         need(target, "the backup file"),
         to,
-        passphrase(false),
+        passphraseFor(target!),
       );
       console.log(`restored ${m.counts.rows} rows and ${m.counts.blobs} files into ${to}`);
       const note = describeMissing(missing);
@@ -121,7 +158,7 @@ const main = async (): Promise<number> => {
     case "check-roundtrip": {
       const { identical } = await checkRoundtrip(
         need(target, "the backup file"),
-        passphrase(false),
+        passphraseFor(target!),
       );
       console.log(
         identical
@@ -133,7 +170,7 @@ const main = async (): Promise<number> => {
     case "summary": {
       console.log(
         JSON.stringify(
-          await summarizeBackup(need(target, "the backup file"), passphrase(false)),
+          await summarizeBackup(need(target, "the backup file"), passphraseFor(target!)),
           null,
           2,
         ),

@@ -26,11 +26,18 @@ export class BackupTooNewError extends BackupError {
     );
   }
 }
+/**
+ * A damaged backup. With `path`: one file inside the zip doesn't match the manifest. Without: the
+ * encrypted file itself is damaged, cut short or altered (age's checks failed after the passphrase
+ * matched), so retrying the passphrase won't help.
+ */
 export class BackupFileCorruptError extends BackupError {
   override readonly name = "BackupFileCorruptError";
-  constructor(path: string) {
+  constructor(readonly path?: string) {
     super(
-      `"${path}" in this backup is damaged (its contents don't match the backup's record). Nothing was changed.`,
+      path === undefined
+        ? "This backup file is damaged (cut short or altered), so it can't be opened. The passphrase is right. Nothing was changed."
+        : `"${path}" in this backup is damaged (its contents don't match the backup's record). Nothing was changed.`,
     );
   }
 }

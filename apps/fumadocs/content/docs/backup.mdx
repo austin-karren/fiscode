@@ -21,10 +21,12 @@ You can open it without fiscode, using the `age` command-line tool:
 age -d -o fiscode-backup-2026-11-21.zip fiscode-backup-2026-11-21.zip.age
 ```
 
-`age` asks for the passphrase. fiscode also restores the decrypted `.zip`.
+`age` asks for the passphrase. fiscode (the app and the script) also restores the decrypted `.zip`,
+without asking for a passphrase.
 
 A wrong passphrase stops the restore with "That passphrase doesn't open this backup", and nothing
-changes.
+changes. A file that was cut short or altered stops it with "This backup file is damaged" instead:
+the passphrase is right, so trying it again won't help. Use another copy of the backup.
 
 ## What is in the zip
 
@@ -76,7 +78,8 @@ and in shell history):
    refuses a file that other users can read. One trailing newline is ignored;
 3. a prompt in the terminal that doesn't show what you type.
 
-With none of these, it stops with an error. It never prints the passphrase.
+With none of these, it stops with an error. It never prints the passphrase. A plain `.zip` (already
+decrypted with `age`) needs no passphrase, so the script doesn't look for one.
 
 | Command                                                           | What it does                                                                                                                                                                                           |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
