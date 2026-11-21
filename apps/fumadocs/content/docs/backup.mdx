@@ -1,15 +1,30 @@
 ---
 title: Full backup
-description: One zip with everything, documents included, and how to restore it in the app or from a script.
+description: One encrypted file with everything, documents included, and how to restore it in the app or from a script.
 icon: Archive
 ---
 
-A **full backup** is one `.zip` with everything in fiscode: every row (deleted ones too), the edit
+A **full backup** is one encrypted file (`.zip.age`) with everything in fiscode: every row (deleted ones too), the edit
 history, and the files of your documents. Restoring it into a new browser gives you back exactly
 what you had.
 
-**It is not encrypted.** Anyone who has the file can read your whole tax record. Keep it somewhere
-private.
+**It is encrypted with a passphrase you choose** (at least 12 characters). fiscode never stores
+the passphrase. If you forget it, nobody can open the backup, so keep it in a password manager.
+
+## Encryption
+
+The file is an [age](https://age-encryption.org/v1) v1 file with one scrypt passphrase recipient
+(work factor 18), made with the `age-encryption` package. Inside it is the zip described below.
+You can open it without fiscode, using the `age` command-line tool:
+
+```sh
+age -d -o fiscode-backup-2026-11-21.zip fiscode-backup-2026-11-21.zip.age
+```
+
+`age` asks for the passphrase. fiscode also restores the decrypted `.zip`.
+
+A wrong passphrase stops the restore with "That passphrase doesn't open this backup", and nothing
+changes.
 
 ## What is in the zip
 
@@ -34,6 +49,8 @@ fiscode-backup-2026-11-21.zip
 
 ## Restoring
 
+fiscode asks for the backup's passphrase first.
+
 - fiscode checks every file against the manifest before it changes anything. A damaged or missing
   file, a file the manifest doesn't list, or a damaged manifest refuses the whole backup and names
   the file.
@@ -48,14 +65,25 @@ fiscode-backup-2026-11-21.zip
 ## From a script
 
 `packages/backup/bin/fiscode-backup.ts` works on backup files without a browser. Run it with Bun
-from the repository:
+from the repository.
 
-| Command                                                       | What it does                                                                                                                                                                                           |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `verify <backup.zip> [--allow-missing]`                       | Every check a restore makes. Exits 1 and names the problem; exits 3 when the backup lists files as missing (the device that made it didn't have them), naming the documents, unless `--allow-missing`. |
-| `restore <backup.zip> --to <dir>`                             | Restores into a new, empty directory: `fiscode.sqlite` and `documents/blobs/…`, the layout the browser uses.                                                                                           |
-| `backup --from <dir> --out <backup.zip> [--created-at <iso>]` | A backup of such a directory.                                                                                                                                                                          |
-| `check-roundtrip <backup.zip>`                                | Restores into a temporary directory, backs up again with the same date and time, and compares the bytes. Exits 0 when they are the same.                                                               |
-| `summary <backup.zip>`                                        | Counts, dates, schema and the document paths, as JSON.                                                                                                                                                 |
+It finds the passphrase in this order, and never takes it as an argument (arguments show in `ps`
+and in shell history):
+
+1. the `FISCODE_BACKUP_PASSPHRASE` environment variable;
+2. the file named by `FISCODE_BACKUP_PASSPHRASE_FILE`, by default
+   `~/.config/fiscode/backup-passphrase`. Create it yourself and run `chmod 600` on it: the script
+   refuses a file that other users can read. One trailing newline is ignored;
+3. a prompt in the terminal that doesn't show what you type.
+
+With none of these, it stops with an error. It never prints the passphrase.
+
+| Command                                                           | What it does                                                                                                                                                                                           |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `verify <backup.zip.age> [--allow-missing]`                       | Every check a restore makes. Exits 1 and names the problem; exits 3 when the backup lists files as missing (the device that made it didn't have them), naming the documents, unless `--allow-missing`. |
+| `restore <backup.zip.age> --to <dir>`                             | Restores into a new, empty directory: `fiscode.sqlite` and `documents/blobs/…`, the layout the browser uses.                                                                                           |
+| `backup --from <dir> --out <backup.zip.age> [--created-at <iso>]` | A backup of such a directory.                                                                                                                                                                          |
+| `check-roundtrip <backup.zip.age>`                                | Restores into a temporary directory, backs up again with the same date and time, and compares the decrypted zips. Exits 0 when they are the same.                                                      |
+| `summary <backup.zip.age>`                                        | Counts, dates, schema and the document paths, as JSON.                                                                                                                                                 |
 
 The script can't read a browser's storage: a backup always starts in the app.
