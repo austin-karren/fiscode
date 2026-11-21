@@ -93,6 +93,81 @@ export type TaxInput = {
   priorYearAgi: Cents | undefined;
   /** Last year's state tax liability (Utah TC-546 line 4); undefined when not entered. */
   priorYearStateTax?: Cents | undefined;
+  /**
+   * The filer's own W-2s for the year, summed (DF-07). On any filing status: they are the
+   * filer's own, unlike the spouse's. Undefined = none.
+   */
+  ownW2?: OwnW2;
+  /** Estimated tax payments made for the year (DF-07). Undefined = none. */
+  estimatedPayments?: { federal: EstimatedPaymentInput[]; state: EstimatedPaymentInput[] };
+  /**
+   * "I didn't file a return for last year": no prior-year safe harbor (Form 2210 line 8, "If you
+   * didn't file a return for 2024 … don't complete line 8"). Default false.
+   */
+  priorYearNotFiled?: boolean;
+};
+
+/** The filer's own W-2 boxes for the year, summed over their W-2s. */
+export type OwnW2 = {
+  /** Box 1: wages, tips, other compensation. Adds to AGI. */
+  wages: Cents;
+  /** Box 2: federal income tax withheld. */
+  federalWithholding: Cents;
+  /** Boxes 3 + 7: Social Security wages and tips (Schedule SE line 8a). */
+  ssWages: Cents;
+  /** Box 5: Medicare wages and tips (Form 8959). */
+  medicareWages: Cents;
+  /** Box 17: state income tax withheld. */
+  stateWithholding: Cents;
+};
+
+/** One estimated tax payment made. */
+export type EstimatedPaymentInput = {
+  date: string;
+  amount: Cents;
+  /** The quarter the user applied it to; undefined = from the date (the next due date). */
+  appliedQuarter: 1 | 2 | 3 | 4 | undefined;
+};
+
+/** One quarter of the federal payments view (Form 2210 due dates). */
+export type QuarterPaid = {
+  quarter: 1 | 2 | 3 | 4;
+  dueDate: IsoDate;
+  /** Required installments through this quarter, cumulative. */
+  requiredThrough: Cents;
+  /** Paid by this due date, cumulative: a quarter of the withholding per due date + estimates dated by then. */
+  paidByDueDate: Cents;
+  /** requiredThrough − paidByDueDate, not below 0. */
+  shortfall: Cents;
+  /** Estimates whose applied quarter is this one (for the list). */
+  paidAppliedHere: Cents;
+};
+
+/** What has been paid against what is required (DF-07). No penalty math. */
+export type PaymentsResult = {
+  federal: {
+    withholding: Cents;
+    estimates: Cents;
+    totalPaid: Cents;
+    /** The required annual payment: the safe-harbor floor, or 0 when no installments are required. */
+    target: Cents;
+    remaining: Cents;
+    quarters: [QuarterPaid, QuarterPaid, QuarterPaid, QuarterPaid];
+    /** Every quarter's shortfall is 0. */
+    safeHarborMet: boolean;
+  };
+  state:
+    | {
+        withholding: Cents;
+        estimates: Cents;
+        totalPaid: Cents;
+        /** TC-546 line 5. */
+        minimumBeforePayments: Cents;
+        /** TC-546 line 8. */
+        remaining: Cents;
+        dueDate: IsoDate;
+      }
+    | undefined;
 };
 
 export type SeTaxBreakdown = {
@@ -168,8 +243,10 @@ export type QuarterlyPlan = {
 export type StatePrepayment = {
   state: "UT";
   dueDate: IsoDate;
-  /** TC-546 line 8: what to pay by `dueDate` after Utah withholding; $0 if none. */
+  /** TC-546 line 8: what to pay by `dueDate` after Utah withholding and prepayments; $0 if none. */
   minimum: Cents;
+  /** TC-546 line 5: the lesser of line 3 and line 4, before withholding and prepayments. */
+  line5?: Cents;
   /** Which TC-546 line 5 amount was used: line 3 (90% of this year's) or line 4 (last year's). */
   basis: "currentYear90" | "priorYear";
 };
@@ -185,6 +262,11 @@ export type SafeHarborResult = {
    * entered (110%, since it might be over). Undefined in the first-year fallback.
    */
   multiplierReason?: "agi_over_threshold" | "agi_not_over_threshold" | "agi_not_entered";
+  /**
+   * Where the prior-year amount stands: entered and used, not entered (blank or another year's),
+   * or no return filed for that year (Form 2210 line 8).
+   */
+  priorYearBasis?: "entered" | "not_entered" | "not_filed";
   firstYear: boolean;
 };
 

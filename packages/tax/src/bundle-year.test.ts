@@ -1207,3 +1207,98 @@ describe("prior-year safe harbor from the profile (Pub 505; Utah TC-546 line 4)"
     expect(under.result.safeHarbor.multiplierReason).toBe("agi_not_over_threshold");
   });
 });
+
+describe("own W-2s and estimated payments from the bundle (DF-07)", () => {
+  const job = (id: string, taxYear: number, extra = {}) => ({
+    id,
+    taxYear,
+    employer: "Demo Employer Inc",
+    startDate: null,
+    endDate: null,
+    wagesCents: 10_000_00,
+    federalWithholdingCents: 1_000_00,
+    ssWagesCents: 9_000_00,
+    ssTaxWithheldCents: 0,
+    medicareWagesCents: 10_000_00,
+    ssTipsCents: 500_00,
+    stateWagesCents: 10_000_00,
+    stateWithholdingCents: 400_00,
+    notes: null,
+    createdAt: FIXED,
+    updatedAt: FIXED,
+    deletedAt: null as string | null,
+    ...extra,
+  });
+  const payment = (
+    id: string,
+    date: string,
+    jurisdiction: string,
+    taxYear: number,
+    extra = {},
+  ) => ({
+    id,
+    date,
+    amountCents: 250_00,
+    jurisdiction,
+    taxYear,
+    appliedQuarter: null as number | null,
+    notes: null,
+    createdAt: FIXED,
+    updatedAt: FIXED,
+    deletedAt: null as string | null,
+    ...extra,
+  });
+
+  it("sums the year's live W-2s (box 3 + box 7 for Social Security) and takes the year's payments", () => {
+    const b = makeBundle({
+      w2Jobs: [
+        job("w1", 2026),
+        job("w2", 2026),
+        job("old", 2025),
+        job("gone", 2026, { deletedAt: FIXED }),
+      ],
+      estimatedPayments: [
+        payment("p1", "2026-04-10", "federal", 2026),
+        payment("p2", "2027-01-12", "federal", 2026, { appliedQuarter: 4 }),
+        payment("p3", "2026-09-01", "UT", 2026),
+        payment("p4", "2026-01-10", "federal", 2025), // last year's Q4
+      ],
+    });
+    const input = inputFor(b, 2026);
+    expect(input.ownW2).toEqual({
+      wages: 20_000_00,
+      federalWithholding: 2_000_00,
+      ssWages: 19_000_00, // (9,000 + 500) × 2
+      medicareWages: 20_000_00,
+      stateWithholding: 800_00,
+    });
+    expect(input.estimatedPayments).toEqual({
+      federal: [
+        { date: "2026-04-10", amount: 250_00, appliedQuarter: undefined },
+        { date: "2027-01-12", amount: 250_00, appliedQuarter: 4 },
+      ],
+      state: [{ date: "2026-09-01", amount: 250_00, appliedQuarter: undefined }],
+    });
+    const d = deriveYear(b, 2026);
+    expect(d.ownW2Wages).toBe(20_000_00);
+    expect(d.ownW2Count).toBe(2);
+    expect(d.estimatedPaymentCount).toEqual({ federal: 2, state: 1 });
+  });
+
+  it("prior_year_not_filed counts only when stamped for the year before", () => {
+    const stamped = (year: number | null) =>
+      makeBundle({
+        profile: {
+          ...makeBundle().profile!,
+          priorYearNotFiled: true,
+          priorYearFiguresYear: year,
+        },
+      });
+    expect(inputFor(stamped(2025), 2026).priorYearNotFiled).toBe(true);
+    expect(inputFor(stamped(2025), 2027).priorYearNotFiled).toBe(false);
+    expect(inputFor(stamped(null), 2026).priorYearNotFiled).toBe(false);
+    expect(estimateBundleYear(stamped(2025), 2026).result.safeHarbor.priorYearBasis).toBe(
+      "not_filed",
+    );
+  });
+});

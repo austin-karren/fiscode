@@ -81,15 +81,44 @@ export const scheduleAiInstallments = (
 export const paymentsAfterWithholding = (
   installments: Four<Cents>,
   withholding: Cents,
+  /** Estimated payments credited at each due date (`estimatesByDueDate`). */
+  estimates: Four<Cents> = [cents(0), cents(0), cents(0), cents(0)],
 ): Four<Cents> => {
   const perQuarter = regularInstallments(withholding);
   const out: Cents[] = [];
   let carry = cents(0);
   for (let i = 0; i < 4; i++) {
-    const available = cents(perQuarter[i]! + carry);
+    const available = cents(perQuarter[i]! + estimates[i]! + carry);
     const due = installments[i]!;
     out.push(clampMinZero(subCents(due, available)));
     carry = clampMinZero(subCents(available, due));
   }
   return out as Four<Cents>;
+};
+
+/**
+ * Estimated payments by the due date they count toward: each at the first due date on or after
+ * the day it was paid. Pub 505 (https://www.irs.gov/publications/p505): "If a payment is mailed,
+ * the date of the U.S. postmark is considered the date of payment." A payment after the last due
+ * date counts toward none (it is still paid; see `PaymentsResult.federal.totalPaid`).
+ */
+export const estimatesByDueDate = (
+  payments: readonly { date: string; amount: Cents }[],
+  dueDates: readonly [string, string, string, string],
+): Four<Cents> => {
+  const out: Four<Cents> = [cents(0), cents(0), cents(0), cents(0)];
+  for (const p of payments) {
+    const i = dueDates.findIndex((due) => p.date <= due);
+    if (i >= 0) out[i] = cents(out[i]! + p.amount);
+  }
+  return out;
+};
+
+/** The quarter a payment counts toward by its date: the first due date on or after it, else 4. */
+export const quarterForDate = (
+  date: string,
+  dueDates: readonly [string, string, string, string],
+): 1 | 2 | 3 | 4 => {
+  const i = dueDates.findIndex((due) => date <= due);
+  return (i === -1 ? 4 : i + 1) as 1 | 2 | 3 | 4;
 };

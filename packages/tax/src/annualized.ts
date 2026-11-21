@@ -1,5 +1,10 @@
 import { type Cents, type IsoDate, mulRate, shiftToBusinessDay } from "@fiscode/core";
-import { type Four, paymentsAfterWithholding, scheduleAiInstallments } from "./installments.ts";
+import {
+  type Four,
+  estimatesByDueDate,
+  paymentsAfterWithholding,
+  scheduleAiInstallments,
+} from "./installments.ts";
 import type {
   AnnualizedInput,
   IncomePeriod,
@@ -67,7 +72,15 @@ export const annualizedQuarterly = (
     return estimate.federalLiability;
   }) as Four<Cents>;
   const required = scheduleAiInstallments(annualizedTax, requiredAnnualPayment);
-  const toPay = paymentsAfterWithholding(required, input.spouseFederalWithholding);
+  // Federal withholding: the spouse's (joint return only; see engine.ts) and the filer's own.
+  // Estimated payments count from the date paid (DF-07).
+  const withholding = (input.spouseFederalWithholding +
+    (input.ownW2?.federalWithholding ?? 0)) as Cents;
+  const toPay = paymentsAfterWithholding(
+    required,
+    withholding,
+    estimatesByDueDate(input.estimatedPayments?.federal ?? [], dues),
+  );
   const payments = periods.map((period, i): QuarterPayment => ({
     quarter: (i + 1) as 1 | 2 | 3 | 4,
     periodStart: period.start,
