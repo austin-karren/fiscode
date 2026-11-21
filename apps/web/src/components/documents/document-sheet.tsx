@@ -100,6 +100,13 @@ function SheetBody({
     if (!file) return;
     try {
       await documentRepo.replaceBytes(doc.id, file);
+      // The name keeps the user's wording but takes the new file's extension (a PNG replacing a
+      // PDF is no longer ".pdf").
+      const ext = (n: string) => (n.includes(".") ? n.slice(n.lastIndexOf(".")) : "");
+      if (ext(file.name) && ext(file.name).toLowerCase() !== ext(doc.name).toLowerCase()) {
+        const base = ext(doc.name) ? doc.name.slice(0, -ext(doc.name).length) : doc.name;
+        await documentRepo.rename(doc.id, `${base}${ext(file.name)}`);
+      }
       toast.success(`Replaced ${doc.name}.`);
       onChanged();
     } catch (err) {

@@ -35,6 +35,26 @@ describe("name dialog", () => {
   });
 });
 
+describe("name dialog opens fresh each time (REVIEW #83 r2 F2)", () => {
+  it("starts blank for a new folder after a rename, and from the current name for a rename", () => {
+    const props = {
+      title: "Folder",
+      label: "Folder name",
+      submitLabel: "Save",
+      onOpenChange: () => {},
+      onSubmit: async () => {},
+    };
+    const { rerender } = render(<NameDialog {...props} open initial="" />);
+    fireEvent.change(screen.getByLabelText("Folder name"), { target: { value: "Alpha" } });
+    rerender(<NameDialog {...props} open={false} initial="" />);
+    rerender(<NameDialog {...props} open initial="" />);
+    expect(screen.getByLabelText("Folder name")).toHaveValue("");
+    rerender(<NameDialog {...props} open={false} initial="Demo receipts" />);
+    rerender(<NameDialog {...props} open initial="Demo receipts" />);
+    expect(screen.getByLabelText("Folder name")).toHaveValue("Demo receipts");
+  });
+});
+
 describe("move dialog", () => {
   it("leaves out the folder and everything inside it", async () => {
     const a = await folderRepo.create({ name: "Demo move A" });
@@ -91,5 +111,22 @@ describe("document sheet", () => {
     expect(revoke).toHaveBeenCalledWith("blob:demo-1");
     create.mockRestore();
     revoke.mockRestore();
+  });
+
+  it("gives a replaced file's name the new file's extension", async () => {
+    const doc = await documentRepo.upload(
+      new File(["%PDF demo"], "demo-receipt.pdf", { type: "application/pdf" }),
+    );
+    render(
+      <DocumentSheet doc={doc} folderPath="Unfiled" onClose={() => {}} onChanged={() => {}} />,
+    );
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    fireEvent.change(input, {
+      target: { files: [new File(["PNG demo"], "scan.png", { type: "image/png" })] },
+    });
+    await waitFor(async () =>
+      expect((await documentRepo.get(doc.id))?.name).toBe("demo-receipt.png"),
+    );
+    expect((await documentRepo.get(doc.id))?.mime).toBe("image/png");
   });
 });

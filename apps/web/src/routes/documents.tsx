@@ -472,6 +472,7 @@ function FolderTree({
             {documentCount > 0 ? (
               <span className="ms-auto text-xs text-muted-foreground tabular-nums">
                 {documentCount}
+                <span className="sr-only"> {documentCount === 1 ? "document" : "documents"}</span>
               </span>
             ) : null}
           </Link>
@@ -490,7 +491,13 @@ function FolderTree({
   );
   return (
     <>
-      <details className="rounded-md border border-border p-2 @3xl:hidden">
+      {/* A pick closes it on a phone, so the folder's documents are in view. */}
+      <details
+        className="relative rounded-md border border-border p-2 @3xl:hidden"
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("a")) e.currentTarget.open = false;
+        }}
+      >
         <summary className="cursor-pointer text-sm font-medium">Folders</summary>
         <div className="mt-2">{list}</div>
       </details>
