@@ -19,6 +19,7 @@ import { exampleBundle, exportBundle } from "@fiscode/csv";
 import {
   __setBlobStoreForTests,
   buildBundle,
+  historyRepo,
   documentLinkRepo,
   documentRepo,
   folderRepo,
@@ -46,7 +47,8 @@ import {
   verifyBackup,
 } from "./node.ts";
 
-const CREATED = "2026-11-21T02:00:00.000Z";
+// Noon UTC: the same calendar day (the file name's date is local) from UTC-11 to UTC+11.
+const CREATED = "2026-11-21T12:00:00.000Z";
 // A throwaway constant, only ever used on demo data. Work factor 10 keeps scrypt fast in tests.
 const PASS = "throwaway-test-passphrase";
 const WF = 10;
@@ -1192,4 +1194,74 @@ describe("check-roundtrip when the restored contents differ", () => {
     expect(await checkRoundtrip(path, PASS)).toMatchObject({ identical: true });
     expect(script(path).status).toBe(0);
   }, 30_000);
+});
+
+describe("a backup restore is its own History entry (backup-restore)", () => {
+  const snapshots = async () =>
+    (await historyRepo.listAll()).filter((h) => h.entity === "__import_snapshot");
+
+  it("over existing data: one backup-restore snapshot with the backup's time; the data is the backup's", async () => {
+    await seed();
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    const expected = normalized(await buildBundle({ includeDeleted: true }));
+    await folderRepo.create({ name: "Made after the backup" });
+    const before = (await snapshots()).length;
+    const read = await openBackup(backup.blob);
+    if (!read.ok) throw new Error(read.headline);
+    await restoreBackup(read);
+    const added = (await snapshots()).slice(before);
+    expect(added.map((s) => s.entityId)).toEqual(["backup-restore"]);
+    expect(JSON.parse(added[0]!.afterJson!).backup).toEqual({ createdAt: CREATED });
+    expect(normalized(await buildBundle({ includeDeleted: true }))).toEqual(expected);
+  });
+
+  it("into an empty profile: no snapshot (nothing to go back to), so the restore stays exact", async () => {
+    await seed();
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    const logBefore = (await historyRepo.listAll()).map((h) => h.id);
+    emptyProfile();
+    const read = await openBackup(backup.blob);
+    if (!read.ok) throw new Error(read.headline);
+    await restoreBackup(read);
+    // The same entries (listAll's order among equal times isn't fixed): nothing added.
+    const logAfter = (await historyRepo.listAll()).map((h) => h.id);
+    expect(logAfter.toSorted()).toEqual(logBefore.toSorted());
+  });
+
+  it("then backed up and restored again: the backup-restore entry survives byte for byte", async () => {
+    await seed();
+    const first = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    await folderRepo.create({ name: "Made after the backup" });
+    const read = await openBackup(first.blob);
+    if (!read.ok) throw new Error(read.headline);
+    await restoreBackup(read); // writes the backup-restore entry
+    const second = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    emptyProfile();
+    const again = await openBackup(second.blob);
+    if (!again.ok) throw new Error(again.headline);
+    await restoreBackup(again);
+    const third = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    expect(await plain(third.blob)).toEqual(await plain(second.blob));
+    expect((await snapshots()).some((s) => s.entityId === "backup-restore")).toBe(true);
+  });
 });

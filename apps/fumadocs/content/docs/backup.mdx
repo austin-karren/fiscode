@@ -46,6 +46,8 @@ fiscode-backup-2026-11-21.zip
 - **The whole backup is held in memory** while it is made or read: about twice its size (the
   files, then the zip). That is fine for a personal record; a very large set of documents needs a
   device with the memory for it.
+- **The file is named for the day you made it,** on your device's calendar, as the CSV export is:
+  a backup made at 10:55 pm on November 20 is `fiscode-backup-2026-11-20.zip.age`.
 - **Folder and file names are made safe to unzip anywhere,** Windows included. The characters
   `< > : " | ? *` become `_`, trailing dots and spaces are dropped, and a device name such as `CON`
   or `nul.txt` gets a leading `_`. A document whose name would match a folder's (ignoring case) gets
@@ -66,7 +68,8 @@ fiscode asks for the backup's passphrase first.
 - Into a new, empty browser the restore is exact: the same rows, history and documents. Exporting
   again gives the same CSV, byte for byte.
 - Over data that is already there, fiscode shows what would be replaced and asks first. The restore
-  replaces everything and can be undone from **History**.
+  replaces everything and can be undone from **History**, where it shows as "Restored from the
+  backup of" the day the backup was made.
 - A backup made on a device that was missing some document files (for example after a CSV-only
   restore) lists them in the manifest. Restoring it brings those documents' rows back; their files
   say "not on this device".

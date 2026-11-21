@@ -23,7 +23,12 @@ import {
 } from "../schema/index.ts";
 import { buildBundle } from "./index.ts";
 
-export type ImportReason = "import-restore" | "import-append" | "import-update" | "history-restore";
+export type ImportReason =
+  | "import-restore"
+  | "import-append"
+  | "import-update"
+  | "history-restore"
+  | "backup-restore";
 
 /**
  * Apply a Bundle to the DB, all or nothing.
@@ -31,6 +36,9 @@ export type ImportReason = "import-restore" | "import-append" | "import-update" 
  * - `import-restore`: every data table is emptied and reloaded from the bundle.
  * - `history-restore`: the same as `import-restore`, for a past snapshot put
  *   back from the History screen, so the log can tell it from a file restore.
+ * - `backup-restore`: the same as `import-restore`, for a full backup (@fiscode/backup).
+ *   `options.backup.createdAt` (the backup's time) is kept in the snapshot's `afterJson`
+ *   as `backup`, for History to name the backup.
  * - `import-append`: nothing is removed. The caller (CSV's `applyImport`) has
  *   already resolved id collisions, so rows that are not here yet are inserted.
  * - `import-update`: the bundle is CSV's `applyImport(…, "update")`, which holds
@@ -45,7 +53,11 @@ export type ImportReason = "import-restore" | "import-append" | "import-update" 
  * pre-import bundle so a future revert UI can restore it. The bundle's own
  * history entries are added to the log.
  */
-export const importBundle = async (bundle: Bundle, reason: ImportReason): Promise<void> => {
+export const importBundle = async (
+  bundle: Bundle,
+  reason: ImportReason,
+  options: { backup?: { createdAt: string } } = {},
+): Promise<void> => {
   const db = getDb();
   // The snapshot holds everything a restore removes, deleted rows too.
   //
@@ -71,7 +83,11 @@ export const importBundle = async (bundle: Bundle, reason: ImportReason): Promis
         op: "revert",
         // Without the logs: see `buildBundle` on why a snapshot never nests history.
         beforeJson: JSON.stringify({ ...before, history: [] }),
-        afterJson: JSON.stringify({ ...bundle, history: [] }),
+        afterJson: JSON.stringify(
+          options.backup
+            ? { ...bundle, history: [], backup: { createdAt: options.backup.createdAt } }
+            : { ...bundle, history: [] },
+        ),
         at: new Date().toISOString(),
       }),
     );
@@ -83,7 +99,12 @@ export const importBundle = async (bundle: Bundle, reason: ImportReason): Promis
     queries.push(db.insert(historyTable).values(row).onConflictDoNothing());
   }
 
-  if (reason === "import-restore" || reason === "history-restore" || reason === "import-update") {
+  if (
+    reason === "import-restore" ||
+    reason === "history-restore" ||
+    reason === "backup-restore" ||
+    reason === "import-update"
+  ) {
     // Empty every data table. History is intact.
     queries.push(
       db.delete(profile),

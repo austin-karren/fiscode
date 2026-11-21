@@ -7,6 +7,7 @@ import {
   HOME_OFFICE_METHOD_LABELS,
   INCOME_KIND_LABELS,
   INCOME_SOURCE_TYPE_LABELS,
+  isoFromDate,
   labelFor,
   QUARTERLY_METHOD_LABELS,
   RETIREMENT_ACCOUNT_LABELS,
@@ -301,6 +302,20 @@ const KINDS: Record<string, KindSpec> = {
 const IMPORT_ENTITY = "__import_snapshot";
 /** The import reason a whole-state restore from History is stored under. */
 export const HISTORY_RESTORE_REASON = "history-restore";
+/** The import reason a full backup restored over data is stored under (@fiscode/backup). */
+export const BACKUP_RESTORE_REASON = "backup-restore";
+
+/**
+ * "the backup of Nov 20, 2026": the local day the backup was made (its file name's date), from
+ * the `backup.createdAt` the restore keeps in the entry. "a backup" when the entry has none.
+ */
+const backupName = (after: Snapshot | undefined): string => {
+  const createdAt = (after as { backup?: { createdAt?: unknown } } | undefined)?.backup?.createdAt;
+  const made = typeof createdAt === "string" ? new Date(createdAt) : undefined;
+  return made && !Number.isNaN(made.getTime())
+    ? `the backup of ${formatDate(isoFromDate(made))}`
+    : "a backup";
+};
 export const IMPORT_KIND = "import";
 
 const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
@@ -434,7 +449,9 @@ export function describeHistoryRow(row: HistoryRow, names: NameLookup): HistoryE
           ? `Import updated ${rows(countChangedRows(before, after))} and added ${rows(Math.max(added, 0))}`
           : fromHistory
             ? `Went back to an earlier state from History (${rows(countBundleRows(after))})`
-            : `Import replaced everything (${rows(countBundleRows(after))})`;
+            : row.entityId === BACKUP_RESTORE_REASON
+              ? `Restored from ${backupName(after)} (${rows(countBundleRows(after))})`
+              : `Import replaced everything (${rows(countBundleRows(after))})`;
     return {
       ...base,
       kind: IMPORT_KIND,
