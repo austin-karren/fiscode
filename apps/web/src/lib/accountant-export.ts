@@ -270,7 +270,10 @@ export const accountantExport = (bundle: Bundle, year: number, today: string): s
       ...payments.map((p) => [
         p.date,
         labelFor(JURISDICTION_LABELS, p.jurisdiction),
-        p.appliedQuarter ?? defaultAppliedQuarter(p.date, year),
+        // Federal installments have quarters; Utah has one prepayment date, so none.
+        p.jurisdiction === "federal"
+          ? (p.appliedQuarter ?? defaultAppliedQuarter(p.date, year))
+          : "",
         p.notes,
         usd(p.amountCents),
       ]),

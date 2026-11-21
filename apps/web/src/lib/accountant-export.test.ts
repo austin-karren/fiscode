@@ -198,6 +198,10 @@ describe("accountant export: totals agree with the estimate", () => {
     const p = t.get("Estimated payments")!;
     expect(p.find((r) => r[1] === "Total federal")?.[p[0]!.indexOf("amount")]).toBe("400.00");
     expect(p.find((r) => r[1] === "Total Utah")?.[p[0]!.indexOf("amount")]).toBe("100.00");
+    // Utah has no quarterly schedule: its payments have no quarter.
+    const q3 = p[0]!.indexOf("applied_quarter");
+    expect(p.find((r) => r[1] === "2026-09-15")?.[q3]).toBe("");
+    expect(p.find((r) => r[1] === "2026-04-15")?.[q3]).toBe("1");
     const q = t.get("Federal payments by quarter")!;
     expect(q[0]).toEqual([
       "Federal payments by quarter",
