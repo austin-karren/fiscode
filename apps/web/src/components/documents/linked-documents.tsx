@@ -32,30 +32,23 @@ export function LinkedDocuments({
     void load();
   }, [load]);
 
-  // After Unlink, focus moves to the next Unlink button (or the previous), else the heading.
-  const focusAfter = (index: number) => {
-    const buttons = list.current?.querySelectorAll<HTMLElement>("button[data-unlink]") ?? [];
-    const next = buttons[Math.min(index, buttons.length - 1)];
+  // Before the row goes, focus moves to the next Unlink button (or the previous), else the
+  // heading: the dialog takes focus back if the focused button is removed under it.
+  const focusNeighbour = (index: number) => {
+    const buttons = [...(list.current?.querySelectorAll<HTMLElement>("button[data-unlink]") ?? [])];
+    const next = buttons[index + 1] ?? buttons[index - 1];
     (next ?? list.current?.querySelector<HTMLElement>("h3"))?.focus();
   };
 
-  // Focus moves once the list has re-rendered without (or with) the row.
-  const focusPending = useRef<number | null>(null);
-  useEffect(() => {
-    if (focusPending.current === null) return;
-    focusAfter(focusPending.current);
-    focusPending.current = null;
-  }, [links]);
-
   const unlink = async (l: Linked, index: number) => {
     const { document: doc, ...row } = l;
+    focusNeighbour(index);
     await softDeleteWithUndo<DocumentLinkRow>({
       repo: { softDelete: documentLinkRepo.unlink, revertTo: documentLinkRepo.revertTo },
       row,
       message: `Unlinked ${doc.name}.`,
       undoneMessage: `Attached ${doc.name} again.`,
       onChange: () => {
-        focusPending.current = index;
         void load();
         onChanged();
       },
