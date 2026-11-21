@@ -244,16 +244,22 @@ export function ImportCard({
                           refusal ? "opacity-70" : "cursor-pointer hover:bg-muted/40"
                         }`}
                       >
+                        {/* Named by its title; the description (or why it is off) is
+                            its description, not part of the name (#52). */}
                         <RadioGroupItem
                           id={`import-mode-${m}`}
                           value={m}
                           disabled={refusal !== undefined || busy}
+                          aria-labelledby={`import-mode-${m}-title`}
+                          aria-describedby={`import-mode-${m}-hint`}
                           className="mt-0.5"
                         />
                         <span className="flex flex-col gap-1">
-                          <span className="font-medium">{MODE_LABELS[m]}</span>
-                          <span className="text-muted-foreground">
-                            {refusal ?? MODE_DESCRIPTIONS[m]}
+                          <span id={`import-mode-${m}-title`} className="font-medium">
+                            {MODE_LABELS[m]}
+                          </span>
+                          <span id={`import-mode-${m}-hint`} className="text-muted-foreground">
+                            {refusal ? refusalCopy(plans[m], pending.file) : MODE_DESCRIPTIONS[m]}
                           </span>
                         </span>
                       </Label>
@@ -349,6 +355,18 @@ const addsNothing = (plan: ImportPlan): boolean =>
  * periods that would overlap. Warnings, not refusals: the file is the user's or their
  * accountant's, the rows import as written, and Profile shows any overlap to fix.
  */
+// Why Restore is off for a yearly file over data (the planner refuses it): short, with what would
+// be lost and what to use instead. Any other refusal keeps the planner's own words.
+function refusalCopy(plan: ImportPlan, file: ReadableFile): string {
+  if (file.scope !== "yearly") return plan.refusal ?? "";
+  const lost = plan.removed.live + plan.removed.deleted;
+  const year = file.year === undefined ? "one year" : String(file.year);
+  // One line in the card at 1440 (#52).
+  return lost === 0
+    ? `Not for a yearly file (${year} only): use Update rows.`
+    : `Not for a yearly file: ${n(lost, "row")} would be lost. Use Update rows.`;
+}
+
 function Warnings({ plan }: { plan: ImportPlan }) {
   const { outOfRange, overlaps } = plan.warnings;
   if (outOfRange.count === 0 && overlaps.length === 0) return null;
