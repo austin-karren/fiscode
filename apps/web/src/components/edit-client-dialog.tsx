@@ -23,6 +23,7 @@ import { TSFormField } from "./forms/ts-form-field";
 import { EnterToSubmitForm } from "./forms/enter-to-submit-form";
 import { noChangesToSave, useEditDialog } from "../hooks/use-edit-dialog";
 import { recordLabel } from "../lib/record-label";
+import { submitForm } from "../lib/submit-form";
 
 const editSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -72,7 +73,7 @@ export function EditClientDialog({ client, onSaved }: { client: ClientRow; onSav
         <EnterToSubmitForm
           onSubmit={(e) => {
             e.preventDefault();
-            void form.handleSubmit();
+            void submitForm(form);
           }}
         >
           <div className="grid gap-3">
@@ -131,11 +132,9 @@ export function EditClientDialog({ client, onSaved }: { client: ClientRow; onSav
           </div>
           <DialogFooter className="mt-4">
             <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
-            <form.Subscribe
-              selector={(s) => ({ canSubmit: s.canSubmit, isSubmitting: s.isSubmitting })}
-            >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+            <form.Subscribe selector={(s) => ({ isSubmitting: s.isSubmitting })}>
+              {({ isSubmitting }) => (
+                <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Saving..." : "Save"}
                 </Button>
               )}

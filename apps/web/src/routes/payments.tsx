@@ -25,6 +25,7 @@ import { softDeleteWithUndo } from "../lib/soft-delete";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { formatDate } from "../lib/format-date";
 import { useToday } from "../lib/use-today";
+import { submitForm } from "../lib/submit-form";
 
 export const Route = createFileRoute("/payments")({
   loader: async () => ({ payments: await estimatedPaymentRepo.list() }),
@@ -67,7 +68,7 @@ function PaymentsPage() {
       <EnterToSubmitForm
         onSubmit={(e) => {
           e.preventDefault();
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <Card>
@@ -80,11 +81,9 @@ function PaymentsPage() {
             <PaymentFields form={form} firstValue={firstValue} />
           </CardContent>
           <CardFooter className="justify-end">
-            <form.Subscribe
-              selector={(s) => ({ canSubmit: s.canSubmit, isSubmitting: s.isSubmitting })}
-            >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+            <form.Subscribe selector={(s) => ({ isSubmitting: s.isSubmitting })}>
+              {({ isSubmitting }) => (
+                <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Adding..." : "Add"}
                 </Button>
               )}

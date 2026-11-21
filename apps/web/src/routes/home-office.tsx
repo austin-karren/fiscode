@@ -46,6 +46,7 @@ import { GLOSSARY } from "../lib/tax-glossary";
 import { useToday } from "../lib/use-today";
 import { formatDate } from "../lib/format-date";
 import { SectionTitle } from "../components/section-title";
+import { submitForm } from "../lib/submit-form";
 
 // Per-field schemas (onBlur). Form-level adds the cross-field "ack required"
 // refine and runs on submit. sqft inputs are optional non-negative integers —
@@ -129,7 +130,7 @@ function HomeOfficePage() {
       <EnterToSubmitForm
         onSubmit={(e) => {
           e.preventDefault();
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <Card>
@@ -182,12 +183,11 @@ function HomeOfficePage() {
           <CardFooter className="justify-end">
             <form.Subscribe
               selector={(s) => ({
-                canSubmit: s.canSubmit,
                 isSubmitting: s.isSubmitting,
               })}
             >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+              {({ isSubmitting }) => (
+                <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Saving..." : "Save"}
                 </Button>
               )}

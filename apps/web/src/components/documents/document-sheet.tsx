@@ -9,12 +9,14 @@ import {
 import { Button } from "@fiscode/ui/components/button";
 import { Label } from "@fiscode/ui/components/label";
 import { Textarea } from "@fiscode/ui/components/textarea";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 import { DocumentBytesMissingError } from "@fiscode/core";
 import { documentLinkRepo, documentRepo } from "@fiscode/db";
 import type { DocumentRow } from "@fiscode/csv";
 import { errorLine, fileKind, formatBytes } from "../../lib/documents-view";
+import { isLinkable, linkedRowLabel, ROUTE_FOR, rowAnchor } from "../../lib/documents-links";
 import { formatDate, formatDateTime } from "../../lib/format-date";
 
 type Versions = Awaited<ReturnType<typeof documentRepo.versions>>;
@@ -203,7 +205,19 @@ function SheetBody({
           ) : (
             <ul className="text-sm">
               {links.map((l) => (
-                <li key={l.id}>{l.record.label}</li>
+                <li key={l.id}>
+                  {isLinkable(l.recordType) ? (
+                    <Link
+                      to={ROUTE_FOR[l.recordType]}
+                      hash={rowAnchor(l.recordId)}
+                      className="underline-offset-4 hover:underline"
+                    >
+                      {linkedRowLabel(l.record)}
+                    </Link>
+                  ) : (
+                    linkedRowLabel(l.record)
+                  )}
+                </li>
               ))}
             </ul>
           )}
