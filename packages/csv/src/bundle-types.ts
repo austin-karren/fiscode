@@ -25,6 +25,8 @@ export type ProfileRow = {
   priorYearStateTaxCents: number | null;
   /** The tax year of those figures; they count only for the estimate of the year after. */
   priorYearFiguresYear: number | null;
+  /** "I didn't file a return for <priorYearFiguresYear>"; null = not claimed. */
+  priorYearNotFiled: boolean | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -130,6 +132,34 @@ export type RetirementContributionRow = Dated & {
   notes: string | null;
 };
 
+/** One of the taxpayer's own W-2s (one employer, one tax year); amounts are its boxes, in cents. */
+export type W2JobRow = Dated & {
+  taxYear: number;
+  employer: string;
+  startDate: string | null;
+  endDate: string | null;
+  wagesCents: number; // box 1
+  federalWithholdingCents: number; // box 2
+  ssWagesCents: number; // box 3
+  ssTaxWithheldCents: number; // box 4
+  medicareWagesCents: number; // box 5
+  ssTipsCents: number; // box 7
+  stateWagesCents: number; // box 16
+  stateWithholdingCents: number; // box 17
+  notes: string | null;
+};
+
+/** An estimated tax payment made (federal or Utah) for one tax year. */
+export type EstimatedPaymentRow = Dated & {
+  date: string;
+  amountCents: number;
+  jurisdiction: string;
+  taxYear: number;
+  /** 1-4, or null: derived from the date by the year's due dates. */
+  appliedQuarter: number | null;
+  notes: string | null;
+};
+
 /**
  * One entry of the append-only edit log. `beforeJson` / `afterJson` are the
  * row (or, for an import snapshot, the bundle) as JSON text, kept verbatim.
@@ -156,6 +186,8 @@ export type Bundle = {
   homeOffice: HomeOfficeRow[];
   expenses: ExpenseRow[];
   retirementContributions: RetirementContributionRow[];
+  w2Jobs: W2JobRow[];
+  estimatedPayments: EstimatedPaymentRow[];
   /** The edit log. Empty when the bundle was built for a screen or an estimate. */
   history: HistoryRow[];
 };
@@ -172,5 +204,7 @@ export const emptyBundle = (): Bundle => ({
   homeOffice: [],
   expenses: [],
   retirementContributions: [],
+  w2Jobs: [],
+  estimatedPayments: [],
   history: [],
 });

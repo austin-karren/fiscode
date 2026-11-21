@@ -20,6 +20,7 @@ const fullBundle = (): Bundle => ({
     priorYearAgiCents: null,
     priorYearStateTaxCents: null,
     priorYearFiguresYear: null,
+    priorYearNotFiled: null,
     createdAt: FIXED_TIMESTAMP,
     updatedAt: FIXED_TIMESTAMP,
   },
@@ -190,6 +191,41 @@ const fullBundle = (): Bundle => ({
       deletedAt: null,
     },
   ],
+  w2Jobs: [
+    {
+      id: "w2_1",
+      taxYear: 2026,
+      employer: "Demo Employer Inc",
+      startDate: "2026-01-01",
+      endDate: "2026-02-18",
+      wagesCents: 12_345_67,
+      federalWithholdingCents: 1_234_56,
+      ssWagesCents: 12_345_67,
+      ssTaxWithheldCents: 765_43,
+      medicareWagesCents: 12_345_67,
+      ssTipsCents: 0,
+      stateWagesCents: 12_345_67,
+      stateWithholdingCents: 543_21,
+      notes: null,
+      createdAt: FIXED_TIMESTAMP,
+      updatedAt: FIXED_TIMESTAMP,
+      deletedAt: null,
+    },
+  ],
+  estimatedPayments: [
+    {
+      id: "ep_1",
+      date: "2027-01-15",
+      amountCents: 1_000_00,
+      jurisdiction: "federal",
+      taxYear: 2026,
+      appliedQuarter: 4,
+      notes: "Q4, paid in January",
+      createdAt: FIXED_TIMESTAMP,
+      updatedAt: FIXED_TIMESTAMP,
+      deletedAt: null,
+    },
+  ],
   history: [
     {
       id: "h_1",
@@ -329,7 +365,40 @@ describe("CSV round-trip", () => {
       priorYearAgiCents: null,
       priorYearStateTaxCents: null,
       priorYearFiguresYear: null,
+      priorYearNotFiled: null,
     });
+  });
+
+  it("a v4 file (no W-2 or payment rows, no prior_year_not_filed) imports with them empty", () => {
+    const v4 = exportBundle(fullBundle(), { scope: "full" })
+      .replace("schema: v5", "schema: v4")
+      .split("\r\n")
+      .filter((l) => !/^(w2_job|estimated_payment),/.test(l))
+      .join("\r\n");
+    const { bundle, validationErrors, provenance } = parseCsv(v4);
+    expect(validationErrors).toEqual([]);
+    expect(provenance.schema).toBe("v4");
+    expect(bundle.w2Jobs).toEqual([]);
+    expect(bundle.estimatedPayments).toEqual([]);
+  });
+
+  it("a profile's prior_year_not_filed reads yes, no and empty as true, false and null", () => {
+    for (const v of [true, false, null]) {
+      const b = fullBundle();
+      b.profile = { ...b.profile!, priorYearNotFiled: v };
+      expect(parseCsv(exportBundle(b, { scope: "full" })).bundle.profile!.priorYearNotFiled).toBe(
+        v,
+      );
+    }
+  });
+
+  it("the yearly file carries W-2s and payments by tax year: a January payment goes with the prior year", () => {
+    const b = fullBundle(); // ep_1 is dated 2027-01-15 for tax year 2026
+    const y2026 = parseCsv(exportBundle(b, { scope: "yearly", year: 2026 })).bundle;
+    const y2027 = parseCsv(exportBundle(b, { scope: "yearly", year: 2027 })).bundle;
+    expect(y2026.estimatedPayments.map((p) => p.id)).toEqual(["ep_1"]);
+    expect(y2026.w2Jobs.map((w) => w.id)).toEqual(["w2_1"]);
+    expect(y2027.estimatedPayments).toEqual([]);
   });
 
   it("yearly export puts a startup cost paid before the SE start in the year the business begins", () => {
@@ -417,7 +486,7 @@ describe("CSV round-trip", () => {
     const { provenance } = parseCsv(csv);
     expect(provenance.scope).toBe("yearly");
     expect(provenance.year).toBe(2026);
-    expect(provenance.schema).toBe("v4");
+    expect(provenance.schema).toBe("v5");
     expect(provenance.exportedAt).toBeUndefined();
   });
 

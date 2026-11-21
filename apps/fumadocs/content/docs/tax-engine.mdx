@@ -280,9 +280,45 @@ Notes on the quarterly plan:
 
 - Schedule AI Part II figures self-employment tax per period with a prorated Social Security
   limit. Without W-2 wages of your own, that gives the same result as the annualized calculation
-  fiscode uses. With your own W-2 wages it would differ, and fiscode does not model them yet.
+  fiscode uses. With your own W-2 wages it can differ: fiscode uses the year's W-2 figures (wages,
+  withholding, Social Security and Medicare wages) in full in every period, where Schedule AI
+  Part II annualizes each period's wages. A known gap.
 - The plan is federal only, as Form 2210 is: federal income tax plus self-employment tax, minus
   federal withholding. State tax and state withholding never enter it.
+
+### Your own W-2 and payments made
+
+Your own W-2s (one per employer and year) and the estimated payments you made count like this:
+
+- **Wages** (box 1) add to AGI on any filing status. A spouse's wages count on a joint return only.
+- **Self-employment tax.** Social Security wages and tips (boxes 3 and 7) use up the Social
+  Security wage base before your self-employment earnings do.
+  [2026 Schedule SE](https://www.irs.gov/pub/irs-pdf/f1040sse.pdf): line 8a "Total social
+  security wages and tips (total of boxes 3 and 7 on Form(s) W-2)"; line 9 "Subtract line 8d from
+  line 7. If zero or less, enter -0-"; line 10 "Multiply the smaller of line 6 or line 9 by 12.4%
+  (0.124)". Medicare wages (box 5) lower the Additional Medicare threshold for
+  self-employment earnings. On a joint return the spouse's wages lower it too; the spouse block
+  holds one annual W-2 wage figure, which stands in for their box 5:
+  [Form 8959 instructions](https://www.irs.gov/instructions/i8959), "the threshold amount for
+  applying Additional Medicare Tax on the self-employment income is reduced (but not below zero)
+  by the total amount of Medicare wages received".
+- **Withholding** (box 2, plus a spouse's on a joint return) counts as paid a quarter on each due
+  date. [Pub 505](https://www.irs.gov/publications/p505), Line 31: "One-fourth of your estimated
+  withholding is considered withheld on the due date of each payment period."
+- **Estimated payments** count on the date paid, toward the first due date on or after it. The
+  dashboard's "left to pay" subtracts them, and each quarter shows what was required and paid by
+  then. [Pub 505](https://www.irs.gov/publications/p505): "If a payment is mailed, the date of
+  the U.S. postmark is considered the date of payment." The quarter you apply a payment to groups
+  it in the list; the date decides when it counts.
+- **Utah** payments come off the TC-546 minimum (line 7, prepayments already made).
+- **No prior-year return.** If you didn't file a return last year, the prior-year safe harbor
+  isn't available. [Form 2210 instructions](https://www.irs.gov/instructions/i2210), line 8: "If
+  you didn't file a return for 2024 or your 2024 tax year was less than 12 months, don't complete
+  line 8." The floor is 90% of this year's tax.
+
+Not modelled: penalty amounts (Form 2210 Part III/IV), the 0.9% Additional Medicare tax on wages
+(Form 8959 Part I), excess Social Security withheld by more than one employer (Schedule 3), and
+withholding on the actual dates withheld.
 
 ### Utah prepayment
 

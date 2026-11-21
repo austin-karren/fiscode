@@ -68,6 +68,12 @@ export const RETIREMENT_ACCOUNT_LABELS = {
   trad_ira: "Traditional IRA",
 } as const satisfies LabelMap;
 
+/** Where an estimated tax payment went. */
+export const JURISDICTION_LABELS = {
+  federal: "Federal",
+  UT: "Utah",
+} as const satisfies LabelMap;
+
 /** The label for a code, or the code itself when it is one we don't know. */
 export const labelFor = (labels: LabelMap, code: string): string => labels[code] ?? code;
 

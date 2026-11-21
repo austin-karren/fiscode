@@ -6,7 +6,11 @@ import {
   shiftToBusinessDay,
   yearOf,
 } from "@fiscode/core";
-import { paymentsAfterWithholding, regularInstallments } from "./installments.ts";
+import {
+  estimatesByDueDate,
+  paymentsAfterWithholding,
+  regularInstallments,
+} from "./installments.ts";
 import type { QuarterPayment, QuarterlyPlan, TaxEstimate, YearConfig } from "./types.ts";
 
 // Uneven IRS quarters: Q1 Jan-Mar, Q2 Apr-May, Q3 Jun-Aug, Q4 Sep-Dec.
@@ -26,16 +30,28 @@ export const evenQuarterly = (
   estimate: TaxEstimate,
   cfg: YearConfig,
   requiredAnnualPayment: Cents,
+  federalEstimates: readonly { date: string; amount: Cents }[] = [],
 ): QuarterlyPlan => {
   const periods = quarterPeriods(estimate.year);
   const required = regularInstallments(requiredAnnualPayment);
-  // Federal withholding only (Form 2210 line 6); state withholding never offsets IRS installments.
-  const toPay = paymentsAfterWithholding(required, estimate.federalWithholding);
+  const dues = cfg.quarterlyDueDates.map((d) => shiftToBusinessDay(d)) as [
+    IsoDate,
+    IsoDate,
+    IsoDate,
+    IsoDate,
+  ];
+  // Federal withholding only (Form 2210 line 6); state withholding never offsets IRS
+  // installments. Estimated payments count from the date paid (DF-07).
+  const toPay = paymentsAfterWithholding(
+    required,
+    estimate.federalWithholding,
+    estimatesByDueDate(federalEstimates, dues),
+  );
   const payments = periods.map((p, i): QuarterPayment => ({
     quarter: (i + 1) as 1 | 2 | 3 | 4,
     periodStart: p.start,
     periodEnd: p.end,
-    dueDate: shiftToBusinessDay(cfg.quarterlyDueDates[i]!),
+    dueDate: dues[i]!,
     requiredInstallment: required[i]!,
     amount: toPay[i]!,
   }));

@@ -21,7 +21,9 @@ import type { StatePrepayment, TaxEstimate, TaxInput, YearConfig } from "./types
  * month of the extension period".
  *
  * Line 4 is used when last year's Utah tax is entered (`priorYearStateTax`);
- * otherwise line 5 is line 3. fiscode has no input for Utah prepayments.
+ * otherwise line 5 is line 3. Line 7, "Prepayments already made for this year",
+ * is the Utah estimated payments entered for the year (DF-07): line 8 is
+ * "Minimum payment due (subtract line 6 and line 7 from line 5)".
  *
  * Due date: "on or before the return due date"; the Utah return is due "on or
  * before the day on which a federal individual income tax return is due"
@@ -37,12 +39,17 @@ export const computeStatePrepayment = (
   if (input.state !== "UT") return undefined;
   const line3: Cents = mulRate(estimate.state.stateIncomeTax, cfg.safeHarbor.currentYearFraction);
   const line4 = input.priorYearStateTax;
+  const line7 = (input.estimatedPayments?.state ?? []).reduce(
+    (sum, p) => (sum + p.amount) as Cents,
+    0 as Cents,
+  );
   const usePrior = line4 !== undefined && line4 < line3;
   const line5: Cents = usePrior ? line4 : line3;
   return {
     state: "UT",
     dueDate: shiftToBusinessDay(isoDate(`${input.year + 1}-04-15`)),
-    minimum: clampMinZero(subCents(line5, estimate.stateWithholding)),
+    minimum: clampMinZero(subCents(subCents(line5, estimate.stateWithholding), line7)),
+    line5,
     basis: usePrior ? "priorYear" : "currentYear90",
   };
 };

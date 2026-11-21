@@ -10,7 +10,13 @@ export const addCents = (...vals: Cents[]): Cents => vals.reduce((sum, v) => sum
 
 export const subCents = (a: Cents, b: Cents): Cents => (a - b) as Cents;
 
-export const mulRate = (c: Cents, rate: number): Cents => Math.round(c * rate) as Cents;
+/**
+ * `c × rate`, rounded half up to a whole cent. The product is first rounded to 6 decimals so a
+ * float error can't push an exact half cent down: 3,617,500 × 0.009 is 32,557.4999… in floating
+ * point and must round to 32,558 (review #79 r1).
+ */
+export const mulRate = (c: Cents, rate: number): Cents =>
+  Math.round(Number((c * rate).toFixed(6))) as Cents;
 
 export const maxCents = (...vals: Cents[]): Cents =>
   vals.reduce((m, v) => (v > m ? v : m), 0 as Cents);

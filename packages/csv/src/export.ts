@@ -49,6 +49,7 @@ const bundleToRows = (bundle: Bundle): Record<string, string>[] => {
         prior_year_agi_cents: num(p.priorYearAgiCents),
         prior_year_state_tax_cents: num(p.priorYearStateTaxCents),
         prior_year_figures_year: num(p.priorYearFiguresYear),
+        prior_year_not_filed: bool(p.priorYearNotFiled),
         created_at: p.createdAt,
         updated_at: p.updatedAt,
       }),
@@ -194,6 +195,43 @@ const bundleToRows = (bundle: Bundle): Record<string, string>[] => {
       }),
     );
   }
+  for (const w of bundle.w2Jobs) {
+    rows.push(
+      emit("w2_job", w.id, {
+        tax_year: num(w.taxYear),
+        employer: w.employer,
+        start_date: str(w.startDate),
+        end_date: str(w.endDate),
+        wages_cents: num(w.wagesCents),
+        federal_withholding_cents: num(w.federalWithholdingCents),
+        ss_wages_cents: num(w.ssWagesCents),
+        ss_tax_withheld_cents: num(w.ssTaxWithheldCents),
+        medicare_wages_cents: num(w.medicareWagesCents),
+        ss_tips_cents: num(w.ssTipsCents),
+        state_wages_cents: num(w.stateWagesCents),
+        state_withholding_cents: num(w.stateWithholdingCents),
+        notes: str(w.notes),
+        created_at: w.createdAt,
+        updated_at: w.updatedAt,
+        deleted_at: str(w.deletedAt),
+      }),
+    );
+  }
+  for (const p of bundle.estimatedPayments) {
+    rows.push(
+      emit("estimated_payment", p.id, {
+        date: p.date,
+        amount_cents: num(p.amountCents),
+        jurisdiction: p.jurisdiction,
+        tax_year: num(p.taxYear),
+        applied_quarter: num(p.appliedQuarter),
+        notes: str(p.notes),
+        created_at: p.createdAt,
+        updated_at: p.updatedAt,
+        deleted_at: str(p.deletedAt),
+      }),
+    );
+  }
   for (const r of bundle.retirementContributions) {
     rows.push(
       emit("retirement_contribution", r.id, {
@@ -274,6 +312,9 @@ const filterYearly = (bundle: Bundle, year: number): Bundle => {
       within(countedExpenseDate(r, bundle.profile?.seStartDate)),
     ),
     retirementContributions: live(bundle.retirementContributions).filter((r) => within(r.date)),
+    // By the year each is for, not its date: a January payment is the prior year's Q4.
+    w2Jobs: live(bundle.w2Jobs).filter((r) => r.taxYear === year),
+    estimatedPayments: live(bundle.estimatedPayments).filter((r) => r.taxYear === year),
     entities: live(bundle.entities).filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
     spouses: live(bundle.spouses).filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
     homeOffice: live(bundle.homeOffice).filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
