@@ -1,10 +1,10 @@
 import { useRef } from "react";
-import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useLoaderData, useLocation, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
-import { clientRepo, incomeRepo, profileRepo } from "@fiscode/db";
+import { clientRepo, incomeRepo, profileRepo, documentLinkRepo } from "@fiscode/db";
 import { cents, formatUSD } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { Coins } from "lucide-react";
@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { Page } from "../components/page";
+import { AttachDialog } from "../components/documents/attach-dialog";
+import { rowAnchor } from "../lib/documents-links";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
 import { SelectWithLabels } from "../components/forms/select-with-labels";
@@ -29,6 +31,7 @@ import { INCOME_KIND_LABELS, labelFor } from "@fiscode/core";
 import { SectionTitle } from "../components/section-title";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { recordLabel } from "../lib/record-label";
+import { submitForm } from "../lib/submit-form";
 
 const KIND_OPTIONS = [
   { value: "recurring", label: "Recurring" },
@@ -50,17 +53,26 @@ const fieldSchemas = {
 const incomeFormSchema = z.object(fieldSchemas);
 
 export const Route = createFileRoute("/income")({
-  loader: async () => ({
-    income: await incomeRepo.list(),
-    // Archived clients too: old rows keep showing their client's name.
-    clients: await clientRepo.listIncludingDeleted(),
-    profile: await profileRepo.get(),
-  }),
+  loader: async () => {
+    const incomeRows = await incomeRepo.list();
+    return {
+      income: incomeRows,
+      // Documents per row, in one query for the screen.
+      linkCounts: await documentLinkRepo.countsFor(
+        "income",
+        incomeRows.map((r) => r.id),
+      ),
+      // Archived clients too: old rows keep showing their client's name.
+      clients: await clientRepo.listIncludingDeleted(),
+      profile: await profileRepo.get(),
+    };
+  },
   component: IncomePage,
 });
 
 function IncomePage() {
-  const { income, clients: allClients, profile } = useLoaderData({ from: "/income" });
+  const { income, clients: allClients, profile, linkCounts } = useLoaderData({ from: "/income" });
+  const hash = useLocation({ select: (l) => l.hash });
   const router = useRouter();
   // Only live clients can be picked for a new entry.
   const clients = allClients.filter((c) => !c.deletedAt);
@@ -144,7 +156,7 @@ function IncomePage() {
       <EnterToSubmitForm
         onSubmit={(e) => {
           e.preventDefault();
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <Card ref={addCard}>
@@ -250,12 +262,11 @@ function IncomePage() {
           <CardFooter className="justify-end">
             <form.Subscribe
               selector={(s) => ({
-                canSubmit: s.canSubmit,
                 isSubmitting: s.isSubmitting,
               })}
             >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+              {({ isSubmitting }) => (
+                <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Adding..." : "Add"}
                 </Button>
               )}
@@ -287,7 +298,11 @@ function IncomePage() {
               .slice()
               .sort((a, b) => (a.date > b.date ? -1 : 1))
               .map((i) => (
-                <DataTable.Row key={i.id}>
+                <DataTable.Row
+                  key={i.id}
+                  id={rowAnchor(i.id)}
+                  highlighted={hash === rowAnchor(i.id)}
+                >
                   <DataTable.Cell label="Date">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="whitespace-nowrap">{formatDate(i.date)}</span>
@@ -310,6 +325,14 @@ function IncomePage() {
                         income={i}
                         clients={allClients}
                         onSaved={() => router.invalidate()}
+                      />
+                      <AttachDialog
+                        recordType="income"
+                        recordId={i.id}
+                        recordDate={i.date}
+                        recordLabel={recordLabel.income(i)}
+                        count={linkCounts[i.id] ?? 0}
+                        onChanged={() => router.invalidate()}
                       />
                       <Button variant="ghost" size="sm" onClick={() => duplicate(i)}>
                         Duplicate

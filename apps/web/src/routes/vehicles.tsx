@@ -25,6 +25,7 @@ import { GLOSSARY } from "../lib/tax-glossary";
 import { VEHICLE_METHOD_LABELS, labelFor } from "@fiscode/core";
 import { SectionTitle } from "../components/section-title";
 import { recordLabel } from "../lib/record-label";
+import { submitForm } from "../lib/submit-form";
 
 const vehicleSchema = z.object({
   make: z.string().min(1, "Make is required"),
@@ -99,7 +100,7 @@ function VehiclesPage() {
       <EnterToSubmitForm
         onSubmit={(e) => {
           e.preventDefault();
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <Card>
@@ -197,12 +198,11 @@ function VehiclesPage() {
           <CardFooter className="justify-end">
             <form.Subscribe
               selector={(s) => ({
-                canSubmit: s.canSubmit,
                 isSubmitting: s.isSubmitting,
               })}
             >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+              {({ isSubmitting }) => (
+                <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Adding..." : "Add"}
                 </Button>
               )}

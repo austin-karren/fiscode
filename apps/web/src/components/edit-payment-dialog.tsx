@@ -24,6 +24,7 @@ import {
   paymentValuesFrom,
   usePaymentForm,
 } from "./payment-form";
+import { submitForm } from "../lib/submit-form";
 
 export function EditPaymentDialog({
   payment,
@@ -60,7 +61,7 @@ export function EditPaymentDialog({
         <EnterToSubmitForm
           onSubmit={(e) => {
             e.preventDefault();
-            void form.handleSubmit();
+            void submitForm(form);
           }}
         >
           <div className="grid gap-3">
@@ -68,11 +69,9 @@ export function EditPaymentDialog({
           </div>
           <DialogFooter className="mt-4">
             <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
-            <form.Subscribe
-              selector={(s) => ({ canSubmit: s.canSubmit, isSubmitting: s.isSubmitting })}
-            >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+            <form.Subscribe selector={(s) => ({ isSubmitting: s.isSubmitting })}>
+              {({ isSubmitting }) => (
+                <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Saving..." : "Save"}
                 </Button>
               )}

@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useLoaderData, useLocation, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
@@ -10,7 +10,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@fiscode/ui/components/form";
-import { mileageRepo, profileRepo, vehicleRepo } from "@fiscode/db";
+import { mileageRepo, profileRepo, vehicleRepo, documentLinkRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Car } from "lucide-react";
 import { toast } from "sonner";
@@ -18,6 +18,8 @@ import { z } from "zod";
 
 import { tripMiles } from "../lib/field-schemas";
 import { Page } from "../components/page";
+import { AttachDialog } from "../components/documents/attach-dialog";
+import { rowAnchor } from "../lib/documents-links";
 import { DataTable } from "../components/data-table";
 import { TSFormField } from "../components/forms/ts-form-field";
 import { DatePicker, dateToIso, isoToDate } from "../components/forms/date-picker";
@@ -35,6 +37,7 @@ import { formatDate } from "../lib/format-date";
 import { SectionTitle } from "../components/section-title";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { recordLabel } from "../lib/record-label";
+import { submitForm } from "../lib/submit-form";
 
 const mileageSchema = z.object({
   date: z.date({ message: "Pick a date" }),
@@ -45,17 +48,31 @@ const mileageSchema = z.object({
 const fs = mileageSchema.shape;
 
 export const Route = createFileRoute("/mileage")({
-  loader: async () => ({
-    mileage: await mileageRepo.list(),
-    // Archived vehicles too: old rows keep showing their vehicle's name.
-    vehicles: await vehicleRepo.listIncludingDeleted(),
-    profile: await profileRepo.get(),
-  }),
+  loader: async () => {
+    const mileageRows = await mileageRepo.list();
+    return {
+      mileage: mileageRows,
+      // Documents per row, in one query for the screen.
+      linkCounts: await documentLinkRepo.countsFor(
+        "mileage",
+        mileageRows.map((r) => r.id),
+      ),
+      // Archived vehicles too: old rows keep showing their vehicle's name.
+      vehicles: await vehicleRepo.listIncludingDeleted(),
+      profile: await profileRepo.get(),
+    };
+  },
   component: MileagePage,
 });
 
 function MileagePage() {
-  const { mileage, vehicles: allVehicles, profile } = useLoaderData({ from: "/mileage" });
+  const {
+    mileage,
+    vehicles: allVehicles,
+    profile,
+    linkCounts,
+  } = useLoaderData({ from: "/mileage" });
+  const hash = useLocation({ select: (l) => l.hash });
   const router = useRouter();
   // Only live vehicles can be picked for a new entry.
   const vehicles = allVehicles.filter((v) => !v.deletedAt);
@@ -141,7 +158,7 @@ function MileagePage() {
       <EnterToSubmitForm
         onSubmit={(e) => {
           e.preventDefault();
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <Card ref={addCard}>
@@ -242,12 +259,11 @@ function MileagePage() {
           <CardFooter className="justify-end">
             <form.Subscribe
               selector={(s) => ({
-                canSubmit: s.canSubmit,
                 isSubmitting: s.isSubmitting,
               })}
             >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+              {({ isSubmitting }) => (
+                <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Adding..." : "Add"}
                 </Button>
               )}
@@ -278,7 +294,11 @@ function MileagePage() {
               .slice()
               .sort((a, b) => (a.date > b.date ? -1 : 1))
               .map((m) => (
-                <DataTable.Row key={m.id}>
+                <DataTable.Row
+                  key={m.id}
+                  id={rowAnchor(m.id)}
+                  highlighted={hash === rowAnchor(m.id)}
+                >
                   <DataTable.Cell label="Date">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="whitespace-nowrap">{formatDate(m.date)}</span>
@@ -298,6 +318,14 @@ function MileagePage() {
                         mileage={m}
                         vehicles={allVehicles}
                         onSaved={() => router.invalidate()}
+                      />
+                      <AttachDialog
+                        recordType="mileage"
+                        recordId={m.id}
+                        recordDate={m.date}
+                        recordLabel={recordLabel.mileage(m)}
+                        count={linkCounts[m.id] ?? 0}
+                        onChanged={() => router.invalidate()}
                       />
                       <Button variant="ghost" size="sm" onClick={() => duplicate(m)}>
                         Duplicate

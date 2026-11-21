@@ -17,6 +17,7 @@ import { w2JobRepo } from "@fiscode/db";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { formatDate } from "../lib/format-date";
+import { submitForm } from "../lib/submit-form";
 
 export const Route = createFileRoute("/w2-jobs")({
   loader: async () => ({ jobs: await w2JobRepo.list(), year: yearOf(todayIso()) }),
@@ -67,7 +68,7 @@ function W2JobsPage() {
       <EnterToSubmitForm
         onSubmit={(e) => {
           e.preventDefault();
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <Card>
@@ -80,11 +81,9 @@ function W2JobsPage() {
             <W2Fields form={form} year={year} firstValue={firstValue} />
           </CardContent>
           <CardFooter className="justify-end">
-            <form.Subscribe
-              selector={(s) => ({ canSubmit: s.canSubmit, isSubmitting: s.isSubmitting })}
-            >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+            <form.Subscribe selector={(s) => ({ isSubmitting: s.isSubmitting })}>
+              {({ isSubmitting }) => (
+                <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Adding..." : "Add"}
                 </Button>
               )}

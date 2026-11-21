@@ -55,6 +55,7 @@ import { softDeleteWithUndo } from "../lib/soft-delete";
 import { SectionTitle } from "../components/section-title";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { recordLabel } from "../lib/record-label";
+import { submitForm } from "../lib/submit-form";
 
 const FILING_OPTIONS = labelOptions(FILING_STATUS_LABELS);
 
@@ -341,7 +342,7 @@ function ProfileFormPanel({
       setScopeConfirmOpen(true);
       return;
     }
-    void profileForm.handleSubmit();
+    void submitForm(profileForm);
   };
 
   const spouseForm = useForm({
@@ -388,7 +389,7 @@ function ProfileFormPanel({
         }`}
         confirmLabel="Save"
         confirmVariant="destructive"
-        onConfirm={() => void profileForm.handleSubmit()}
+        onConfirm={() => void submitForm(profileForm)}
       >
         {(() => {
           const newStart = offeredMove();
@@ -692,12 +693,11 @@ function ProfileFormPanel({
           <CardFooter className="justify-end">
             <profileForm.Subscribe
               selector={(s) => ({
-                canSubmit: s.canSubmit,
                 isSubmitting: s.isSubmitting,
               })}
             >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+              {({ isSubmitting }) => (
+                <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Saving..." : "Save profile"}
                 </Button>
               )}
@@ -709,7 +709,7 @@ function ProfileFormPanel({
       <EnterToSubmitForm
         onSubmit={(e) => {
           e.preventDefault();
-          void entityForm.handleSubmit();
+          void submitForm(entityForm);
         }}
       >
         <Card>
@@ -834,12 +834,11 @@ function ProfileFormPanel({
           <CardFooter className="justify-end">
             <entityForm.Subscribe
               selector={(s) => ({
-                canSubmit: s.canSubmit,
                 isSubmitting: s.isSubmitting,
               })}
             >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" variant="outline" disabled={!canSubmit || isSubmitting}>
+              {({ isSubmitting }) => (
+                <Button type="submit" variant="outline" disabled={isSubmitting}>
                   {isSubmitting ? "Adding..." : "Add entity period"}
                 </Button>
               )}
@@ -851,7 +850,7 @@ function ProfileFormPanel({
       <EnterToSubmitForm
         onSubmit={(e) => {
           e.preventDefault();
-          void spouseForm.handleSubmit();
+          void submitForm(spouseForm);
         }}
       >
         <Card>
@@ -1021,12 +1020,11 @@ function ProfileFormPanel({
             <CardFooter className="justify-end">
               <spouseForm.Subscribe
                 selector={(s) => ({
-                  canSubmit: s.canSubmit,
                   isSubmitting: s.isSubmitting,
                 })}
               >
-                {({ canSubmit, isSubmitting }) => (
-                  <Button type="submit" variant="outline" disabled={!canSubmit || isSubmitting}>
+                {({ isSubmitting }) => (
+                  <Button type="submit" variant="outline" disabled={isSubmitting}>
                     {isSubmitting ? "Adding..." : "Add"}
                   </Button>
                 )}

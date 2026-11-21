@@ -38,6 +38,7 @@ vi.mock("@fiscode/db", () => ({
   incomeRepo: { list: async () => [], create, update, softDelete, revertTo },
   clientRepo: { list: async () => [], listIncludingDeleted: async () => [] },
   profileRepo: { get: async () => null },
+  documentLinkRepo: { forRecord: async () => [], countsFor: async () => ({}) },
 }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
@@ -46,7 +47,9 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
     income: [rowForArchived, rowForLive],
     clients: [liveClient, archivedClient],
     profile: null,
+    linkCounts: {},
   }),
+  useLocation: () => "",
   useRouter: () => ({ invalidate }),
 }));
 

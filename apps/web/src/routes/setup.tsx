@@ -24,6 +24,7 @@ import { LabelWithTooltip } from "../components/forms/labeled";
 import { GLOSSARY } from "../lib/tax-glossary";
 import { ImportCard } from "../components/import-card";
 import { SectionTitle } from "../components/section-title";
+import { submitForm } from "../lib/submit-form";
 
 const FILING_OPTIONS = labelOptions(FILING_STATUS_LABELS);
 
@@ -117,7 +118,7 @@ function SetupPage() {
       <EnterToSubmitForm
         onSubmit={(e) => {
           e.preventDefault();
-          void form.handleSubmit();
+          void submitForm(form);
         }}
       >
         <Card>
@@ -220,12 +221,11 @@ function SetupPage() {
           <CardFooter className="justify-end">
             <form.Subscribe
               selector={(s) => ({
-                canSubmit: s.canSubmit,
                 isSubmitting: s.isSubmitting,
               })}
             >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" disabled={!canSubmit || isSubmitting}>
+              {({ isSubmitting }) => (
+                <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Saving..." : "Save and continue"}
                 </Button>
               )}
