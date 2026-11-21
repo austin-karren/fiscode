@@ -36,7 +36,7 @@ export class BackupFileCorruptError extends BackupError {
   constructor(readonly path?: string) {
     super(
       path === undefined
-        ? "This backup file is damaged (cut short or altered), so it can't be opened. The passphrase is right. Nothing was changed."
+        ? "This backup file is damaged (cut short or altered), so it can't be opened. Nothing was changed."
         : `"${path}" in this backup is damaged (its contents don't match the backup's record). Nothing was changed.`,
     );
   }
