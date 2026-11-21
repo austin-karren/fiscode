@@ -5,6 +5,7 @@ import {
   documentRepo,
   folderRepo,
   FolderCycleError,
+  FolderNameInvalidError,
   FolderNameTakenError,
   FolderTooDeepError,
   DocumentBytesMissingError,
@@ -90,6 +91,13 @@ describe("folders (stub)", () => {
     await expect(
       folderRepo.create({ name: "receipts", parentId: parent.id }),
     ).rejects.toBeInstanceOf(FolderNameTakenError);
+  });
+
+  it("refuses a blank name or one with a slash, with a line to show (#84)", async () => {
+    await expect(folderRepo.create({ name: "  " })).rejects.toThrow(
+      new FolderNameInvalidError("Enter a name."),
+    );
+    await expect(folderRepo.create({ name: "a/b" })).rejects.toThrow("A name can't contain /.");
   });
 
   it("refuses moving a folder into itself, and nesting past 8 levels", async () => {

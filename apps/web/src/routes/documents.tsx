@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@fiscode/ui/components
 import { Input } from "@fiscode/ui/components/input";
 import { ConfirmDialog } from "@fiscode/ui/components/confirm-dialog";
 import { todayIso, yearOf } from "@fiscode/core";
-import { FileText, Folder, FolderOpen, Trash2, Upload } from "lucide-react";
+import { FileText, Folder, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { Page } from "../components/page";
@@ -14,16 +14,16 @@ import { SectionTitle } from "../components/section-title";
 import { NameDialog } from "../components/documents/name-dialog";
 import { MoveDialog } from "../components/documents/move-dialog";
 import { DocumentSheet } from "../components/documents/document-sheet";
+import { FolderTree } from "../components/documents/folder-tree";
 import {
   ALLOWED_DOCUMENT_MIMES,
   documentLinkRepo,
   documentRepo,
   folderRepo,
   type DocumentRow,
-  type FolderNode,
-  type FolderRow,
+  type DocumentFolderRow,
 } from "../lib/documents-stub";
-import { fileKind, flattenTree, folderPath, formatBytes, subtreeOf } from "../lib/documents-view";
+import { fileKind, folderPath, formatBytes, subtreeOf } from "../lib/documents-view";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { uploadFiles, type UploadResult } from "../lib/documents-upload";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
@@ -82,14 +82,14 @@ function DocumentsPage() {
 
   const [dialog, setDialog] = useState<
     | { kind: "new-folder" }
-    | { kind: "rename-folder"; folder: FolderRow }
-    | { kind: "move-folder"; folder: FolderRow }
+    | { kind: "rename-folder"; folder: DocumentFolderRow }
+    | { kind: "move-folder"; folder: DocumentFolderRow }
     | { kind: "rename-doc"; doc: DocumentRow }
     | { kind: "move-doc"; doc: DocumentRow }
     | null
   >(null);
   const [confirmDelete, setConfirmDelete] = useState<{
-    folder: FolderRow;
+    folder: DocumentFolderRow;
     counts: { folders: number; documents: number };
   } | null>(null);
   const [results, setResults] = useState<UploadResult[]>([]);
@@ -103,7 +103,7 @@ function DocumentsPage() {
     await refresh();
   };
 
-  const askDeleteFolder = async (folder: FolderRow) =>
+  const askDeleteFolder = async (folder: DocumentFolderRow) =>
     setConfirmDelete({ folder, counts: await folderRepo.countTree(folder.id) });
 
   const deleteFolder = async () => {
@@ -308,7 +308,7 @@ function DocumentsPage() {
                             </span>
                           </DataTable.Cell>
                           <DataTable.Cell label="Links" align="right">
-                            {linkCounts[d.id] ?? 0}
+                            {linkCounts.get(d.id) ?? 0}
                           </DataTable.Cell>
                           <DataTable.Cell align="right">
                             <div className="inline-flex gap-1">
@@ -438,74 +438,6 @@ function DocumentsPage() {
 
 const n = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
-// The folder tree: links, so Tab and Enter work without a mouse. On a phone it folds into a
-// "Folders" disclosure above the list.
-function FolderTree({
-  tree,
-  selected,
-  trash,
-}: {
-  tree: FolderNode[];
-  selected: string | null;
-  trash: boolean;
-}) {
-  const rows = flattenTree(tree);
-  const list = (
-    <nav aria-label="Folders" className="grid gap-0.5 text-sm">
-      {rows.map(({ folder, depth, documentCount }) => {
-        const isSelected = !trash && folder.id === selected;
-        return (
-          <Link
-            key={folder.id}
-            from="/documents"
-            search={{ folder: folder.id }}
-            aria-current={isSelected ? "page" : undefined}
-            className={`flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-muted ${isSelected ? "bg-muted font-medium" : ""}`}
-            style={{ paddingInlineStart: `${0.5 + depth}rem` }}
-          >
-            {isSelected ? (
-              <FolderOpen className="size-4 shrink-0" aria-hidden />
-            ) : (
-              <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-            )}
-            <span className="truncate">{folder.name}</span>
-            {documentCount > 0 ? (
-              <span className="ms-auto text-xs text-muted-foreground tabular-nums">
-                {documentCount}
-                <span className="sr-only"> {documentCount === 1 ? "document" : "documents"}</span>
-              </span>
-            ) : null}
-          </Link>
-        );
-      })}
-      <Link
-        from="/documents"
-        search={{ trash: true }}
-        aria-current={trash ? "page" : undefined}
-        className={`mt-2 flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-muted ${trash ? "bg-muted font-medium" : ""}`}
-      >
-        <Trash2 className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        Trash
-      </Link>
-    </nav>
-  );
-  return (
-    <>
-      {/* A pick closes it on a phone, so the folder's documents are in view. */}
-      <details
-        className="relative rounded-md border border-border p-2 @3xl:hidden"
-        onClick={(e) => {
-          if ((e.target as HTMLElement).closest("a")) e.currentTarget.open = false;
-        }}
-      >
-        <summary className="cursor-pointer text-sm font-medium">Folders</summary>
-        <div className="mt-2">{list}</div>
-      </details>
-      <div className="hidden @3xl:block">{list}</div>
-    </>
-  );
-}
-
 // Deleted folders and documents, each with Restore.
 function TrashView({
   folders,
@@ -513,12 +445,12 @@ function TrashView({
   allFolders,
   onRestored,
 }: {
-  folders: FolderRow[];
+  folders: DocumentFolderRow[];
   docs: DocumentRow[];
-  allFolders: FolderRow[];
+  allFolders: DocumentFolderRow[];
   onRestored: () => Promise<void>;
 }) {
-  const restoreFolder = async (f: FolderRow) => {
+  const restoreFolder = async (f: DocumentFolderRow) => {
     await folderRepo.restoreTree({ folderIds: [f.id], documentIds: [] });
     toast(`Restored ${f.name}.`);
     await onRestored();

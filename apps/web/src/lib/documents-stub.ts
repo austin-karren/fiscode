@@ -19,27 +19,30 @@ export const ALLOWED_DOCUMENT_MIMES = [
 ] as const;
 const MAX_FOLDER_DEPTH = 8;
 
-class NamedError extends Error {
+/** Every documents error; its `message` can be shown as is. */
+export class DocumentError extends Error {
   constructor(message: string) {
     super(message);
     this.name = new.target.name;
   }
 }
-export class FolderNameTakenError extends NamedError {}
-export class FolderNotFoundError extends NamedError {}
-export class FolderTooDeepError extends NamedError {}
-export class FolderCycleError extends NamedError {}
-export class DocumentTooLargeError extends NamedError {}
-export class DocumentTypeNotAllowedError extends NamedError {}
-export class StorageQuotaError extends NamedError {}
-export class DocumentBytesMissingError extends NamedError {}
-export class RecordNotFoundError extends NamedError {}
+export class FolderNameTakenError extends DocumentError {}
+export class FolderNameInvalidError extends DocumentError {}
+export class DocumentNotFoundError extends DocumentError {}
+export class FolderNotFoundError extends DocumentError {}
+export class FolderTooDeepError extends DocumentError {}
+export class FolderCycleError extends DocumentError {}
+export class DocumentTooLargeError extends DocumentError {}
+export class DocumentTypeNotAllowedError extends DocumentError {}
+export class StorageQuotaError extends DocumentError {}
+export class DocumentBytesMissingError extends DocumentError {}
+export class RecordNotFoundError extends DocumentError {}
 
 // ─── Rows ───────────────────────────────────────────────────────────────────
 
 type Dated = { id: string; createdAt: string; updatedAt: string; deletedAt: string | null };
 
-export type FolderRow = Dated & {
+export type DocumentFolderRow = Dated & {
   parentId: string | null;
   name: string;
   taxYear: number | null;
@@ -54,14 +57,25 @@ export type DocumentRow = Dated & {
   addedAt: string;
   notes: string | null;
 };
-export type LinkRow = Dated & { documentId: string; recordType: string; recordId: string };
-export type FolderNode = { folder: FolderRow; children: FolderNode[]; documentCount: number };
+export type DocumentLinkRow = Dated & { documentId: string; recordType: string; recordId: string };
+export type LinkedRecord = {
+  recordType: string;
+  id: string;
+  date: string;
+  label: string;
+  amountCents?: number;
+};
+export type FolderNode = {
+  folder: DocumentFolderRow;
+  children: FolderNode[];
+  documentCount: number;
+};
 
 // ─── In-memory store ────────────────────────────────────────────────────────
 
-const folders = new Map<string, FolderRow>();
+const folders = new Map<string, DocumentFolderRow>();
 const documents = new Map<string, DocumentRow>();
-const links = new Map<string, LinkRow>();
+const links = new Map<string, DocumentLinkRow>();
 const blobs = new Map<string, Blob>();
 const versionLog = new Map<
   string,
@@ -74,8 +88,8 @@ const live = <T extends Dated>(rows: Iterable<T>) => [...rows].filter((r) => r.d
 
 const cleanName = (name: string) => {
   const trimmed = name.trim();
-  if (!trimmed) throw new FolderNameTakenError("Enter a name.");
-  if (trimmed.includes("/")) throw new FolderNameTakenError("A name can't contain /.");
+  if (!trimmed) throw new FolderNameInvalidError("Enter a name.");
+  if (trimmed.includes("/")) throw new FolderNameInvalidError("A name can't contain /.");
   return trimmed.slice(0, 120);
 };
 const depthOf = (id: string | null): number => {
@@ -148,7 +162,7 @@ export const folderRepo = {
     name: string;
     parentId?: string | null;
     taxYear?: number | null;
-  }): Promise<FolderRow> {
+  }): Promise<DocumentFolderRow> {
     const clean = cleanName(name);
     if (parentId && !folders.get(parentId)) throw new FolderNotFoundError("That folder is gone.");
     if (depthOf(parentId) + 1 > MAX_FOLDER_DEPTH) {
@@ -156,7 +170,7 @@ export const folderRepo = {
     }
     assertNameFree(parentId, clean);
     const t = now();
-    const row: FolderRow = {
+    const row: DocumentFolderRow = {
       id: newId("fld"),
       parentId,
       name: clean,
@@ -169,7 +183,7 @@ export const folderRepo = {
     folders.set(row.id, row);
     return row;
   },
-  async rename(id: string, name: string): Promise<FolderRow> {
+  async rename(id: string, name: string): Promise<DocumentFolderRow> {
     const row = folders.get(id);
     if (!row) throw new FolderNotFoundError("That folder is gone.");
     const clean = cleanName(name);
@@ -178,7 +192,7 @@ export const folderRepo = {
     folders.set(id, next);
     return next;
   },
-  async move(id: string, newParentId: string | null): Promise<FolderRow> {
+  async move(id: string, newParentId: string | null): Promise<DocumentFolderRow> {
     const row = folders.get(id);
     if (!row) throw new FolderNotFoundError("That folder is gone.");
     if (newParentId && subtreeIds(id).includes(newParentId)) {
@@ -199,7 +213,7 @@ export const folderRepo = {
     folders.set(id, { ...row, deletedAt: now() });
     return true;
   },
-  async revertTo(id: string, snapshot: FolderRow) {
+  async revertTo(id: string, snapshot: DocumentFolderRow) {
     folders.set(id, snapshot);
     return snapshot;
   },
@@ -239,7 +253,7 @@ export const folderRepo = {
         }));
     return build(null);
   },
-  async ensureYearDefaults(taxYear: number): Promise<FolderRow[]> {
+  async ensureYearDefaults(taxYear: number): Promise<DocumentFolderRow[]> {
     const named = (parentId: string | null, name: string) =>
       [...folders.values()].find(
         (f) => f.parentId === parentId && f.name.toLowerCase() === name.toLowerCase(),
@@ -277,7 +291,8 @@ export const documentRepo = {
     return documents.get(id);
   },
   async update(id: string, patch: Partial<Pick<DocumentRow, "notes" | "name">>) {
-    const row = documents.get(id)!;
+    const row = documents.get(id);
+    if (!row) throw new DocumentNotFoundError("That document is gone.");
     const next = { ...row, ...patch, updatedAt: now() };
     documents.set(id, next);
     return next;
@@ -329,11 +344,12 @@ export const documentRepo = {
   },
   async rename(id: string, name: string) {
     const clean = name.trim();
-    if (!clean) throw new FolderNameTakenError("Enter a name.");
+    if (!clean) throw new FolderNameInvalidError("Enter a name.");
     return documentRepo.update(id, { name: clean });
   },
   async move(id: string, folderId: string | null) {
-    const row = documents.get(id)!;
+    const row = documents.get(id);
+    if (!row) throw new DocumentNotFoundError("That document is gone.");
     const next = { ...row, folderId, updatedAt: now() };
     documents.set(id, next);
     return next;
@@ -378,13 +394,13 @@ export const dropBytesForStub = (sha256: string) => blobs.delete(sha256);
 // ─── documentLinkRepo ───────────────────────────────────────────────────────
 
 export const documentLinkRepo = {
-  async link(documentId: string, recordType: string, recordId: string): Promise<LinkRow> {
+  async link(documentId: string, recordType: string, recordId: string): Promise<DocumentLinkRow> {
     const same = live(links.values()).find(
       (l) => l.documentId === documentId && l.recordType === recordType && l.recordId === recordId,
     );
     if (same) return same;
     const t = now();
-    const row: LinkRow = {
+    const row: DocumentLinkRow = {
       id: newId("lnk"),
       documentId,
       recordType,
@@ -424,11 +440,11 @@ export const documentLinkRepo = {
     }
     return counts;
   },
-  /** Links per document, for the list's link count in one query. NOT in the contract: FINDING for
-   * d-data (the contract has forDocument per document, or countsFor per record). */
-  async countsByDocument(): Promise<Record<string, number>> {
-    const counts: Record<string, number> = {};
-    for (const l of live(links.values())) counts[l.documentId] = (counts[l.documentId] ?? 0) + 1;
+  /** Links per document, for the list's link count in one query. */
+  async countsByDocument(): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+    for (const l of live(links.values()))
+      counts.set(l.documentId, (counts.get(l.documentId) ?? 0) + 1);
     return counts;
   },
 };
