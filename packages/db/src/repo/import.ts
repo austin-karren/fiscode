@@ -14,6 +14,9 @@ import {
   retirementContribution,
   w2Job,
   estimatedPayment,
+  documentFolder,
+  document,
+  documentLink,
   spouse,
   timeEntry,
   vehicle,
@@ -96,6 +99,9 @@ export const importBundle = async (bundle: Bundle, reason: ImportReason): Promis
       db.delete(retirementContribution),
       db.delete(w2Job),
       db.delete(estimatedPayment),
+      db.delete(documentFolder),
+      db.delete(document),
+      db.delete(documentLink),
     );
     queries.push(...insertQueries(bundle, "strict"));
   } else {
@@ -123,6 +129,9 @@ const isEmptyBundle = (b: Bundle): boolean =>
     b.retirementContributions,
     b.w2Jobs,
     b.estimatedPayments,
+    b.documentFolders,
+    b.documents,
+    b.documentLinks,
   ].every((rows) => rows.length === 0);
 
 const insertQueries = (
@@ -149,5 +158,9 @@ const insertQueries = (
   }
   for (const row of bundle.w2Jobs) add(db.insert(w2Job).values(row));
   for (const row of bundle.estimatedPayments) add(db.insert(estimatedPayment).values(row));
+  // Document rows only: the bytes are blobs on this device (blob-store.ts), never in a CSV.
+  for (const row of bundle.documentFolders) add(db.insert(documentFolder).values(row));
+  for (const row of bundle.documents) add(db.insert(document).values(row));
+  for (const row of bundle.documentLinks) add(db.insert(documentLink).values(row));
   return queries;
 };

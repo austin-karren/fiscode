@@ -12,6 +12,9 @@ import {
   type ProfileRow,
   type RetirementContributionRow,
   type W2JobRow,
+  type DocumentFolderRow,
+  type DocumentRow,
+  type DocumentLinkRow,
   type EstimatedPaymentRow,
   type SpouseRow,
   type TimeEntryRow,
@@ -248,6 +251,44 @@ const rowToBundle = (rows: CsvRow[]): Bundle => {
           updatedAt: r.updated_at ?? "",
           deletedAt: strOrNull(r.deleted_at),
         } satisfies EstimatedPaymentRow);
+        break;
+      case "document_folder":
+        b.documentFolders.push({
+          id: r.id,
+          parentId: strOrNull(r.parent_id),
+          name: r.name ?? "",
+          taxYear: numOrNull(r.tax_year),
+          sortOrder: num(r.sort_order),
+          createdAt: r.created_at ?? "",
+          updatedAt: r.updated_at ?? "",
+          deletedAt: strOrNull(r.deleted_at),
+        } satisfies DocumentFolderRow);
+        break;
+      case "document":
+        b.documents.push({
+          id: r.id,
+          folderId: strOrNull(r.folder_id),
+          name: r.name ?? "",
+          mime: r.mime ?? "",
+          sizeBytes: num(r.size_bytes),
+          sha256: r.sha256 ?? "",
+          addedAt: r.added_at ?? "",
+          notes: strOrNull(r.notes),
+          createdAt: r.created_at ?? "",
+          updatedAt: r.updated_at ?? "",
+          deletedAt: strOrNull(r.deleted_at),
+        } satisfies DocumentRow);
+        break;
+      case "document_link":
+        b.documentLinks.push({
+          id: r.id,
+          documentId: r.document_id ?? "",
+          recordType: r.linked_record_type ?? "",
+          recordId: r.linked_record_id ?? "",
+          createdAt: r.created_at ?? "",
+          updatedAt: r.updated_at ?? "",
+          deletedAt: strOrNull(r.deleted_at),
+        } satisfies DocumentLinkRow);
         break;
       case "history":
         b.history.push({

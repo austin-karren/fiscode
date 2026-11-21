@@ -160,6 +160,32 @@ export type EstimatedPaymentRow = Dated & {
   notes: string | null;
 };
 
+/** A document folder. `parentId` null = a root folder. */
+export type DocumentFolderRow = Dated & {
+  parentId: string | null;
+  name: string;
+  taxYear: number | null;
+  sortOrder: number;
+};
+
+/** A document's row: its bytes are a blob on the device (by sha256), never in the CSV. */
+export type DocumentRow = Dated & {
+  folderId: string | null;
+  name: string;
+  mime: string;
+  sizeBytes: number;
+  sha256: string;
+  addedAt: string;
+  notes: string | null;
+};
+
+/** A link from a document to a record, by CSV record-type name. */
+export type DocumentLinkRow = Dated & {
+  documentId: string;
+  recordType: string;
+  recordId: string;
+};
+
 /**
  * One entry of the append-only edit log. `beforeJson` / `afterJson` are the
  * row (or, for an import snapshot, the bundle) as JSON text, kept verbatim.
@@ -188,6 +214,9 @@ export type Bundle = {
   retirementContributions: RetirementContributionRow[];
   w2Jobs: W2JobRow[];
   estimatedPayments: EstimatedPaymentRow[];
+  documentFolders: DocumentFolderRow[];
+  documents: DocumentRow[];
+  documentLinks: DocumentLinkRow[];
   /** The edit log. Empty when the bundle was built for a screen or an estimate. */
   history: HistoryRow[];
 };
@@ -206,5 +235,8 @@ export const emptyBundle = (): Bundle => ({
   retirementContributions: [],
   w2Jobs: [],
   estimatedPayments: [],
+  documentFolders: [],
+  documents: [],
+  documentLinks: [],
   history: [],
 });

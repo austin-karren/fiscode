@@ -1,0 +1,67 @@
+import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+// Document folders, documents and their links to records (contract: d-data
+// drafts/contract-documents.md). Bytes never live here: a document's bytes are a
+// content-addressed blob in OPFS at documents/blobs/<sha[0:2]>/<sha256> (blob-store.ts).
+
+/** A folder. `parentId` null = a root folder. Names are unique among live siblings (repo). */
+export const documentFolder = sqliteTable("document_folder", {
+  id: text("id").primaryKey(),
+  parentId: text("parent_id"),
+  name: text("name").notNull(),
+  // Set on a year's default folders and their children; a filter only.
+  taxYear: integer("tax_year"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  deletedAt: text("deleted_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+/** A document: one file's current bytes (by sha256) and how it is shown. */
+export const document = sqliteTable(
+  "document",
+  {
+    id: text("id").primaryKey(),
+    // Null = "Unfiled".
+    folderId: text("folder_id"),
+    // Display name including the extension; editable; duplicates allowed.
+    name: text("name").notNull(),
+    mime: text("mime").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    // Lowercase hex, 64 chars: the content address of the current bytes.
+    sha256: text("sha256").notNull(),
+    // When it was first uploaded.
+    addedAt: text("added_at").notNull(),
+    notes: text("notes"),
+    deletedAt: text("deleted_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("document_folder_idx").on(t.folderId), index("document_sha_idx").on(t.sha256)],
+);
+
+/** A link from a document to a record (polymorphic by CSV record-type name). Unlink = soft delete. */
+export const documentLink = sqliteTable(
+  "document_link",
+  {
+    id: text("id").primaryKey(),
+    documentId: text("document_id").notNull(),
+    // 'expense' | 'income' | 'mileage' (open for later record types).
+    recordType: text("record_type").notNull(),
+    recordId: text("record_id").notNull(),
+    deletedAt: text("deleted_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    index("document_link_doc_idx").on(t.documentId),
+    index("document_link_rec_idx").on(t.recordType, t.recordId),
+  ],
+);
+
+export type DocumentFolderRow = typeof documentFolder.$inferSelect;
+export type DocumentFolderInsert = typeof documentFolder.$inferInsert;
+export type DocumentRow = typeof document.$inferSelect;
+export type DocumentInsert = typeof document.$inferInsert;
+export type DocumentLinkRow = typeof documentLink.$inferSelect;
+export type DocumentLinkInsert = typeof documentLink.$inferInsert;

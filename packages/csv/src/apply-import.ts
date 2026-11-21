@@ -76,6 +76,19 @@ export const applyImport = (
       incoming.estimatedPayments,
       conflicts,
     ),
+    documentFolders: mergeRows(
+      "document_folder",
+      existing.documentFolders,
+      incoming.documentFolders,
+      conflicts,
+    ),
+    documents: mergeRows("document", existing.documents, incoming.documents, conflicts),
+    documentLinks: mergeRows(
+      "document_link",
+      existing.documentLinks,
+      incoming.documentLinks,
+      conflicts,
+    ),
     // History is append-only: entries the file brings are added, and an entry
     // both sides already hold is the same entry, not a conflict to report.
     history: mergeRows("history", existing.history, incoming.history, []),
@@ -114,6 +127,9 @@ const DATA_TABLES = [
   "retirementContributions",
   "w2Jobs",
   "estimatedPayments",
+  "documentFolders",
+  "documents",
+  "documentLinks",
 ] as const satisfies readonly (keyof Bundle)[];
 
 /**

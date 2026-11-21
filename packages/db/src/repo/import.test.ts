@@ -463,3 +463,54 @@ describe("importBundle — a Restore stays exact with out-of-range rows and over
     ).toBe(file);
   });
 });
+
+describe("importBundle — document rows (v6)", () => {
+  it("a restore brings document folders, documents and links back exactly; bytes are not its business", async () => {
+    const withDocs: Bundle = {
+      ...fullBundle(),
+      documentFolders: [
+        {
+          id: "df_1",
+          parentId: null,
+          name: "2026",
+          taxYear: 2026,
+          sortOrder: 0,
+          createdAt: FIXED,
+          updatedAt: FIXED,
+          deletedAt: null,
+        },
+      ],
+      documents: [
+        {
+          id: "doc_1",
+          folderId: "df_1",
+          name: "Demo receipt.pdf",
+          mime: "application/pdf",
+          sizeBytes: 10,
+          sha256: "c".repeat(64),
+          addedAt: FIXED,
+          notes: null,
+          createdAt: FIXED,
+          updatedAt: FIXED,
+          deletedAt: null,
+        },
+      ],
+      documentLinks: [
+        {
+          id: "dl_1",
+          documentId: "doc_1",
+          recordType: "income",
+          recordId: "in_1",
+          createdAt: FIXED,
+          updatedAt: FIXED,
+          deletedAt: null,
+        },
+      ],
+    };
+    await importBundle(withDocs, "import-restore");
+    const round = await buildBundle({ includeDeleted: true });
+    expect(round.documentFolders).toEqual(withDocs.documentFolders);
+    expect(round.documents).toEqual(withDocs.documents);
+    expect(round.documentLinks).toEqual(withDocs.documentLinks);
+  });
+});

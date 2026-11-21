@@ -245,6 +245,31 @@ const KINDS: Record<string, KindSpec> = {
     ],
     facts: ["annualW2WagesCents", "endDate"],
   },
+  // Documents (data layer only; d-ux owns the screens). The bytes never appear here.
+  document: {
+    noun: "document",
+    title: (r) => text(r.name),
+    fields: [
+      ["name", "Name", text],
+      ["notes", "Notes", text],
+      ["sizeBytes", "Size (bytes)", text],
+      ["mime", "Type", text],
+    ],
+    facts: [],
+  },
+  document_folder: {
+    noun: "document folder",
+    title: (r) => text(r.name),
+    fields: [["name", "Name", text]],
+    facts: [],
+  },
+  document_link: {
+    noun: "document link",
+    title: (r) =>
+      `attached to ${r.recordType === "income" ? "an income row" : r.recordType === "mileage" ? "a mileage trip" : "an expense"}`,
+    fields: [],
+    facts: [],
+  },
   retirement_contribution: {
     noun: "retirement contribution",
     title: (r) => join(labelled(RETIREMENT_ACCOUNT_LABELS)(r.account), money(r.amountCents)),
@@ -316,6 +341,9 @@ const DATA_TABLES = [
   "retirementContributions",
   "w2Jobs",
   "estimatedPayments",
+  "documentFolders",
+  "documents",
+  "documentLinks",
 ] as const satisfies readonly (keyof Bundle)[];
 
 /** How many records a stored bundle holds; the profile counts as one. */

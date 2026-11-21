@@ -24,6 +24,9 @@ const ROW_TABLES = [
   "retirementContributions",
   "w2Jobs",
   "estimatedPayments",
+  "documentFolders",
+  "documents",
+  "documentLinks",
 ] as const satisfies readonly (keyof Bundle)[];
 
 /** Count a bundle's rows. The profile is one live row. */

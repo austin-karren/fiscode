@@ -214,7 +214,7 @@ v1 files also had an `# exported:` time line. It is read and ignored.
 The `schema:` marker is used for one thing: a file marked `v1` never carried the `'` formula
 guard, so its text is kept exactly as written.
 
-Exports are always written as v5. Schema v5 adds the `w2_job` and `estimated_payment` record types and the profile column `prior_year_not_filed`. Schema v4 added four profile columns, `prior_year_total_tax`, `prior_year_agi`, `prior_year_state_tax` and `prior_year_figures_year`; schema v3 added `placed_in_service_date` on expenses. v1 to v4 files still import, with the newer columns and record types empty. An app version older than v5 refuses a v5 file rather than read it wrongly.
+Exports are always written as v6. Schema v6 adds the `document_folder`, `document` and `document_link` record types (rows only: a document's bytes are never in a CSV). Schema v5 added the `w2_job` and `estimated_payment` record types and the profile column `prior_year_not_filed`. Schema v4 added four profile columns, `prior_year_total_tax`, `prior_year_agi`, `prior_year_state_tax` and `prior_year_figures_year`; schema v3 added `placed_in_service_date` on expenses. v1 to v5 files still import, with the newer columns and record types empty. An app version older than v6 refuses a v6 file rather than read it wrongly.
 
 ## Columns by record type
 
@@ -536,6 +536,78 @@ An estimated tax payment you made. Added in schema v5.
 
 A yearly file carries W-2s and payments by `tax_year`, so a payment made in January for the year
 before goes in that year's file.
+
+### `document_folder`, `document`, `document_link`
+
+Your document folders, the documents in them, and which records each document is attached to.
+Added in schema v6. **The files themselves are not in the CSV.** A document row names its bytes by
+`sha256`; the bytes stay on the device that has them. Restoring from a CSV brings the rows back,
+and a document whose bytes aren't on this device says so until you restore a backup that includes
+your files. A yearly file has no document rows.
+
+<TypeTable
+  type={{
+    "document_folder.name": {
+      description: "Folder name, unique among its live siblings.",
+      type: "string",
+      required: true,
+    },
+    "document_folder.parent_id": {
+      description: "The folder it is in; empty = a top-level folder.",
+      type: "string",
+    },
+    "document_folder.tax_year": {
+      description: "Set on a year's default folders and their children.",
+      type: "whole number",
+    },
+    "document_folder.sort_order": {
+      description: "Order among siblings (then by name).",
+      type: "whole number",
+    },
+    "document.name": {
+      description: "Display name, including the extension.",
+      type: "string",
+      required: true,
+    },
+    "document.folder_id": { description: "The folder; empty = Unfiled.", type: "string" },
+    "document.mime": {
+      description:
+        "application/pdf | image/png | image/jpeg | image/webp | image/heic | image/gif | text/plain",
+      type: "code",
+      required: true,
+    },
+    "document.size": {
+      description: "The size for reading (e.g. 1.2 MB); ignored on import.",
+      type: "label",
+    },
+    "document.size_bytes": {
+      description: "The size in bytes.",
+      type: "whole number",
+      required: true,
+    },
+    "document.sha256": {
+      description: "Lowercase hex sha256 of the current bytes.",
+      type: "string",
+      required: true,
+    },
+    "document.added_at": {
+      description: "When it was first uploaded.",
+      type: "timestamp",
+      required: true,
+    },
+    "document_link.document_id": { description: "The document.", type: "string", required: true },
+    "document_link.linked_record_type": {
+      description: "expense | income | mileage",
+      type: "code",
+      required: true,
+    },
+    "document_link.linked_record_id": {
+      description: "The id of that row.",
+      type: "string",
+      required: true,
+    },
+  }}
+/>
 
 ## File names
 

@@ -10,6 +10,9 @@ import {
   mileageRepo,
   profileRepo,
   retirementRepo,
+  folderRepo,
+  documentRepo,
+  documentLinkRepo,
   spouseRepo,
   timeRepo,
   vehicleRepo,
@@ -60,6 +63,9 @@ const REPOS: Record<string, AnyCrudRepo> = {
   home_office: homeOfficeRepo,
   expense: expenseRepo,
   retirement_contribution: retirementRepo,
+  document_folder: folderRepo,
+  document: documentRepo,
+  document_link: documentLinkRepo,
 };
 
 const BUNDLE_KEY: Record<string, keyof Bundle> = {
@@ -73,6 +79,9 @@ const BUNDLE_KEY: Record<string, keyof Bundle> = {
   home_office: "homeOffice",
   expense: "expenses",
   retirement_contribution: "retirementContributions",
+  document_folder: "documentFolders",
+  document: "documents",
+  document_link: "documentLinks",
 };
 
 /** The record a history row is about, as it is now (deleted rows included). */
