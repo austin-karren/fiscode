@@ -264,6 +264,10 @@ export const exampleBundle = (): Bundle => ({
   // built from it, so adding rows here would move their numbers.
   w2Jobs: [],
   estimatedPayments: [],
+  // No documents: their bytes are never in a CSV.
+  documentFolders: [],
+  documents: [],
+  documentLinks: [],
   // The example is a file to read and to author from, so it carries no edit
   // log. A real full export ends with a History table.
   history: [],

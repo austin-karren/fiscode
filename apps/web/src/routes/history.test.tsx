@@ -38,6 +38,9 @@ vi.mock("@fiscode/db", () => ({
   mileageRepo: db.other,
   homeOfficeRepo: db.other,
   retirementRepo: db.other,
+  folderRepo: db.other,
+  documentRepo: db.other,
+  documentLinkRepo: db.other,
   profileRepo: db.profileRepo,
 }));
 

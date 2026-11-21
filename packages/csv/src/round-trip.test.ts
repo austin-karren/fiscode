@@ -226,6 +226,45 @@ const fullBundle = (): Bundle => ({
       deletedAt: null,
     },
   ],
+  documentFolders: [
+    {
+      id: "df_1",
+      parentId: null,
+      name: "2026",
+      taxYear: 2026,
+      sortOrder: 0,
+      defaultKey: "year-root",
+      createdAt: FIXED_TIMESTAMP,
+      updatedAt: FIXED_TIMESTAMP,
+      deletedAt: null,
+    },
+  ],
+  documents: [
+    {
+      id: "doc_1",
+      folderId: "df_1",
+      name: "Demo receipt.pdf",
+      mime: "application/pdf",
+      sizeBytes: 1_234_567,
+      sha256: "a".repeat(64),
+      addedAt: FIXED_TIMESTAMP,
+      notes: null,
+      createdAt: FIXED_TIMESTAMP,
+      updatedAt: FIXED_TIMESTAMP,
+      deletedAt: null,
+    },
+  ],
+  documentLinks: [
+    {
+      id: "dl_1",
+      documentId: "doc_1",
+      recordType: "expense",
+      recordId: "ex_1",
+      createdAt: FIXED_TIMESTAMP,
+      updatedAt: FIXED_TIMESTAMP,
+      deletedAt: null,
+    },
+  ],
   history: [
     {
       id: "h_1",
@@ -369,11 +408,39 @@ describe("CSV round-trip", () => {
     });
   });
 
+  it("a v5 file (no document rows) imports with them empty", () => {
+    const v5 = exportBundle(fullBundle(), { scope: "full" })
+      .replace("schema: v6", "schema: v5")
+      .split("\r\n")
+      .filter((l) => !/^(document_folder|document|document_link),/.test(l))
+      .join("\r\n");
+    const { bundle, validationErrors, provenance } = parseCsv(v5);
+    expect(validationErrors).toEqual([]);
+    expect(provenance.schema).toBe("v5");
+    expect(bundle.documentFolders).toEqual([]);
+    expect(bundle.documents).toEqual([]);
+    expect(bundle.documentLinks).toEqual([]);
+  });
+
+  it("documents round-trip as rows (no bytes), with a size for people; the yearly file has none", () => {
+    const b = fullBundle();
+    const csv = exportBundle(b, { scope: "full" });
+    expect(csv).toContain("# Documents");
+    expect(csv).toContain("Demo receipt.pdf,df_1,application/pdf,1.2 MB,1234567,");
+    const round = parseCsv(csv).bundle;
+    expect(round.documentFolders).toEqual(b.documentFolders);
+    expect(round.documents).toEqual(b.documents);
+    expect(round.documentLinks).toEqual(b.documentLinks);
+    expect(exportBundle(round, { scope: "full" })).toBe(csv);
+    const yearly = parseCsv(exportBundle(b, { scope: "yearly", year: 2026 })).bundle;
+    expect([yearly.documentFolders, yearly.documents, yearly.documentLinks]).toEqual([[], [], []]);
+  });
+
   it("a v4 file (no W-2 or payment rows, no prior_year_not_filed) imports with them empty", () => {
     const v4 = exportBundle(fullBundle(), { scope: "full" })
-      .replace("schema: v5", "schema: v4")
+      .replace("schema: v6", "schema: v4")
       .split("\r\n")
-      .filter((l) => !/^(w2_job|estimated_payment),/.test(l))
+      .filter((l) => !/^(w2_job|estimated_payment|document_folder|document|document_link),/.test(l))
       .join("\r\n");
     const { bundle, validationErrors, provenance } = parseCsv(v4);
     expect(validationErrors).toEqual([]);
@@ -486,7 +553,7 @@ describe("CSV round-trip", () => {
     const { provenance } = parseCsv(csv);
     expect(provenance.scope).toBe("yearly");
     expect(provenance.year).toBe(2026);
-    expect(provenance.schema).toBe("v5");
+    expect(provenance.schema).toBe("v6");
     expect(provenance.exportedAt).toBeUndefined();
   });
 
@@ -500,5 +567,37 @@ describe("CSV round-trip", () => {
     const { bundle: round, validationErrors } = parseCsv(dirtied);
     expect(validationErrors).toEqual([]);
     expect(round).toEqual(bundle);
+  });
+});
+
+describe("document folders: one per default key per tax year (review #84 r3)", () => {
+  it("a file with two folders sharing a year's default key is refused at parse, naming both rows", () => {
+    const b = fullBundle();
+    b.documentFolders = [
+      b.documentFolders[0]!,
+      { ...b.documentFolders[0]!, id: "df_2", name: "2026 copy" },
+    ];
+    const csv = exportBundle(b, { scope: "full" });
+    const { validationErrors } = parseCsv(csv);
+    const lines = csv.split("\r\n");
+    const first = lines.findIndex((l) => l.startsWith("document_folder,2026,")) + 1;
+    const second = lines.findIndex((l) => l.startsWith("document_folder,2026 copy,")) + 1;
+    expect(validationErrors).toEqual([
+      expect.objectContaining({
+        line: second,
+        message: `default_key: "year-root" for 2026 is also used on row ${first}. A tax year has one folder per default key`,
+      }),
+    ]);
+  });
+
+  it("the same key in different years, and folders with no key, are fine", () => {
+    const b = fullBundle();
+    b.documentFolders = [
+      b.documentFolders[0]!,
+      { ...b.documentFolders[0]!, id: "df_2", name: "2027", taxYear: 2027 },
+      { ...b.documentFolders[0]!, id: "df_3", name: "Mine", defaultKey: null },
+      { ...b.documentFolders[0]!, id: "df_4", name: "Mine too", defaultKey: null },
+    ];
+    expect(parseCsv(exportBundle(b, { scope: "full" })).validationErrors).toEqual([]);
   });
 });

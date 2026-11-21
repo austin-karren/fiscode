@@ -1,5 +1,8 @@
 import type {
   ClientRow,
+  DocumentFolderRow,
+  DocumentLinkRow,
+  DocumentRow,
   EntityRow,
   EstimatedPaymentRow,
   ExpenseRow,
@@ -39,6 +42,9 @@ export type Bundle = {
   retirementContributions: RetirementContributionRow[];
   w2Jobs: W2JobRow[];
   estimatedPayments: EstimatedPaymentRow[];
+  documentFolders: DocumentFolderRow[];
+  documents: DocumentRow[];
+  documentLinks: DocumentLinkRow[];
   history: HistoryRow[];
 };
 
@@ -56,5 +62,8 @@ export const emptyBundle = (): Bundle => ({
   retirementContributions: [],
   w2Jobs: [],
   estimatedPayments: [],
+  documentFolders: [],
+  documents: [],
+  documentLinks: [],
   history: [],
 });

@@ -1,5 +1,11 @@
 import { describeEntityPeriod, findEntityOverlap } from "@fiscode/core";
-import { fieldsOf, updateTakesFileRow, withFileFields, type ImportMode } from "./apply-import.ts";
+import {
+  fieldsOf,
+  placeIncomingFolders,
+  updateTakesFileRow,
+  withFileFields,
+  type ImportMode,
+} from "./apply-import.ts";
 import type { Bundle } from "./bundle-types.ts";
 import { formRangeProblems, TABLE_RECORD_TYPES } from "./form-ranges.ts";
 import { parseCsv, rowLineKey, type ImportError } from "./import.ts";
@@ -24,6 +30,9 @@ const ROW_TABLES = [
   "retirementContributions",
   "w2Jobs",
   "estimatedPayments",
+  "documentFolders",
+  "documents",
+  "documentLinks",
 ] as const satisfies readonly (keyof Bundle)[];
 
 /** Count a bundle's rows. The profile is one live row. */
@@ -148,6 +157,11 @@ export type ImportPlan = {
   keptLive: number;
   /** Add rows and Update rows: what the rows they write would trip. Restore never warns. */
   warnings: ImportWarnings;
+  /**
+   * Add rows and Update rows: folders from the file kept as plain folders, because this profile
+   * already has that year's default folders (`placeIncomingFolders`).
+   */
+  keptAsPlainFolders: number;
 };
 
 /** How many rows that break a form's range are listed before the rest become a count. */
@@ -191,6 +205,15 @@ export const planImport = (
   const newHistory = incoming.history.filter((h) => !existingHistory.has(h.id)).length;
   const snapshot = current.live + current.deleted + current.history > 0;
 
+  // Add rows / Update rows take another device's year folders as plain folders; compare and count
+  // the rows as they will be written (review #84 r4).
+  let keptAsPlainFolders = 0;
+  if (mode !== "restore") {
+    const placed = placeIncomingFolders(existing, incoming);
+    incoming = placed.incoming;
+    keptAsPlainFolders = placed.keptAsPlain;
+  }
+
   if (mode === "append") {
     const written: RowCounts = { live: 0, deleted: 0, history: newHistory };
     let skipped = 0;
@@ -225,6 +248,7 @@ export const planImport = (
       keptDeleted: 0,
       keptLive: 0,
       warnings: warningsFor(existing, incoming, mode, file.rowLines, file.columns),
+      keptAsPlainFolders,
     };
   }
 
@@ -284,6 +308,7 @@ export const planImport = (
       keptDeleted,
       keptLive,
       warnings: warningsFor(existing, incoming, mode, file.rowLines, file.columns),
+      keptAsPlainFolders,
     };
   }
 
@@ -320,6 +345,7 @@ export const planImport = (
     keptDeleted: 0,
     keptLive: 0,
     warnings: NO_WARNINGS,
+    keptAsPlainFolders: 0,
   };
 };
 

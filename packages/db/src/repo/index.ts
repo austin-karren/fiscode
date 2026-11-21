@@ -232,6 +232,9 @@ export const buildBundle = async (
     retirementRows,
     w2Rows,
     paymentRows,
+    folderRows,
+    documentRows,
+    linkRows,
   ] = await Promise.all([
     profileRepo.get(),
     rows(entityRepo),
@@ -246,6 +249,9 @@ export const buildBundle = async (
     rows(retirementRepo),
     rows(w2JobRepo),
     rows(estimatedPaymentRepo),
+    rows(folderRepo),
+    rows(documentRepo),
+    rows(documentLinkRepo),
   ]);
   return {
     ...emptyBundle(),
@@ -262,6 +268,13 @@ export const buildBundle = async (
     retirementContributions: retirementRows,
     w2Jobs: w2Rows,
     estimatedPayments: paymentRows,
+    documentFolders: folderRows,
+    documents: documentRows,
+    documentLinks: linkRows,
     history,
   };
 };
+
+import { documentLinkRepo, documentRepo, folderRepo } from "./documents.ts";
+export { folderRepo, documentRepo, documentLinkRepo };
+export type { FolderNode, LinkedRecord } from "./documents.ts";

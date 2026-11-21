@@ -29,6 +29,9 @@ describe("Bundle shape", () => {
         "vehicles",
         "w2Jobs",
         "estimatedPayments",
+        "documentFolders",
+        "documents",
+        "documentLinks",
       ].sort(),
     );
   });

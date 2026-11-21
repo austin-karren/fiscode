@@ -232,6 +232,48 @@ const bundleToRows = (bundle: Bundle): Record<string, string>[] => {
       }),
     );
   }
+  for (const f of bundle.documentFolders) {
+    rows.push(
+      emit("document_folder", f.id, {
+        name: f.name,
+        parent_id: str(f.parentId),
+        tax_year: num(f.taxYear),
+        sort_order: num(f.sortOrder),
+        default_key: str(f.defaultKey),
+        created_at: f.createdAt,
+        updated_at: f.updatedAt,
+        deleted_at: str(f.deletedAt),
+      }),
+    );
+  }
+  for (const d of bundle.documents) {
+    rows.push(
+      emit("document", d.id, {
+        name: d.name,
+        folder_id: str(d.folderId),
+        mime: d.mime,
+        size_bytes: num(d.sizeBytes),
+        sha256: d.sha256,
+        added_at: d.addedAt,
+        notes: str(d.notes),
+        created_at: d.createdAt,
+        updated_at: d.updatedAt,
+        deleted_at: str(d.deletedAt),
+      }),
+    );
+  }
+  for (const l of bundle.documentLinks) {
+    rows.push(
+      emit("document_link", l.id, {
+        document_id: l.documentId,
+        linked_record_type: l.recordType,
+        linked_record_id: l.recordId,
+        created_at: l.createdAt,
+        updated_at: l.updatedAt,
+        deleted_at: str(l.deletedAt),
+      }),
+    );
+  }
   for (const r of bundle.retirementContributions) {
     rows.push(
       emit("retirement_contribution", r.id, {
@@ -315,6 +357,11 @@ const filterYearly = (bundle: Bundle, year: number): Bundle => {
     // By the year each is for, not its date: a January payment is the prior year's Q4.
     w2Jobs: live(bundle.w2Jobs).filter((r) => r.taxYear === year),
     estimatedPayments: live(bundle.estimatedPayments).filter((r) => r.taxYear === year),
+    // Documents are a full backup's: a yearly file is for an accountant, and the rows are no use
+    // without the files.
+    documentFolders: [],
+    documents: [],
+    documentLinks: [],
     entities: live(bundle.entities).filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
     spouses: live(bundle.spouses).filter((r) => spanOverlapsYear(r.startDate, r.endDate)),
     homeOffice: live(bundle.homeOffice).filter((r) => spanOverlapsYear(r.startDate, r.endDate)),

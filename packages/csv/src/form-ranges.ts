@@ -198,4 +198,7 @@ export const TABLE_RECORD_TYPES = {
   retirementContributions: "retirement_contribution",
   w2Jobs: "w2_job",
   estimatedPayments: "estimated_payment",
+  documentFolders: "document_folder",
+  documents: "document",
+  documentLinks: "document_link",
 } as const satisfies Partial<Record<keyof Bundle, string>>;

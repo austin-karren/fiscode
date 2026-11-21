@@ -10,7 +10,7 @@ import { z } from "zod";
 // lay the same fields out as one table per record type, with money in
 // dollars. The importer maps both back to this flat row before validating.
 
-export const CSV_SCHEMA_VERSION = "v5" as const;
+export const CSV_SCHEMA_VERSION = "v6" as const;
 
 export const recordTypeSchema = z.enum([
   "profile",
@@ -26,6 +26,9 @@ export const recordTypeSchema = z.enum([
   "retirement_contribution",
   "w2_job",
   "estimated_payment",
+  "document_folder",
+  "document",
+  "document_link",
   "history",
 ]);
 export type RecordType = z.infer<typeof recordTypeSchema>;
@@ -147,6 +150,20 @@ export const csvRowSchema = z.object({
   jurisdiction: optStr,
   applied_quarter: optInt,
 
+  // document_folder / document / document_link (name, tax_year, notes shared)
+  parent_id: optStr,
+  sort_order: optInt,
+  default_key: optStr,
+  folder_id: optStr,
+  mime: optStr,
+  size_bytes: optInt,
+  sha256: optStr,
+  added_at: optStr,
+  document_id: optStr,
+  // The linked record's type; `record_type` is the row's own.
+  linked_record_type: optStr,
+  linked_record_id: optStr,
+
   // history (the append-only edit log; one row per change)
   at: optStr,
   entity: optStr,
@@ -229,6 +246,17 @@ export const CSV_COLUMNS: ReadonlyArray<keyof CsvRow> = [
   "state_withholding_cents",
   "jurisdiction",
   "applied_quarter",
+  "parent_id",
+  "sort_order",
+  "default_key",
+  "folder_id",
+  "mime",
+  "size_bytes",
+  "sha256",
+  "added_at",
+  "document_id",
+  "linked_record_type",
+  "linked_record_id",
   "at",
   "entity",
   "entity_id",
@@ -238,4 +266,4 @@ export const CSV_COLUMNS: ReadonlyArray<keyof CsvRow> = [
 ];
 
 /** Schema markers this build can read. A file with any other marker is refused. */
-export const READABLE_SCHEMA_VERSIONS: readonly string[] = ["v1", "v2", "v3", "v4", "v5"];
+export const READABLE_SCHEMA_VERSIONS: readonly string[] = ["v1", "v2", "v3", "v4", "v5", "v6"];

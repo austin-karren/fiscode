@@ -1,4 +1,5 @@
 import type { Bundle } from "./bundle-types.ts";
+import { freeFolderName } from "@fiscode/core";
 import { emptyBundle } from "./bundle-types.ts";
 import { TABLE_RECORD_TYPES } from "./form-ranges.ts";
 import { rowLineKey } from "./import.ts";
@@ -45,11 +46,13 @@ export const applyImport = (
   }
   if (mode === "update") {
     return {
-      next: updateBundle(existing, incoming, file.columns),
+      next: updateBundle(existing, placeIncomingFolders(existing, incoming).incoming, file.columns),
       conflicts: [],
       replaced: existing,
     };
   }
+  // Another device's year folders come in as plain folders where this profile has the keys.
+  incoming = placeIncomingFolders(existing, incoming).incoming;
   const conflicts: ImportConflict[] = [];
   const next: Bundle = {
     ...emptyBundle(),
@@ -74,6 +77,19 @@ export const applyImport = (
       "estimated_payment",
       existing.estimatedPayments,
       incoming.estimatedPayments,
+      conflicts,
+    ),
+    documentFolders: mergeRows(
+      "document_folder",
+      existing.documentFolders,
+      incoming.documentFolders,
+      conflicts,
+    ),
+    documents: mergeRows("document", existing.documents, incoming.documents, conflicts),
+    documentLinks: mergeRows(
+      "document_link",
+      existing.documentLinks,
+      incoming.documentLinks,
       conflicts,
     ),
     // History is append-only: entries the file brings are added, and an entry
@@ -114,6 +130,9 @@ const DATA_TABLES = [
   "retirementContributions",
   "w2Jobs",
   "estimatedPayments",
+  "documentFolders",
+  "documents",
+  "documentLinks",
 ] as const satisfies readonly (keyof Bundle)[];
 
 /**
@@ -212,4 +231,53 @@ export const withFileFields = <T extends object>(
   const out: Record<string, unknown> = { ...(here as Record<string, unknown>) };
   for (const [k, v] of Object.entries(file)) if (fields.has(k)) out[k] = v;
   return out as T;
+};
+
+/**
+ * Add rows / Update rows: the file's document folders as this profile will take them. A folder
+ * whose (tax year, default key) is held here by a different folder, live or deleted, keeps its row
+ * but drops its key (a plain folder): the database allows one folder per key per year, and another
+ * device's backup has its own year folders. Such a folder also gets a name free among its live
+ * siblings here and in the file ("2026 (2)", `freeFolderName`). Done before the plan and the merge
+ * compare rows, so a second import of the same file finds them equal and changes nothing
+ * (review #84 r4). Restore replaces everything and doesn't use it.
+ */
+export const placeIncomingFolders = (
+  existing: Bundle,
+  incoming: Bundle,
+): { incoming: Bundle; keptAsPlain: number } => {
+  const holder = new Map<string, string>();
+  for (const f of existing.documentFolders) {
+    if (f.defaultKey !== null && f.taxYear !== null)
+      holder.set(`${f.taxYear}\u0000${f.defaultKey}`, f.id);
+  }
+  const live = <T extends { deletedAt: string | null }>(rows: readonly T[]) =>
+    rows.filter((r) => r.deletedAt === null);
+  let keptAsPlain = 0;
+  const placed: Bundle["documentFolders"] = [];
+  for (const f of incoming.documentFolders) {
+    const held =
+      f.defaultKey === null || f.taxYear === null
+        ? undefined
+        : holder.get(`${f.taxYear}\u0000${f.defaultKey}`);
+    if (held === undefined || held === f.id) {
+      placed.push(f);
+      continue;
+    }
+    keptAsPlain++;
+    const parent = f.parentId ?? null;
+    const siblings = [
+      ...live(existing.documentFolders),
+      ...live(placed),
+      ...live(incoming.documentFolders.filter((o) => !placed.some((p) => p.id === o.id))),
+    ]
+      .filter((o) => o.id !== f.id && (o.parentId ?? null) === parent)
+      .map((o) => o.name);
+    placed.push({
+      ...f,
+      defaultKey: null,
+      name: f.deletedAt === null ? freeFolderName(f.name, siblings) : f.name,
+    });
+  }
+  return { incoming: { ...incoming, documentFolders: placed }, keptAsPlain };
 };
