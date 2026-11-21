@@ -1,7 +1,7 @@
 import { describeEntityPeriod, findEntityOverlap } from "@fiscode/core";
 import {
   fieldsOf,
-  plainWhereKeyHeld,
+  placeIncomingFolders,
   updateTakesFileRow,
   withFileFields,
   type ImportMode,
@@ -159,7 +159,7 @@ export type ImportPlan = {
   warnings: ImportWarnings;
   /**
    * Add rows and Update rows: folders from the file kept as plain folders, because this profile
-   * already has that year's default folders (`plainWhereKeyHeld`).
+   * already has that year's default folders (`placeIncomingFolders`).
    */
   keptAsPlainFolders: number;
 };
@@ -205,6 +205,15 @@ export const planImport = (
   const newHistory = incoming.history.filter((h) => !existingHistory.has(h.id)).length;
   const snapshot = current.live + current.deleted + current.history > 0;
 
+  // Add rows / Update rows take another device's year folders as plain folders; compare and count
+  // the rows as they will be written (review #84 r4).
+  let keptAsPlainFolders = 0;
+  if (mode !== "restore") {
+    const placed = placeIncomingFolders(existing, incoming);
+    incoming = placed.incoming;
+    keptAsPlainFolders = placed.keptAsPlain;
+  }
+
   if (mode === "append") {
     const written: RowCounts = { live: 0, deleted: 0, history: newHistory };
     let skipped = 0;
@@ -239,7 +248,7 @@ export const planImport = (
       keptDeleted: 0,
       keptLive: 0,
       warnings: warningsFor(existing, incoming, mode, file.rowLines, file.columns),
-      keptAsPlainFolders: plainWhereKeyHeld(existing, incoming).keptAsPlain,
+      keptAsPlainFolders,
     };
   }
 
@@ -299,7 +308,7 @@ export const planImport = (
       keptDeleted,
       keptLive,
       warnings: warningsFor(existing, incoming, mode, file.rowLines, file.columns),
-      keptAsPlainFolders: plainWhereKeyHeld(existing, incoming).keptAsPlain,
+      keptAsPlainFolders,
     };
   }
 

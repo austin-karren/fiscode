@@ -46,11 +46,13 @@ export const applyImport = (
   }
   if (mode === "update") {
     return {
-      next: plainWhereKeyHeld(existing, updateBundle(existing, incoming, file.columns)).next,
+      next: updateBundle(existing, placeIncomingFolders(existing, incoming).incoming, file.columns),
       conflicts: [],
       replaced: existing,
     };
   }
+  // Another device's year folders come in as plain folders where this profile has the keys.
+  incoming = placeIncomingFolders(existing, incoming).incoming;
   const conflicts: ImportConflict[] = [];
   const next: Bundle = {
     ...emptyBundle(),
@@ -94,7 +96,7 @@ export const applyImport = (
     // both sides already hold is the same entry, not a conflict to report.
     history: mergeRows("history", existing.history, incoming.history, []),
   };
-  return { next: plainWhereKeyHeld(existing, next).next, conflicts, replaced: existing };
+  return { next, conflicts, replaced: existing };
 };
 
 const mergeRows = <T extends { id: string }>(
@@ -232,43 +234,50 @@ export const withFileFields = <T extends object>(
 };
 
 /**
- * Add rows / Update rows: a folder coming from the file whose (tax year, default key) is held here
- * by a different folder, live or deleted, keeps its row but drops its key, so it becomes a plain
- * folder. The database allows one folder per key per year (another device's backup has its own
- * year folders). Restore replaces everything and doesn't need this. Returns the count, for the plan.
+ * Add rows / Update rows: the file's document folders as this profile will take them. A folder
+ * whose (tax year, default key) is held here by a different folder, live or deleted, keeps its row
+ * but drops its key (a plain folder): the database allows one folder per key per year, and another
+ * device's backup has its own year folders. Such a folder also gets a name free among its live
+ * siblings here and in the file ("2026 (2)", `freeFolderName`). Done before the plan and the merge
+ * compare rows, so a second import of the same file finds them equal and changes nothing
+ * (review #84 r4). Restore replaces everything and doesn't use it.
  */
-export const plainWhereKeyHeld = (
+export const placeIncomingFolders = (
   existing: Bundle,
-  next: Bundle,
-): { next: Bundle; keptAsPlain: number } => {
+  incoming: Bundle,
+): { incoming: Bundle; keptAsPlain: number } => {
   const holder = new Map<string, string>();
   for (const f of existing.documentFolders) {
     if (f.defaultKey !== null && f.taxYear !== null)
       holder.set(`${f.taxYear}\u0000${f.defaultKey}`, f.id);
   }
+  const live = <T extends { deletedAt: string | null }>(rows: readonly T[]) =>
+    rows.filter((r) => r.deletedAt === null);
   let keptAsPlain = 0;
-  const documentFolders = next.documentFolders.map((f) => {
-    if (f.defaultKey === null || f.taxYear === null) return f;
-    const held = holder.get(`${f.taxYear}\u0000${f.defaultKey}`);
-    if (held === undefined || held === f.id) return f;
+  const placed: Bundle["documentFolders"] = [];
+  for (const f of incoming.documentFolders) {
+    const held =
+      f.defaultKey === null || f.taxYear === null
+        ? undefined
+        : holder.get(`${f.taxYear}\u0000${f.defaultKey}`);
+    if (held === undefined || held === f.id) {
+      placed.push(f);
+      continue;
+    }
     keptAsPlain++;
-    return { ...f, defaultKey: null };
-  });
-  // A folder kept as plain can share its name with a live sibling (another device's "2026" next
-  // to this one's): it comes in as "Name (2)", the rule restores use (review #84 r3).
-  const plain = new Set(
-    documentFolders.filter((f, i) => f !== next.documentFolders[i]).map((f) => f.id),
-  );
-  const named = documentFolders.map((f) => {
-    if (!plain.has(f.id) || f.deletedAt !== null) return f;
-    const siblings = documentFolders
-      .filter(
-        (o) =>
-          o.id !== f.id && o.deletedAt === null && (o.parentId ?? null) === (f.parentId ?? null),
-      )
+    const parent = f.parentId ?? null;
+    const siblings = [
+      ...live(existing.documentFolders),
+      ...live(placed),
+      ...live(incoming.documentFolders.filter((o) => !placed.some((p) => p.id === o.id))),
+    ]
+      .filter((o) => o.id !== f.id && (o.parentId ?? null) === parent)
       .map((o) => o.name);
-    const name = freeFolderName(f.name, siblings);
-    return name === f.name ? f : { ...f, name };
-  });
-  return { next: { ...next, documentFolders: named }, keptAsPlain };
+    placed.push({
+      ...f,
+      defaultKey: null,
+      name: f.deletedAt === null ? freeFolderName(f.name, siblings) : f.name,
+    });
+  }
+  return { incoming: { ...incoming, documentFolders: placed }, keptAsPlain };
 };
