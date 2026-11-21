@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2bd87e71-2e3f-4e25-a9c8-d47a039de55f",
+  "id": "7b9de4ab-f1a0-4e77-b707-87f4f37610dd",
   "prevId": "22e964d7-a993-4e7f-adec-7b17ed9cbe0d",
   "tables": {
     "profile": {
@@ -1383,7 +1383,17 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "document_folder_default_key_idx": {
+          "name": "document_folder_default_key_idx",
+          "columns": [
+            "tax_year",
+            "default_key"
+          ],
+          "isUnique": true,
+          "where": "\"document_folder\".\"default_key\" IS NOT NULL"
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

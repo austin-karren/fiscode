@@ -26,6 +26,7 @@ CREATE TABLE `document_folder` (
 	`updated_at` text NOT NULL
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `document_folder_default_key_idx` ON `document_folder` (`tax_year`,`default_key`) WHERE "document_folder"."default_key" IS NOT NULL;--> statement-breakpoint
 CREATE TABLE `document_link` (
 	`id` text PRIMARY KEY NOT NULL,
 	`document_id` text NOT NULL,

@@ -575,6 +575,27 @@ export const parseCsv = (raw: string): ImportResult => {
       message: "profile.se_start_date is required but missing or empty",
     });
   }
+  // A tax year has one folder per default key, ever (the database's unique index on
+  // document_folder (tax_year, default_key)). The app's own exports can't hold two; a file that
+  // does was edited by hand, and importing it would fail at the database. Refuse it here, naming
+  // both rows (review #84 r3).
+  const keyLine = new Map<string, number>();
+  for (const f of bundle.documentFolders) {
+    if (f.defaultKey === null || f.taxYear === null) continue;
+    const key = `${f.taxYear}\u0000${f.defaultKey}`;
+    const line = seenIds.get(rowLineKey("document_folder", f.id)) ?? 0;
+    const first = keyLine.get(key);
+    if (first === undefined) {
+      keyLine.set(key, line);
+      continue;
+    }
+    validationErrors.push({
+      rowIndex: line - 1,
+      line,
+      recordType: "document_folder",
+      message: `default_key: "${f.defaultKey}" for ${f.taxYear} is also used on row ${first}. A tax year has one folder per default key`,
+    });
+  }
   return { bundle, provenance, validationErrors, tables, rowLines: seenIds, columns };
 };
 

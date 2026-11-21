@@ -569,3 +569,35 @@ describe("CSV round-trip", () => {
     expect(round).toEqual(bundle);
   });
 });
+
+describe("document folders: one per default key per tax year (review #84 r3)", () => {
+  it("a file with two folders sharing a year's default key is refused at parse, naming both rows", () => {
+    const b = fullBundle();
+    b.documentFolders = [
+      b.documentFolders[0]!,
+      { ...b.documentFolders[0]!, id: "df_2", name: "2026 copy" },
+    ];
+    const csv = exportBundle(b, { scope: "full" });
+    const { validationErrors } = parseCsv(csv);
+    const lines = csv.split("\r\n");
+    const first = lines.findIndex((l) => l.startsWith("document_folder,2026,")) + 1;
+    const second = lines.findIndex((l) => l.startsWith("document_folder,2026 copy,")) + 1;
+    expect(validationErrors).toEqual([
+      expect.objectContaining({
+        line: second,
+        message: `default_key: "year-root" for 2026 is also used on row ${first}. A tax year has one folder per default key`,
+      }),
+    ]);
+  });
+
+  it("the same key in different years, and folders with no key, are fine", () => {
+    const b = fullBundle();
+    b.documentFolders = [
+      b.documentFolders[0]!,
+      { ...b.documentFolders[0]!, id: "df_2", name: "2027", taxYear: 2027 },
+      { ...b.documentFolders[0]!, id: "df_3", name: "Mine", defaultKey: null },
+      { ...b.documentFolders[0]!, id: "df_4", name: "Mine too", defaultKey: null },
+    ];
+    expect(parseCsv(exportBundle(b, { scope: "full" })).validationErrors).toEqual([]);
+  });
+});

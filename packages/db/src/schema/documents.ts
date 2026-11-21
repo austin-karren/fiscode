@@ -1,24 +1,35 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // Document folders, documents and their links to records (contract: d-data
 // drafts/contract-documents.md). Bytes never live here: a document's bytes are a
 // content-addressed blob in OPFS at documents/blobs/<sha[0:2]>/<sha256> (blob-store.ts).
 
 /** A folder. `parentId` null = a root folder. Names are unique among live siblings (repo). */
-export const documentFolder = sqliteTable("document_folder", {
-  id: text("id").primaryKey(),
-  parentId: text("parent_id"),
-  name: text("name").notNull(),
-  // Set on a year's default folders and their children; a filter only.
-  taxYear: integer("tax_year"),
-  sortOrder: integer("sort_order").notNull().default(0),
-  // Which of a year's default folders this is ('year-root', 'expenses', ...), or null for a
-  // folder the user made. ensureYearDefaults never makes a key twice for a year (review #84 r1).
-  defaultKey: text("default_key"),
-  deletedAt: text("deleted_at"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-});
+export const documentFolder = sqliteTable(
+  "document_folder",
+  {
+    id: text("id").primaryKey(),
+    parentId: text("parent_id"),
+    name: text("name").notNull(),
+    // Set on a year's default folders and their children; a filter only.
+    taxYear: integer("tax_year"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    // Which of a year's default folders this is ('year-root', 'expenses', ...), or null for a
+    // folder the user made. ensureYearDefaults never makes a key twice for a year (review #84 r1).
+    defaultKey: text("default_key"),
+    deletedAt: text("deleted_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  // One folder per default key per year, ever (deleted rows included: a deleted default is never
+  // made again). Stops two tabs from each making a year's set (review #84 r3).
+  (t) => [
+    uniqueIndex("document_folder_default_key_idx")
+      .on(t.taxYear, t.defaultKey)
+      .where(sql`${t.defaultKey} IS NOT NULL`),
+  ],
+);
 
 /** A document: one file's current bytes (by sha256) and how it is shown. */
 export const document = sqliteTable(

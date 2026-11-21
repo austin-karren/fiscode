@@ -261,12 +261,10 @@ export const folderRepo = {
    * left it). A folder the user made with the same name (any case) in that place is adopted.
    * Every write runs in one transaction (all or nothing). Returns the live ones, root first.
    *
-   * Concurrency (review #84 r2): the in-flight guard is per tab. Within a tab, calls at once share
-   * one run. Across two tabs it does not hold: the check (which keys exist) is a read before the
-   * transaction, so two tabs opening a new year at the same moment could each read "none" and each
-   * write a full set, leaving two "<year>" roots. runAtomic makes each set all or nothing; it does
-   * not stop the second. A partial unique index on (tax_year, default_key) would make the second
-   * set fail and roll back; not added here.
+   * Concurrency: within a tab, calls at once share one run (the in-flight guard). Across tabs, the
+   * partial unique index on document_folder (tax_year, default_key) refuses a second folder with a
+   * year's key, so the tab that writes second has its whole transaction rolled back; it then reads
+   * again and adopts the folders the other tab made (`ensureYearDefaultsNow`). One set, no error.
    */
   ensureYearDefaults(taxYear: number): Promise<DocumentFolderRow[]> {
     const running = ensuring.get(taxYear);
@@ -314,9 +312,34 @@ const placeFor = (
 
 const ensuring = new Map<number, Promise<DocumentFolderRow[]>>();
 
+let ensureRaceHook: (() => Promise<void>) | undefined;
+/** For tests: run `hook` between ensureYearDefaults' read and its write (another tab's write). */
+export const __setEnsureRaceHookForTests = (hook: (() => Promise<void>) | undefined) => {
+  ensureRaceHook = hook;
+};
+
+const isUniqueViolation = (err: unknown): boolean =>
+  /UNIQUE constraint failed/i.test(
+    err instanceof Error ? `${err.message} ${String(err.cause ?? "")}` : String(err),
+  );
+
 const sameName = (a: string, b: string) => a.localeCompare(b, "en", { sensitivity: "base" }) === 0;
 
+/**
+ * One attempt; when another tab made some of the year's folders between our read and our write,
+ * the unique index refuses our whole transaction. Then they are "already made": read again and
+ * adopt them. Never surfaces that error.
+ */
 const ensureYearDefaultsNow = async (taxYear: number): Promise<DocumentFolderRow[]> => {
+  try {
+    return await ensureYearDefaultsOnce(taxYear);
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+    return ensureYearDefaultsOnce(taxYear);
+  }
+};
+
+const ensureYearDefaultsOnce = async (taxYear: number): Promise<DocumentFolderRow[]> => {
   const db = getDb();
   const every = await folderCrud.listIncludingDeleted();
   const keyed = (key: string) => every.find((f) => f.taxYear === taxYear && f.defaultKey === key);
@@ -380,6 +403,7 @@ const ensureYearDefaultsNow = async (taxYear: number): Promise<DocumentFolderRow
     }
     out.push(claim(key, name, root.id));
   }
+  await ensureRaceHook?.();
   await runAtomic(queries);
   return out;
 };

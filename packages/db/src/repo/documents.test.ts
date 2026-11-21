@@ -14,6 +14,9 @@ import {
 import { setupTestDb, teardownTestDb } from "../test/setup-db.ts";
 import { __setBlobStoreForTests, memoryBlobStore, sha256Hex } from "../blob-store.ts";
 import { documentLinkRepo, documentRepo, expenseRepo, folderRepo, historyRepo } from "./index.ts";
+import { __setEnsureRaceHookForTests } from "./documents.ts";
+import { getDb } from "../client.ts";
+import { documentFolder } from "../schema/index.ts";
 
 let sqlite: Database.Database;
 let store: ReturnType<typeof memoryBlobStore>;
@@ -344,5 +347,53 @@ describe("review #84 r1", () => {
       DocumentNameInvalidError,
     );
     expect((await documentRepo.rename(d.id, "  b.pdf ")).name).toBe("b.pdf");
+  });
+});
+
+describe("review #84 r3: two tabs", () => {
+  afterEach(() => __setEnsureRaceHookForTests(undefined));
+
+  it("another tab makes the year root between our read and our write: one set, no throw", async () => {
+    let otherRootId = "";
+    __setEnsureRaceHookForTests(async () => {
+      __setEnsureRaceHookForTests(undefined); // once
+      const at = new Date().toISOString();
+      otherRootId = "df_other_tab";
+      await getDb().insert(documentFolder).values({
+        id: otherRootId,
+        parentId: null,
+        name: "2026",
+        taxYear: 2026,
+        sortOrder: 0,
+        defaultKey: "year-root",
+        deletedAt: null,
+        createdAt: at,
+        updatedAt: at,
+      });
+    });
+    const made = await folderRepo.ensureYearDefaults(2026);
+    expect(made[0]!.id).toBe(otherRootId);
+    expect(made).toHaveLength(7);
+    const all = await folderRepo.listIncludingDeleted();
+    expect(all.filter((f) => f.defaultKey === "year-root")).toHaveLength(1);
+    expect(all).toHaveLength(7);
+  });
+
+  it("the index refuses a second folder with a year's key", async () => {
+    await folderRepo.ensureYearDefaults(2026);
+    const at = new Date().toISOString();
+    await expect(
+      getDb().insert(documentFolder).values({
+        id: "df_dup",
+        parentId: null,
+        name: "2026 again",
+        taxYear: 2026,
+        sortOrder: 0,
+        defaultKey: "year-root",
+        deletedAt: null,
+        createdAt: at,
+        updatedAt: at,
+      }),
+    ).rejects.toThrow(/UNIQUE/);
   });
 });

@@ -543,7 +543,7 @@ Your document folders, the documents in them, and which records each document is
 Added in schema v6. **The files themselves are not in the CSV.** A document row names its bytes by
 `sha256`; the bytes stay on the device that has them. Restoring from a CSV brings the rows back,
 and a document whose bytes aren't on this device says so until you restore a backup that includes
-your files. A yearly file has no document rows.
+your files. A yearly file has no document rows. A tax year has one folder per `default_key`; a file with two is refused at import, naming both rows.
 
 <TypeTable
   type={{
