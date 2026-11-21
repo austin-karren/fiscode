@@ -46,3 +46,15 @@ export class BackupUnexpectedFileError extends BackupError {
     super(`This backup has a file its record doesn't list: "${path}". Nothing was changed.`);
   }
 }
+export class BackupPassphraseError extends BackupError {
+  override readonly name = "BackupPassphraseError";
+  constructor(reason: "wrong" | "missing" | "too-short") {
+    super(
+      reason === "wrong"
+        ? "That passphrase doesn't open this backup. Check it and try again. Nothing was changed."
+        : reason === "missing"
+          ? "This backup is encrypted. Enter its passphrase to restore it."
+          : "Use a passphrase of at least 12 characters. It is the only way to open the backup: keep it somewhere safe.",
+    );
+  }
+}

@@ -1,8 +1,8 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 // Subpaths only: "@fiscode/db" loads boot.ts, which needs Vite's import.meta.glob.
@@ -10,7 +10,14 @@ import { __setBlobStoreForTests, type BlobStore } from "@fiscode/db/blob-store";
 import { __resetDbForTests, __setDbForTests } from "@fiscode/db/client";
 import { buildBundle } from "@fiscode/db/repo";
 import { tables } from "@fiscode/db/schema";
-import { buildBackupZip, readBackup, restoreBackupInto, type BackupManifest } from "./index.ts";
+import {
+  buildBackupZip,
+  decryptBackup,
+  encryptBackup,
+  readBackup,
+  restoreBackupInto,
+  type BackupManifest,
+} from "./index.ts";
 
 // The headless side of backups (contract: drafts/contract-backup.md), for d-dogfood's private
 // repo of backups. A "profile directory" holds what the browser keeps in OPFS, on disk:
@@ -129,8 +136,9 @@ export const describeMissing = (missing: readonly MissingFile[]): string | undef
 /** Every check a restore makes, without writing. Throws a BackupError or the CSV's refusal. */
 export const verifyBackup = async (
   path: string,
+  passphrase: string,
 ): Promise<{ manifest: BackupManifest; missing: MissingFile[] }> => {
-  const file = await readBackup(zipFile(path));
+  const file = await readBackup(zipFile(path), { passphrase });
   if (!file.ok) throw new Error(refusal(file));
   return { manifest: file.manifest, missing: file.missing };
 };
@@ -139,11 +147,13 @@ export const verifyBackup = async (
 export const restoreBackupToDir = async (
   path: string,
   dir: string,
+  passphrase: string,
 ): Promise<{ manifest: BackupManifest; missing: MissingFile[] }> => {
   if (existsSync(dir) && (await readdir(dir)).length > 0) {
     throw new Error(`${dir} isn't empty. Restore into a new directory.`);
   }
-  const file = await readBackup(zipFile(path));
+  // Read (decrypt and check) before making the directory: a wrong passphrase changes nothing.
+  const file = await readBackup(zipFile(path), { passphrase });
   if (!file.ok) throw new Error(refusal(file));
   const close = await openProfileDir(dir);
   try {
@@ -154,16 +164,24 @@ export const restoreBackupToDir = async (
   return { manifest: file.manifest, missing: file.missing };
 };
 
-/** A backup zip of a profile directory. */
+/**
+ * An encrypted backup of a profile directory: `bytes` is the age file, `zip` the deterministic
+ * zip inside it.
+ */
 export const backupDir = async (
   dir: string,
-  options: { createdAt: string; build?: string },
-): Promise<{ bytes: Uint8Array; fileName: string; manifest: BackupManifest }> => {
+  options: { createdAt: string; build?: string; passphrase: string; scryptWorkFactor?: number },
+): Promise<{ bytes: Uint8Array; zip: Uint8Array; fileName: string; manifest: BackupManifest }> => {
   if (!existsSync(join(dir, DB_FILE))) throw new Error(`${dir} has no ${DB_FILE}.`);
   const close = await openProfileDir(dir);
   try {
-    const bundle = await buildBundle({ includeDeleted: true, includeHistory: true });
-    return await buildBackupZip(bundle, fsBlobStore(dir), options);
+    const bundle = await buildBackupZip(
+      await buildBundle({ includeDeleted: true, includeHistory: true }),
+      fsBlobStore(dir),
+      options,
+    );
+    const bytes = await encryptBackup(bundle.bytes, options.passphrase, options.scryptWorkFactor);
+    return { bytes, zip: bundle.bytes, fileName: bundle.fileName, manifest: bundle.manifest };
   } finally {
     close();
   }
@@ -171,21 +189,26 @@ export const backupDir = async (
 
 /**
  * Restore a backup into a temporary directory, back it up again with the same `createdAt` and
- * build, and compare the bytes. True when identical.
+ * build, and compare the decrypted contents: the zips inside (so the CSV's bytes and every
+ * document's sha256). The ciphertext always differs (age's random key and salt), so it isn't
+ * compared. True when identical.
  */
 export const checkRoundtrip = async (
   path: string,
+  passphrase: string,
 ): Promise<{ identical: boolean; manifest: BackupManifest }> => {
   const dir = await mkdtemp(join(tmpdir(), "fiscode-backup-"));
   try {
-    const { manifest } = await restoreBackupToDir(path, join(dir, "profile"));
+    const { manifest } = await restoreBackupToDir(path, join(dir, "profile"), passphrase);
     const again = await backupDir(join(dir, "profile"), {
       createdAt: manifest.createdAt,
       build: manifest.app.build,
+      passphrase,
+      scryptWorkFactor: 10, // re-encrypted only to keep the same code path; it's discarded
     });
-    const original = readFileSync(path);
+    const original = await decryptBackup(new Uint8Array(readFileSync(path)), passphrase);
     const identical =
-      original.length === again.bytes.length && original.every((b, i) => b === again.bytes[i]);
+      original.length === again.zip.length && original.every((b, i) => b === again.zip[i]);
     return { identical, manifest };
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -197,8 +220,8 @@ export const checkRoundtrip = async (
  * live is read from the manifest and the rows (a live document's current bytes), not from the
  * path (review #85 r1).
  */
-export const summarizeBackup = async (path: string) => {
-  const file = await readBackup(zipFile(path));
+export const summarizeBackup = async (path: string, passphrase: string) => {
+  const file = await readBackup(zipFile(path), { passphrase });
   if (!file.ok) throw new Error(refusal(file));
   const m = file.manifest;
   const liveShas = new Set(
@@ -215,4 +238,39 @@ export const summarizeBackup = async (path: string) => {
     versions: m.documents.length - live.length,
     missing: file.missing.map((x) => ({ sha256: x.sha256, names: x.names })),
   };
+};
+
+/** Where the headless script looks for the passphrase file when FISCODE_BACKUP_PASSPHRASE_FILE is unset. */
+export const defaultPassphraseFile = (): string =>
+  join(homedir(), ".config", "fiscode", "backup-passphrase");
+
+/**
+ * The headless passphrase, in this order: FISCODE_BACKUP_PASSPHRASE; else the file named by
+ * FISCODE_BACKUP_PASSPHRASE_FILE (default ~/.config/fiscode/backup-passphrase), refused when
+ * group- or other-readable, with one trailing newline stripped; else `prompt` (a terminal, no
+ * echo). Throws a message that never contains the passphrase.
+ */
+export const resolvePassphrase = (
+  env: Record<string, string | undefined>,
+  prompt: () => string | undefined,
+): string => {
+  if (env.FISCODE_BACKUP_PASSPHRASE) return env.FISCODE_BACKUP_PASSPHRASE;
+  const file = env.FISCODE_BACKUP_PASSPHRASE_FILE || defaultPassphraseFile();
+  if (existsSync(file)) {
+    if ((statSync(file).mode & 0o077) !== 0) {
+      throw new Error(
+        `${file} can be read by other users. Run: chmod 600 ${file} (nothing was read from it).`,
+      );
+    }
+    const text = readFileSync(file, "utf8").replace(/\r?\n$/, "");
+    if (!text) throw new Error(`${file} is empty.`);
+    return text;
+  }
+  const typed = prompt();
+  if (typed === undefined) {
+    throw new Error(
+      `No passphrase: set FISCODE_BACKUP_PASSPHRASE, create ${file} (chmod 600), or run in a terminal to be asked.`,
+    );
+  }
+  return typed;
 };

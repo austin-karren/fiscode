@@ -3,9 +3,11 @@ import {
   BackupFileCorruptError,
   BackupManifestError,
   BackupNotAZipError,
+  BackupPassphraseError,
   BackupTooNewError,
   BackupUnexpectedFileError,
 } from "@fiscode/core";
+import { Decrypter, Encrypter } from "age-encryption";
 import {
   CSV_SCHEMA_VERSION,
   exportBundle,
@@ -62,14 +64,65 @@ export type BackupManifest = {
 };
 
 export type BackupProgress = {
-  phase: "reading" | "checking" | "zipping" | "writing";
+  phase: "reading" | "zipping" | "encrypting" | "decrypting" | "checking" | "writing";
   done: number;
   total: number;
 };
 type ProgressFn = (p: BackupProgress) => void;
 
-/** `fiscode-backup-<YYYY-MM-DD>.zip`. */
-export const backupFileName = (date: string): string => `fiscode-backup-${date}.zip`;
+/**
+ * `fiscode-backup-<YYYY-MM-DD>.zip.age`: an age-encrypted zip. The age CLI decrypts it to the
+ * `.zip` (`age -d -o fiscode-backup-<date>.zip fiscode-backup-<date>.zip.age`).
+ */
+export const backupFileName = (date: string): string => `fiscode-backup-${date}.zip.age`;
+
+// ─── Encryption (d-data / Austin: encrypted in v1) ─────────────────────────────────────────────
+// The zip is encrypted with age (https://age-encryption.org/v1) to an scrypt passphrase
+// recipient, using `age-encryption` (typage, by age's author). The deterministic zip is inside;
+// the ciphertext differs every time (age's random file key and scrypt salt). The passphrase is
+// never stored, logged or written: it is only passed to age.
+
+/** age's scrypt work factor (log2 N): 18 is age's own default, about half a second. */
+export const DEFAULT_SCRYPT_WORK_FACTOR = 18;
+/** The shortest passphrase a backup accepts. */
+export const MIN_PASSPHRASE_LENGTH = 12;
+
+const AGE_HEADER = "age-encryption.org/v1\n";
+const isAge = (bytes: Uint8Array): boolean =>
+  bytes.length >= AGE_HEADER.length &&
+  strFromU8(bytes.subarray(0, AGE_HEADER.length)) === AGE_HEADER;
+
+/** The zip, encrypted to `passphrase` with age (scrypt). */
+export const encryptBackup = async (
+  zip: Uint8Array,
+  passphrase: string,
+  scryptWorkFactor: number = DEFAULT_SCRYPT_WORK_FACTOR,
+): Promise<Uint8Array> => {
+  if (passphrase.length < MIN_PASSPHRASE_LENGTH) throw new BackupPassphraseError("too-short");
+  const e = new Encrypter();
+  e.setPassphrase(passphrase);
+  e.setScryptWorkFactor(scryptWorkFactor);
+  return e.encrypt(zip);
+};
+
+/**
+ * The zip inside an age file. A plain zip (one already decrypted with the age CLI) comes back as
+ * it is. Throws BackupPassphraseError when the passphrase is missing or doesn't open it.
+ */
+export const decryptBackup = async (
+  bytes: Uint8Array,
+  passphrase: string | undefined,
+): Promise<Uint8Array> => {
+  if (!isAge(bytes)) return bytes;
+  if (!passphrase) throw new BackupPassphraseError("missing");
+  const d = new Decrypter();
+  d.addPassphrase(passphrase);
+  try {
+    return await d.decrypt(bytes);
+  } catch {
+    throw new BackupPassphraseError("wrong");
+  }
+};
 
 // A fixed modification time for every entry (local noon on the zip epoch, so no timezone or DST
 // shift moves the DOS date), for byte-identical zips.
@@ -274,9 +327,17 @@ export const buildBackupZip = async (
 };
 
 /** "Back up everything": the whole state of this app as one zip. */
-export const createBackup = async (
-  options: { createdAt?: string; build?: string; onProgress?: ProgressFn } = {},
-): Promise<{ blob: Blob; fileName: string; manifest: BackupManifest }> => {
+export const createBackup = async (options: {
+  /** Encrypts the backup (age, scrypt). Never stored or logged. At least 12 characters. */
+  passphrase: string;
+  createdAt?: string;
+  build?: string;
+  /** age's scrypt work factor; tests lower it. */
+  scryptWorkFactor?: number;
+  onProgress?: ProgressFn;
+}): Promise<{ blob: Blob; fileName: string; manifest: BackupManifest }> => {
+  if (options.passphrase.length < MIN_PASSPHRASE_LENGTH)
+    throw new BackupPassphraseError("too-short");
   options.onProgress?.({ phase: "reading", done: 0, total: 1 });
   const bundle = await buildBundle({ includeDeleted: true, includeHistory: true });
   options.onProgress?.({ phase: "reading", done: 1, total: 1 });
@@ -285,7 +346,14 @@ export const createBackup = async (
     build: options.build,
     onProgress: options.onProgress,
   });
-  return { blob: new Blob([part(bytes)], { type: "application/zip" }), fileName, manifest };
+  options.onProgress?.({ phase: "encrypting", done: 0, total: 1 });
+  const encrypted = await encryptBackup(bytes, options.passphrase, options.scryptWorkFactor);
+  options.onProgress?.({ phase: "encrypting", done: 1, total: 1 });
+  return {
+    blob: new Blob([part(encrypted)], { type: "application/octet-stream" }),
+    fileName,
+    manifest,
+  };
 };
 
 export type BackupFile =
@@ -364,9 +432,11 @@ const validManifest = (raw: unknown): BackupManifest => {
  */
 export const readBackup = async (
   file: Blob,
-  options: { onProgress?: ProgressFn } = {},
+  options: { passphrase?: string; onProgress?: ProgressFn } = {},
 ): Promise<BackupFile> => {
-  const raw = new Uint8Array(await file.arrayBuffer());
+  options.onProgress?.({ phase: "decrypting", done: 0, total: 1 });
+  const raw = await decryptBackup(new Uint8Array(await file.arrayBuffer()), options.passphrase);
+  options.onProgress?.({ phase: "decrypting", done: 1, total: 1 });
   if (raw.length < 4 || raw[0] !== 0x50 || raw[1] !== 0x4b) throw new BackupNotAZipError();
   let entries: Record<string, Uint8Array>;
   try {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -11,6 +11,7 @@ import {
   BackupFileCorruptError,
   BackupManifestError,
   BackupNotAZipError,
+  BackupPassphraseError,
   BackupTooNewError,
   BackupUnexpectedFileError,
 } from "@fiscode/core";
@@ -27,14 +28,28 @@ import {
 import { setupTestDb, teardownTestDb } from "@fiscode/db/test";
 import {
   createBackup,
+  decryptBackup,
+  encryptBackup,
   planBackupRestore,
   readBackup,
   restoreBackup,
   type BackupManifest,
 } from "./index.ts";
-import { checkRoundtrip, restoreBackupToDir, summarizeBackup, verifyBackup } from "./node.ts";
+import {
+  backupDir,
+  checkRoundtrip,
+  resolvePassphrase,
+  restoreBackupToDir,
+  summarizeBackup,
+  verifyBackup,
+} from "./node.ts";
 
 const CREATED = "2026-11-21T02:00:00.000Z";
+// A throwaway constant, only ever used on demo data. Work factor 10 keeps scrypt fast in tests.
+const PASS = "throwaway-test-passphrase";
+const WF = 10;
+const openBackup = (b: Blob) => readBackup(b, { passphrase: PASS });
+const plain = async (blob: Blob) => decryptBackup(new Uint8Array(await blob.arrayBuffer()), PASS);
 
 let sqlite: Database.Database;
 beforeEach(() => {
@@ -89,15 +104,19 @@ const normalized = (b: Record<string, unknown>) =>
     ]),
   );
 
-const zipEntries = async (blob: Blob) => unzipSync(new Uint8Array(await blob.arrayBuffer()));
+const zipEntries = async (blob: Blob) => unzipSync(await plain(blob));
 const rezip = (entries: Record<string, Uint8Array>) =>
   new Blob([zipSync(entries) as unknown as ArrayBuffer]);
 
 describe("backup: layout and manifest", () => {
   it("manifest, CSV, live documents at their folder paths, everything else once by sha", async () => {
     await seed();
-    const { blob, fileName, manifest } = await createBackup({ createdAt: CREATED });
-    expect(fileName).toBe("fiscode-backup-2026-11-21.zip");
+    const { blob, fileName, manifest } = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    expect(fileName).toBe("fiscode-backup-2026-11-21.zip.age");
     const entries = await zipEntries(blob);
     const names = Object.keys(entries);
     expect(names[0]).toBe("manifest.json");
@@ -123,7 +142,11 @@ describe("backup: layout and manifest", () => {
 
   it("an app with no documents still backs up as a zip (CSV + manifest)", async () => {
     await importBundle(exampleBundle() as never, "import-restore");
-    const { blob, manifest } = await createBackup({ createdAt: CREATED });
+    const { blob, manifest } = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
     expect(manifest.documents).toEqual([]);
     expect(Object.keys(await zipEntries(blob))).toHaveLength(2);
   });
@@ -134,10 +157,14 @@ describe("backup: restore into an empty profile is exact", () => {
     await seed();
     const before = await buildBundle({ includeDeleted: true, includeHistory: true });
     const beforeCsv = exportBundle(before as never, { scope: "full" });
-    const first = await createBackup({ createdAt: CREATED });
+    const first = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
 
     emptyProfile();
-    const read = await readBackup(first.blob);
+    const read = await openBackup(first.blob);
     if (!read.ok) throw new Error(read.headline);
     await restoreBackup(read);
 
@@ -156,20 +183,31 @@ describe("backup: restore into an empty profile is exact", () => {
     const receipt = after.documents.find((d) => d.name === "Demo receipt.pdf" && d.folderId)!;
     expect((await documentRepo.versions(receipt.id)).every((v) => v.available)).toBe(true);
 
-    const second = await createBackup({ createdAt: CREATED });
-    const a = new Uint8Array(await first.blob.arrayBuffer());
-    const b = new Uint8Array(await second.blob.arrayBuffer());
-    expect(b).toEqual(a);
+    const second = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    // The 1:1 proof is on the decrypted zips: age's random file key and salt make every
+    // ciphertext different.
+    expect(new Uint8Array(await second.blob.arrayBuffer())).not.toEqual(
+      new Uint8Array(await first.blob.arrayBuffer()),
+    );
+    expect(await plain(second.blob)).toEqual(await plain(first.blob));
   });
 });
 
 describe("backup: restore over existing data", () => {
   it("returns the plan (rows, history, files) for the dialog; restore replaces everything with one snapshot", async () => {
     await seed();
-    const backup = await createBackup({ createdAt: CREATED });
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
     await documentRepo.upload(file("after.pdf", "added after the backup"));
     const existing = await buildBundle({ includeDeleted: true, includeHistory: true });
-    const read = await readBackup(backup.blob);
+    const read = await openBackup(backup.blob);
     if (!read.ok) throw new Error(read.headline);
     const plan = planBackupRestore(read, existing);
     expect(plan.mode).toBe("restore");
@@ -187,11 +225,11 @@ describe("backup: restore over existing data", () => {
 describe("backup: refusals (nothing written)", () => {
   const good = async () => {
     await seed();
-    return createBackup({ createdAt: CREATED });
+    return createBackup({ createdAt: CREATED, passphrase: PASS, scryptWorkFactor: WF });
   };
 
   it("not a zip", async () => {
-    await expect(readBackup(new Blob(["record_type,date\n"]))).rejects.toBeInstanceOf(
+    await expect(openBackup(new Blob(["record_type,date\n"]))).rejects.toBeInstanceOf(
       BackupNotAZipError,
     );
   });
@@ -199,9 +237,9 @@ describe("backup: refusals (nothing written)", () => {
   it("no manifest, or not a fiscode manifest", async () => {
     const entries = await zipEntries((await good()).blob);
     const { ["manifest.json"]: _m, ...rest } = entries;
-    await expect(readBackup(rezip(rest))).rejects.toBeInstanceOf(BackupManifestError);
+    await expect(openBackup(rezip(rest))).rejects.toBeInstanceOf(BackupManifestError);
     await expect(
-      readBackup(rezip({ ...entries, "manifest.json": strToU8('{"format":"other"}') })),
+      openBackup(rezip({ ...entries, "manifest.json": strToU8('{"format":"other"}') })),
     ).rejects.toBeInstanceOf(BackupManifestError);
   });
 
@@ -209,7 +247,7 @@ describe("backup: refusals (nothing written)", () => {
     const entries = await zipEntries((await good()).blob);
     const m = JSON.parse(strFromU8(entries["manifest.json"]!)) as BackupManifest;
     await expect(
-      readBackup(
+      openBackup(
         rezip({ ...entries, "manifest.json": strToU8(JSON.stringify({ ...m, formatVersion: 2 })) }),
       ),
     ).rejects.toBeInstanceOf(BackupTooNewError);
@@ -220,8 +258,8 @@ describe("backup: refusals (nothing written)", () => {
     const entries = await zipEntries(backup.blob);
     const path = backup.manifest.documents[0]!.path;
     const tampered = { ...entries, [path]: strToU8("tampered!!") };
-    await expect(readBackup(rezip(tampered))).rejects.toThrow(path);
-    await expect(readBackup(rezip(tampered))).rejects.toBeInstanceOf(BackupFileCorruptError);
+    await expect(openBackup(rezip(tampered))).rejects.toThrow(path);
+    await expect(openBackup(rezip(tampered))).rejects.toBeInstanceOf(BackupFileCorruptError);
   });
 
   it("a document whose bytes aren't in the zip (nor listed as missing)", async () => {
@@ -236,7 +274,7 @@ describe("backup: refusals (nothing written)", () => {
     m.counts = { ...m.counts, blobs: m.documents.length };
     const { [dropped.path]: _gone, ...rest } = entries;
     await expect(
-      readBackup(rezip({ ...rest, "manifest.json": strToU8(JSON.stringify(m)) })),
+      openBackup(rezip({ ...rest, "manifest.json": strToU8(JSON.stringify(m)) })),
     ).rejects.toBeInstanceOf(BackupBytesMissingError);
   });
 
@@ -253,7 +291,7 @@ describe("backup: refusals (nothing written)", () => {
         sizeBytes: csv.length,
       },
     };
-    const read = await readBackup(
+    const read = await openBackup(
       rezip({ ...entries, [m.csv.path]: csv, "manifest.json": strToU8(JSON.stringify(m)) }),
     );
     expect(read.ok).toBe(false);
@@ -264,11 +302,15 @@ describe("backup: a device without some bytes (after a CSV-only restore)", () =>
   it("backs up anyway, lists them as missing, and restores the rows", async () => {
     await seed();
     __setBlobStoreForTests(memoryBlobStore()); // this device has none of the files
-    const backup = await createBackup({ createdAt: CREATED });
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
     expect(backup.manifest.documents).toEqual([]);
     expect(backup.manifest.missing.length).toBeGreaterThan(0);
     emptyProfile();
-    const read = await readBackup(backup.blob);
+    const read = await openBackup(backup.blob);
     if (!read.ok) throw new Error(read.headline);
     await restoreBackup(read);
     expect((await documentRepo.list()).length).toBe(3);
@@ -284,16 +326,20 @@ describe("backup: headless (node.ts, the script's functions)", () => {
 
   it("verify, restore into a directory, check-roundtrip byte-identical, summary", async () => {
     await seed();
-    const backup = await createBackup({ createdAt: CREATED });
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
     const zip = join(dir, backup.fileName);
     writeFileSync(zip, new Uint8Array(await backup.blob.arrayBuffer()));
     // The test's own database must not be the one the script opens.
     teardownTestDb(sqlite);
 
-    expect((await verifyBackup(zip)).manifest.counts.rows).toBe(backup.manifest.counts.rows);
-    await restoreBackupToDir(zip, join(dir, "profile"));
-    expect(await checkRoundtrip(zip)).toMatchObject({ identical: true });
-    const summary = await summarizeBackup(zip);
+    expect((await verifyBackup(zip, PASS)).manifest.counts.rows).toBe(backup.manifest.counts.rows);
+    await restoreBackupToDir(zip, join(dir, "profile"), PASS);
+    expect(await checkRoundtrip(zip, PASS)).toMatchObject({ identical: true });
+    const summary = await summarizeBackup(zip, PASS);
     expect(summary.documents).toContain("documents/2026/Expenses/Demo receipt.pdf");
 
     sqlite = setupTestDb(); // for afterEach
@@ -301,13 +347,20 @@ describe("backup: headless (node.ts, the script's functions)", () => {
 
   it("the real script runs under Bun (no Vite-only code on its import path): verify and check-roundtrip", async () => {
     await seed();
-    const backup = await createBackup({ createdAt: CREATED });
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
     const zip = join(dir, backup.fileName);
     writeFileSync(zip, new Uint8Array(await backup.blob.arrayBuffer()));
     const bin = fileURLToPath(new URL("../bin/fiscode-backup.ts", import.meta.url));
     // Bun as the repo pins it (packageManager), as CI runs it. stderr goes to the test output.
     const run = (...args: string[]) => {
-      const r = spawnSync("bun", [bin, ...args], { encoding: "utf8" });
+      const r = spawnSync("bun", [bin, ...args], {
+        encoding: "utf8",
+        env: { ...process.env, FISCODE_BACKUP_PASSPHRASE: PASS },
+      });
       if (r.stderr) console.error(r.stderr);
       return r;
     };
@@ -316,20 +369,24 @@ describe("backup: headless (node.ts, the script's functions)", () => {
     expect(verify.status).toBe(0);
     expect(verify.stdout).toMatch(/^ok: /);
     const roundtrip = run("check-roundtrip", zip);
-    expect(roundtrip.stdout.trim()).toBe("identical");
+    expect(roundtrip.stdout.trim()).toBe("identical (decrypted contents)");
     expect(roundtrip.status).toBe(0);
     expect(run("verify", join(dir, "nope.zip")).status).toBe(1);
   }, 30_000);
 
   it("refuses to restore into a directory that isn't empty", async () => {
     await importBundle(exampleBundle() as never, "import-restore");
-    const backup = await createBackup({ createdAt: CREATED });
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
     const zip = join(dir, backup.fileName);
     writeFileSync(zip, new Uint8Array(await backup.blob.arrayBuffer()));
     mkdirSync(join(dir, "busy"));
     writeFileSync(join(dir, "busy", "x"), "x");
     teardownTestDb(sqlite);
-    await expect(restoreBackupToDir(zip, join(dir, "busy"))).rejects.toThrow(/isn't empty/);
+    await expect(restoreBackupToDir(zip, join(dir, "busy"), PASS)).rejects.toThrow(/isn't empty/);
     sqlite = setupTestDb();
   });
 });
@@ -340,7 +397,11 @@ describe("review #85 r1", () => {
 
   it("(1) a blob only history references (an older version) dropped from the zip is refused", async () => {
     await seed();
-    const backup = await createBackup({ createdAt: CREATED });
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
     const entries = await zipEntries(backup.blob);
     const version = backup.manifest.documents.find((d) => d.path.includes("/.versions/"))!;
     const { [version.path]: _gone, ...rest } = entries;
@@ -349,21 +410,25 @@ describe("review #85 r1", () => {
       documents: backup.manifest.documents.filter((d) => d !== version),
     };
     m.counts = { ...m.counts, blobs: m.documents.length };
-    await expect(readBackup(withManifest(rest, m))).rejects.toBeInstanceOf(BackupBytesMissingError);
+    await expect(openBackup(withManifest(rest, m))).rejects.toBeInstanceOf(BackupBytesMissingError);
   });
 
   it("(2) missing files are reported with the documents' names; counts.blobs is cross-checked", async () => {
     await seed();
     __setBlobStoreForTests(memoryBlobStore());
-    const backup = await createBackup({ createdAt: CREATED });
-    const read = await readBackup(backup.blob);
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    const read = await openBackup(backup.blob);
     if (!read.ok) throw new Error(read.headline);
     expect(read.missing.length).toBeGreaterThan(0);
     expect(read.missing.flatMap((m) => m.names)).toContain("Demo receipt.pdf");
 
     const entries = await zipEntries(backup.blob);
     await expect(
-      readBackup(
+      openBackup(
         withManifest(entries, {
           ...backup.manifest,
           counts: { ...backup.manifest.counts, blobs: 99 },
@@ -374,7 +439,11 @@ describe("review #85 r1", () => {
 
   it("(3) a manifest of the wrong shape is a BackupManifestError, never a TypeError", async () => {
     await seed();
-    const backup = await createBackup({ createdAt: CREATED });
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
     const entries = await zipEntries(backup.blob);
     for (const bad of [
       null,
@@ -383,7 +452,7 @@ describe("review #85 r1", () => {
       { ...backup.manifest, missing: "none" },
       { ...backup.manifest, documents: [{ path: 3 }] },
     ]) {
-      await expect(readBackup(withManifest(entries, bad))).rejects.toBeInstanceOf(
+      await expect(openBackup(withManifest(entries, bad))).rejects.toBeInstanceOf(
         BackupManifestError,
       );
     }
@@ -391,16 +460,20 @@ describe("review #85 r1", () => {
 
   it("(4) formatVersion must be a whole number of 1 or more; a file the manifest doesn't list is refused by name", async () => {
     await seed();
-    const backup = await createBackup({ createdAt: CREATED });
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
     const entries = await zipEntries(backup.blob);
     for (const v of [0, 1.5, "1"]) {
       await expect(
-        readBackup(withManifest(entries, { ...backup.manifest, formatVersion: v })),
+        openBackup(withManifest(entries, { ...backup.manifest, formatVersion: v })),
       ).rejects.toBeInstanceOf(BackupManifestError);
     }
     const extra = rezip({ ...entries, "documents/sneaky.pdf": strToU8("x") });
-    await expect(readBackup(extra)).rejects.toBeInstanceOf(BackupUnexpectedFileError);
-    await expect(readBackup(extra)).rejects.toThrow("documents/sneaky.pdf");
+    await expect(openBackup(extra)).rejects.toBeInstanceOf(BackupUnexpectedFileError);
+    await expect(openBackup(extra)).rejects.toThrow("documents/sneaky.pdf");
   });
 });
 
@@ -414,13 +487,20 @@ describe("review #85 r1: the script reports missing files", () => {
   it("(2) verify exits 3 and names them, unless --allow-missing; summary and restore print them", async () => {
     await seed();
     __setBlobStoreForTests(memoryBlobStore());
-    const backup = await createBackup({ createdAt: CREATED });
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
     const zip = join(dir, backup.fileName);
     writeFileSync(zip, new Uint8Array(await backup.blob.arrayBuffer()));
     const bin = fileURLToPath(new URL("../bin/fiscode-backup.ts", import.meta.url));
     // Bun as the repo pins it (packageManager), as CI runs it. stderr goes to the test output.
     const run = (...args: string[]) => {
-      const r = spawnSync("bun", [bin, ...args], { encoding: "utf8" });
+      const r = spawnSync("bun", [bin, ...args], {
+        encoding: "utf8",
+        env: { ...process.env, FISCODE_BACKUP_PASSPHRASE: PASS },
+      });
       if (r.stderr) console.error(r.stderr);
       return r;
     };
@@ -437,11 +517,15 @@ describe("review #85 r1: the script reports missing files", () => {
 
   it("(6) summary tells live files from versions by the manifest, not by the path", async () => {
     await seed();
-    const backup = await createBackup({ createdAt: CREATED });
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
     const zip = join(dir, backup.fileName);
     writeFileSync(zip, new Uint8Array(await backup.blob.arrayBuffer()));
     teardownTestDb(sqlite);
-    const summary = await summarizeBackup(zip);
+    const summary = await summarizeBackup(zip, PASS);
     expect(summary.documents.toSorted()).toEqual(
       [
         "documents/2026/Expenses/Demo receipt (2).pdf",
@@ -450,5 +534,183 @@ describe("review #85 r1: the script reports missing files", () => {
     );
     expect(summary.versions).toBe(2);
     sqlite = setupTestDb();
+  });
+});
+
+describe("encryption (age, scrypt passphrase)", () => {
+  const all = () => buildBundle({ includeDeleted: true, includeHistory: true });
+
+  it("the file is an age v1 file, not a zip; the zip inside is deterministic", async () => {
+    await seed();
+    const { blob } = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    expect(strFromU8(bytes.slice(0, 22))).toBe("age-encryption.org/v1\n");
+    expect(strFromU8(bytes.slice(0, 200))).toContain("-> scrypt ");
+    expect(strFromU8(bytes)).not.toContain("manifest.json");
+    expect(unzipSync(await plain(blob))["manifest.json"]).toBeDefined();
+  });
+
+  it("a wrong passphrase is a typed error and nothing changes", async () => {
+    await seed();
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    await importBundle(exampleBundle() as never, "import-restore");
+    const before = await all();
+    const wrong = readBackup(backup.blob, { passphrase: "not-the-passphrase" });
+    await expect(wrong).rejects.toBeInstanceOf(BackupPassphraseError);
+    await expect(readBackup(backup.blob, { passphrase: "not-the-passphrase" })).rejects.toThrow(
+      /Nothing was changed/,
+    );
+    expect(normalized(await all())).toEqual(normalized(before));
+  });
+
+  it("an encrypted backup without a passphrase asks for one", async () => {
+    await seed();
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    await expect(readBackup(backup.blob)).rejects.toThrow(/encrypted/);
+    await expect(readBackup(backup.blob)).rejects.toBeInstanceOf(BackupPassphraseError);
+  });
+
+  it("a passphrase shorter than 12 characters is refused before anything is built", async () => {
+    await seed();
+    await expect(createBackup({ createdAt: CREATED, passphrase: "short" })).rejects.toBeInstanceOf(
+      BackupPassphraseError,
+    );
+    await expect(encryptBackup(new Uint8Array(1), "")).rejects.toThrow(/at least 12/);
+  });
+
+  it("a plain zip (already decrypted by hand with the age CLI) still restores", async () => {
+    await seed();
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    const read = await readBackup(new Blob([(await plain(backup.blob)) as unknown as ArrayBuffer]));
+    expect(read.ok).toBe(true);
+  });
+
+  describe("headless", () => {
+    let dir: string;
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), "fiscode-backup-pass-"));
+    });
+    afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+    it("a wrong passphrase restores nothing: the directory isn't created", async () => {
+      await seed();
+      const backup = await createBackup({
+        createdAt: CREATED,
+        passphrase: PASS,
+        scryptWorkFactor: WF,
+      });
+      const zip = join(dir, backup.fileName);
+      writeFileSync(zip, new Uint8Array(await backup.blob.arrayBuffer()));
+      teardownTestDb(sqlite);
+      await expect(
+        restoreBackupToDir(zip, join(dir, "profile"), "not-the-passphrase"),
+      ).rejects.toBeInstanceOf(BackupPassphraseError);
+      expect(existsSync(join(dir, "profile"))).toBe(false);
+      sqlite = setupTestDb();
+    });
+
+    it("backupDir writes ciphertext; check-roundtrip compares the decrypted zips", async () => {
+      await seed();
+      const backup = await createBackup({
+        createdAt: CREATED,
+        passphrase: PASS,
+        scryptWorkFactor: WF,
+      });
+      const zip = join(dir, backup.fileName);
+      writeFileSync(zip, new Uint8Array(await backup.blob.arrayBuffer()));
+      teardownTestDb(sqlite);
+      await restoreBackupToDir(zip, join(dir, "profile"), PASS);
+      const again = await backupDir(join(dir, "profile"), {
+        createdAt: CREATED,
+        build: backup.manifest.app.build,
+        passphrase: PASS,
+        scryptWorkFactor: WF,
+      });
+      expect(strFromU8(again.bytes.slice(0, 22))).toBe("age-encryption.org/v1\n");
+      expect(again.zip).toEqual(await plain(backup.blob));
+      sqlite = setupTestDb();
+    });
+
+    // Temp files only: never the real default path.
+    const file = (text: string, mode: number) => {
+      const path = join(dir, "pass");
+      writeFileSync(path, text);
+      chmodSync(path, mode);
+      return path;
+    };
+    const noPrompt = () => undefined;
+
+    it("passphrase order: env, then the file, then the prompt", () => {
+      const path = file("from-the-file-passphrase\n", 0o600);
+      expect(
+        resolvePassphrase(
+          { FISCODE_BACKUP_PASSPHRASE: "from-the-env", FISCODE_BACKUP_PASSPHRASE_FILE: path },
+          noPrompt,
+        ),
+      ).toBe("from-the-env");
+      // One trailing newline is stripped, nothing else.
+      expect(resolvePassphrase({ FISCODE_BACKUP_PASSPHRASE_FILE: path }, noPrompt)).toBe(
+        "from-the-file-passphrase",
+      );
+      expect(
+        resolvePassphrase({ FISCODE_BACKUP_PASSPHRASE_FILE: join(dir, "none") }, () => "typed"),
+      ).toBe("typed");
+    });
+
+    it("a group- or other-readable file is refused without revealing it; no source at all is a clear error", () => {
+      for (const mode of [0o640, 0o604, 0o644]) {
+        const path = file("from-the-file-passphrase", mode);
+        let message = "";
+        try {
+          resolvePassphrase({ FISCODE_BACKUP_PASSPHRASE_FILE: path }, noPrompt);
+        } catch (err) {
+          message = (err as Error).message;
+        }
+        expect(message).toMatch(/chmod 600/);
+        expect(message).not.toContain("from-the-file-passphrase");
+      }
+      expect(() =>
+        resolvePassphrase({ FISCODE_BACKUP_PASSPHRASE_FILE: join(dir, "none") }, noPrompt),
+      ).toThrow(/No passphrase/);
+    });
+
+    it("the script refuses a passphrase argument, and errors clearly with no source and no terminal", () => {
+      const bin = fileURLToPath(new URL("../bin/fiscode-backup.ts", import.meta.url));
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        FISCODE_BACKUP_PASSPHRASE_FILE: join(dir, "none"),
+      };
+      delete env.FISCODE_BACKUP_PASSPHRASE;
+      const arg = spawnSync("bun", [bin, "verify", "x.zip.age", "--passphrase", PASS], {
+        encoding: "utf8",
+        env,
+      });
+      expect(arg.status).toBe(2);
+      expect(arg.stderr).not.toContain(PASS);
+      // setsid: no controlling terminal, so /dev/tty can't open.
+      const none = spawnSync("setsid", ["-w", "bun", bin, "verify", "x.zip.age"], {
+        encoding: "utf8",
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      expect(none.stderr).toMatch(/No passphrase/);
+      expect(none.status).toBe(1);
+    }, 30_000);
   });
 });
