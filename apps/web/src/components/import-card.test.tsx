@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { emptyBundle, exportBundle, type Bundle } from "@fiscode/csv";
+import { emptyBundle, exportBundle, readImportFile, type Bundle } from "@fiscode/csv";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // SQLite over OPFS and the router do not exist in jsdom; both are replaced at
@@ -243,13 +243,44 @@ describe("import card: an app that holds data", () => {
 
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("It is a yearly file for 2026, not a full backup.");
-    const restore = within(dialog).getByRole("radio", { name: /Restore/ });
+    // Named by its title alone; why it is off is its description.
+    const restore = within(dialog).getByRole("radio", { name: "Restore" });
     expect(restore).toHaveAttribute("aria-disabled", "true");
-    expect(dialog).toHaveTextContent(
-      "Restoring from it would remove 2 rows that are here and not in the file.",
+    expect(restore).toHaveAccessibleDescription(
+      "Not for a yearly file: 2 rows would be lost. Use Update rows.",
     );
     // A yearly file over data is an accountant's amended file: Update rows is the mode for it.
-    expect(within(dialog).getByRole("radio", { name: /Update rows/ })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: "Update rows" })).toBeChecked();
+  });
+
+  it("refuses Restore for a yearly file that would remove nothing, and points to Update rows", async () => {
+    // The data here is exactly the yearly file's rows: Restore would remove none.
+    const yearly = exportBundle(backup(), { scope: "yearly", year: 2026 });
+    const read = readImportFile(yearly);
+    if (!read.ok) throw new Error("demo yearly file should read");
+    buildBundle.mockResolvedValue(read.bundle);
+    render(<ImportCard />);
+    choose(yearly, "fiscode-2026-tax-year.csv");
+
+    const dialog = await screen.findByRole("dialog");
+    const restore = within(dialog).getByRole("radio", { name: "Restore" });
+    expect(restore).toHaveAttribute("aria-disabled", "true");
+    expect(restore).toHaveAccessibleDescription(
+      "Not for a yearly file (2026 only): use Update rows.",
+    );
+  });
+
+  it("names each mode by its title and describes it with its hint", async () => {
+    buildBundle.mockResolvedValue(appState());
+    render(<ImportCard />);
+    choose(exportBundle(backup(), { scope: "full" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("radio", { name: "Add rows" })).toHaveAccessibleDescription(
+      "Keep everything here and add the file's rows that are not here yet.",
+    );
+    expect(within(dialog).getByRole("radio", { name: "Restore" })).toHaveAccessibleDescription(
+      "Replace everything here with this file. Use this for a backup.",
+    );
   });
 
   it("holds the button until the import commits", async () => {
