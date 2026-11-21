@@ -178,14 +178,14 @@ export function ImportCard({
       <Card>
         <CardHeader>
           <CardTitle>
-            <SectionTitle>{setup ? "Restore from a backup" : "Import CSV"}</SectionTitle>
+            <SectionTitle>{setup ? "Restore from a CSV" : "Import CSV"}</SectionTitle>
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col items-start gap-4">
           <p className="text-sm text-muted-foreground">
             {setup
-              ? "Already use fiscode somewhere else? Choose the full backup CSV you downloaded there. It brings your profile with it, so you can skip the form above."
-              : "Restore a full backup, or add rows from a fiscode CSV. You see what the file holds and choose what happens before anything changes."}
+              ? "Already use fiscode somewhere else? Choose the full CSV you exported there. It brings your profile with it, so you can skip the form above. It doesn't carry document files: an encrypted backup does."
+              : "Restore everything from a full CSV, or add rows from a fiscode CSV. You see what the file holds and choose what happens before anything changes."}
           </p>
           <input
             ref={input}
@@ -202,7 +202,7 @@ export function ImportCard({
           />
           <Button type="button" variant="outline" onClick={() => input.current?.click()}>
             <Upload />
-            {setup ? "Choose a backup file" : "Choose a CSV file"}
+            Choose a CSV file
           </Button>
           {refused ? (
             <Refusal key={refused.seq} fileName={refused.fileName} file={refused.file} />
@@ -215,7 +215,7 @@ export function ImportCard({
           {pending && plans ? (
             <>
               <DialogHeader>
-                <DialogTitle>{empty ? "Restore this backup?" : "Import this file?"}</DialogTitle>
+                <DialogTitle>{empty ? "Restore this CSV?" : "Import this file?"}</DialogTitle>
                 <DialogDescription>
                   <span className="font-medium text-foreground">{pending.fileName}</span> holds{" "}
                   {n(pending.file.counts.live, "row")},{" "}
@@ -323,7 +323,7 @@ const reveal = (alert: HTMLDivElement | null) => {
 };
 
 /** A refused file, shown in the card until another file is picked. */
-function Refusal({ fileName, file }: { fileName: string; file: RefusedFile }) {
+export function Refusal({ fileName, file }: { fileName: string; file: RefusedFile }) {
   return (
     <Alert ref={reveal} tabIndex={-1} variant="destructive" className="w-full outline-none">
       <CircleAlert />
@@ -412,13 +412,18 @@ const plainFoldersLine = (count: number): string =>
   `${n(count, "folder")} kept as ${count === 1 ? "a plain folder" : "plain folders"}: this profile already has that year's default folders.`;
 
 /** What a mode will do, one checkable sentence per line. */
-const describePlan = (plan: ImportPlan, fileHasNoProfile: boolean): string[] => {
+export const describePlan = (
+  plan: ImportPlan,
+  fileHasNoProfile: boolean,
+  /** What History's new entry is the state before: this import, or a backup's restore. */
+  action: "import" | "restore" = "import",
+): string[] => {
   const { current, written, removed, skipped } = plan;
   const lines: string[] = [];
   const history =
     `History: ${entries(current.history)} here ${current.history === 1 ? "is" : "are"} kept` +
     `, ${written.history} from the file ${written.history === 1 ? "is" : "are"} added` +
-    (plan.snapshot ? ", and 1 new entry records the state before this import." : ".");
+    (plan.snapshot ? `, and 1 new entry records the state before this ${action}.` : ".");
 
   if (plan.mode === "append") {
     lines.push(

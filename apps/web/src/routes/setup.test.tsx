@@ -117,7 +117,7 @@ describe("setup: restore from a backup", () => {
   it("restores a backup into the empty app without filling in the form", async () => {
     buildBundle.mockResolvedValue(emptyBundle());
     render(<SetupPage />);
-    expect(screen.getByText("Restore from a backup")).toBeInTheDocument();
+    expect(screen.getByText("Restore from a CSV")).toBeInTheDocument();
 
     const csv = exportBundle(exampleBundle(), { scope: "full" });
     fireEvent.change(document.querySelector('input[type="file"]')!, {
@@ -125,7 +125,7 @@ describe("setup: restore from a backup", () => {
     });
 
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveTextContent("Restore this backup?");
+    expect(dialog).toHaveTextContent("Restore this CSV?");
     // An empty app has nothing to keep, so there is no mode to choose.
     expect(within(dialog).queryByRole("radio")).not.toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Restore" }));
