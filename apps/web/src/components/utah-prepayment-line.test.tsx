@@ -18,7 +18,7 @@ describe("UtahPrepaymentLine", () => {
     render(<UtahPrepaymentLine prepayment={prepayment(999_00)} />);
     expect(
       screen.getByText(
-        "Utah: pay at least $999.00 by Apr 15, 2027 (90% of this year's Utah tax, less Utah withholding).",
+        "Utah: pay at least $999.00 by Apr 15, 2027 (90% of this year's Utah tax, less Utah withholding and payments made).",
       ),
     ).toBeInTheDocument();
   });
@@ -37,7 +37,7 @@ describe("UtahPrepaymentLine names the TC-546 line 5 basis it used (review #72 r
     );
     expect(
       screen.getByText(
-        "Utah: pay at least $1,200.00 by Apr 15, 2027 (your 2025 Utah tax, which is less than 90% of this year's, less Utah withholding).",
+        "Utah: pay at least $1,200.00 by Apr 15, 2027 (your 2025 Utah tax, which is less than 90% of this year's, less Utah withholding and payments made).",
       ),
     ).toBeInTheDocument();
   });
@@ -45,7 +45,7 @@ describe("UtahPrepaymentLine names the TC-546 line 5 basis it used (review #72 r
   it("90% of this year's (line 3): as before", () => {
     render(<UtahPrepaymentLine prepayment={prepayment(1_557_03)} />);
     expect(
-      screen.getByText(/\(90% of this year's Utah tax, less Utah withholding\)\.$/),
+      screen.getByText(/\(90% of this year's Utah tax, less Utah withholding and payments made\)\.$/),
     ).toBeInTheDocument();
   });
 });
