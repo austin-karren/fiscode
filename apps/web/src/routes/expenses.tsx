@@ -34,7 +34,7 @@ import { SelectWithLabels } from "../components/forms/select-with-labels";
 import { LabelWithTooltip } from "../components/forms/labeled";
 import { InfoTooltip } from "../components/info-tooltip";
 import { NoDataEmpty } from "../components/empty-states/no-data";
-import { expenseYearDate } from "@fiscode/core";
+import { expenseYearDate, startupTickIgnoredForEquipment } from "@fiscode/core";
 import { PreSeStartBadge } from "../components/pre-se-start-badge";
 import { EnterToSubmitForm } from "../components/forms/enter-to-submit-form";
 import { EditExpenseDialog } from "../components/edit-expense-dialog";
@@ -410,7 +410,10 @@ function ExpensesPage() {
                   <DataTable.Cell label="Date">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="whitespace-nowrap">{formatDate(x.date)}</span>
-                      {x.startupExpense ? (
+                      {startupTickIgnoredForEquipment(
+                        x,
+                        profile?.seStartDate,
+                      ) ? null : x.startupExpense ? (
                         <Badge variant="secondary">Startup §195</Badge>
                       ) : (
                         <PreSeStartBadge
@@ -423,6 +426,13 @@ function ExpensesPage() {
                   </DataTable.Cell>
                   <DataTable.Cell label="Category">
                     {labelFor(x.category)}
+                    {/* Ticked Startup before the ruling: §195 excludes equipment
+                        (d-data #75), so the tick is ignored; say why on the row. */}
+                    {startupTickIgnoredForEquipment(x, profile?.seStartDate) ? (
+                      <span className="block text-xs text-muted-foreground">
+                        Equipment uses its placed-in-service date instead.
+                      </span>
+                    ) : null}
                     {x.flagForSection179 ? (
                       <Tooltip>
                         <TooltipTrigger

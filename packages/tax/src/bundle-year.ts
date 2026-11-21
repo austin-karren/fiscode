@@ -7,6 +7,7 @@ import {
   expensesCountedForYear,
   isPreStartStartupCost,
   startupDeductionBetween,
+  startupTickIgnoredForEquipment,
   type Cents,
   yearExclusion,
 } from "@fiscode/core";
@@ -382,6 +383,13 @@ export type DerivedYear = {
    * Pub 334) assumes a section 179 election; the dashboard says so. No number changes.
    */
   equipmentAssumedSection179: number;
+  /**
+   * Equipment counted this year that is ticked Startup but was bought before the SE start. The
+   * tick is ignored: equipment is placed in service, not a §195 start-up cost (core
+   * `startupTickIgnoredForEquipment`). A count, so the dashboard can say it in one line. No
+   * number changes.
+   */
+  startupIgnoredForEquipment: number;
   totalDeductibleExpenses: Cents;
   /** The entity active in the year (the latest one overlapping it), or sole_prop when none. */
   entityType: string;
@@ -458,6 +466,9 @@ const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
       total: startupTotal,
       remainingAfterYear: startupRemaining,
     },
+    startupIgnoredForEquipment: expensesCountedForYear(bundle.expenses, year, seStartDate).filter(
+      (e) => startupTickIgnoredForEquipment(e, seStartDate),
+    ).length,
     equipmentAssumedSection179: expensesCountedForYear(bundle.expenses, year, seStartDate).filter(
       (e) => e.category === "equipment" && !e.flagForSection179 && e.amountCents > 250_000,
     ).length,
