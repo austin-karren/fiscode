@@ -217,10 +217,11 @@ export const referencedBlobs = (bundle: Bundle): Map<string, Set<string>> => {
   return out;
 };
 
-/** A path segment safe in a zip: no separators, no "..", no control characters. */
-// Windows can't create these: the characters, and the device names with or without an extension.
+// Windows can't create these: the characters, and the device names (Microsoft's "Naming Files":
+// CON, PRN, AUX, NUL, COM1-9 and LPT1-9 with superscript ¹²³ too, CONIN$, CONOUT$) with or
+// without an extension.
 const WINDOWS_RESERVED_CHARS = /[<>:"|?*]/g;
-const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i;
+const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³]|conin\$|conout\$)(\.|$)/i;
 
 /**
  * One path segment that unzips anywhere: control characters and slashes dropped, Windows'
@@ -244,10 +245,11 @@ const numbered = (name: string, n: number): string => {
   return dot > 0 ? `${name.slice(0, dot)} (${n})${name.slice(dot)}` : `${name} (${n})`;
 };
 
-/** Where each live document's bytes go for people: documents/<folder path>/<name>. */
 /**
  * Every live document's human path (document id → `documents/<folder path>/<name>`), including
- * a document whose bytes the zip stores under another document's path.
+ * a document whose bytes the zip stores under another document's path. Unique ignoring case, and
+ * never the path of a folder or of a `.versions` file, so the zip extracts with no file where a
+ * directory goes (review #87 r1): a clash gets " (2)".
  */
 export const humanPaths = (bundle: Bundle): Map<string, string> => {
   const folders = new Map(
@@ -265,6 +267,14 @@ export const humanPaths = (bundle: Bundle): Map<string, string> => {
     return parts.join("/");
   };
   const used = new Set<string>();
+  // Directories first: every live folder's path, at every depth.
+  for (const id of folders.keys()) {
+    const dir = folderPath(id);
+    if (dir !== undefined) used.add(`documents/${dir}`.toLowerCase());
+  }
+  for (const sha of referencedBlobs(bundle).keys()) {
+    used.add(`documents/.versions/${sha}`.toLowerCase());
+  }
   const out = new Map<string, string>();
   const live = bundle.documents
     .filter((d) => d.deletedAt === null)

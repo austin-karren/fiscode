@@ -5,7 +5,7 @@
 //   verify <backup.zip.age> [--allow-missing]   every check a restore makes; exit 1 on a problem
 //   restore <backup.zip.age> --to <dir>         into a new, empty profile directory
 //   backup --from <dir> --out <backup.zip.age> [--created-at <iso>]
-//   check-roundtrip <backup.zip.age>            restore, back up again, compare the decrypted zips
+//   check-roundtrip <backup.zip.age>            restore, back up again, compare what restores
 //   summary <backup.zip.age>                    JSON: counts, dates, schema, document paths
 // The passphrase comes from FISCODE_BACKUP_PASSPHRASE, else the file FISCODE_BACKUP_PASSPHRASE_FILE
 // (default ~/.config/fiscode/backup-passphrase, chmod 600), else a prompt that doesn't echo. Never an
@@ -157,16 +157,19 @@ const main = async (): Promise<number> => {
     }
     case "check-roundtrip": {
       const encrypted = isEncryptedBackupFile(need(target, "the backup file"));
-      const { identical } = await checkRoundtrip(
+      const { identical, sameZip } = await checkRoundtrip(
         need(target, "the backup file"),
         passphraseFor(target!),
       );
+      // Exit 0 for both "identical" lines: the restore is exact either way.
       console.log(
-        identical
-          ? encrypted
-            ? "identical (decrypted contents)"
-            : "identical"
-          : "DIFFERENT: the restored profile backs up to other contents",
+        !identical
+          ? "DIFFERENT: the restored profile backs up to other contents"
+          : !sameZip
+            ? "identical contents (file names in the zip were updated)"
+            : encrypted
+              ? "identical (decrypted contents)"
+              : "identical",
       );
       return identical ? 0 : 1;
     }

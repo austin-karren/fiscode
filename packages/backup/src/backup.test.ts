@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } 
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import {
   BackupBytesMissingError,
@@ -963,5 +963,108 @@ describe("#85 follow-ups (r2 a-c, r5 d-f)", () => {
     };
     expect(() => resolvePassphrase(env, () => "")).toThrow(/No passphrase entered/);
     expect(() => resolvePassphrase(env, () => "")).not.toThrow(/Enter its passphrase/);
+  });
+});
+
+describe("review #87 r1", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "fiscode-backup-87-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("(1) a backup made before Windows-safe names round-trips as 'identical contents', exit 0", async () => {
+    await importBundle(exampleBundle() as never, "import-restore");
+    const con = await folderRepo.create({ name: "CON" });
+    await documentRepo.upload(file("a:b.pdf", "demo a:b"), { folderId: con.id });
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    // Rewrite it as ccf749afe (#85) wrote it: the names as they are, in the zip and the manifest.
+    const entries = unzipSync(await plain(backup.blob));
+    const m = JSON.parse(strFromU8(entries["manifest.json"]!)) as BackupManifest;
+    const old = (p: string) => (p === "documents/_CON/a_b.pdf" ? "documents/CON/a:b.pdf" : p);
+    expect(m.documents.map((d) => d.path)).toContain("documents/_CON/a_b.pdf");
+    const rewritten: Record<string, Uint8Array> = {
+      "manifest.json": strToU8(
+        JSON.stringify({ ...m, documents: m.documents.map((d) => ({ ...d, path: old(d.path) })) }),
+      ),
+    };
+    for (const [name, bytes] of Object.entries(entries)) {
+      if (name !== "manifest.json") rewritten[old(name)] = bytes;
+    }
+    const oldAge = join(dir, "pre-87.zip.age");
+    writeFileSync(oldAge, await encryptBackup(zipSync(rewritten), PASS, WF));
+    const now = join(dir, backup.fileName);
+    writeFileSync(now, new Uint8Array(await backup.blob.arrayBuffer()));
+    teardownTestDb(sqlite);
+
+    expect(await checkRoundtrip(oldAge, PASS)).toMatchObject({ identical: true, sameZip: false });
+    expect(await checkRoundtrip(now, PASS)).toMatchObject({ identical: true, sameZip: true });
+    const bin = fileURLToPath(new URL("../bin/fiscode-backup.ts", import.meta.url));
+    const r = spawnSync("bun", [bin, "check-roundtrip", oldAge], {
+      encoding: "utf8",
+      env: { ...process.env, FISCODE_BACKUP_PASSPHRASE: PASS },
+    });
+    expect(r.stdout.trim()).toBe("identical contents (file names in the zip were updated)");
+    expect(r.status).toBe(0);
+    sqlite = setupTestDb();
+  }, 30_000);
+
+  it("(2) no document takes a folder's path: the zip extracts with no file where a directory goes", async () => {
+    await importBundle(exampleBundle() as never, "import-restore");
+    const p = await folderRepo.create({ name: "P" });
+    await documentRepo.upload(file("x", "demo x"), { folderId: p.id });
+    const xDot = await folderRepo.create({ name: "x.", parentId: p.id });
+    await documentRepo.upload(file("in-sub.pdf", "demo in sub"), { folderId: xDot.id });
+    const q = await folderRepo.create({ name: "Q" });
+    await documentRepo.upload(file("Sub", "demo Sub"), { folderId: q.id });
+    const sub = await folderRepo.create({ name: "sub", parentId: q.id });
+    await documentRepo.upload(file("y.pdf", "demo y"), { folderId: sub.id });
+    const backup = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    const entries = unzipSync(await plain(backup.blob));
+    const names = Object.keys(entries);
+    expect(names).toContain("documents/P/x (2)");
+    expect(names).toContain("documents/P/x/in-sub.pdf");
+    expect(names).toContain("documents/Q/Sub (2)");
+    expect(names).toContain("documents/Q/sub/y.pdf");
+    // No file is (ignoring case) a directory of another entry...
+    const lower = names.map((n) => n.toLowerCase());
+    for (const f of lower) expect(lower.some((o) => o.startsWith(`${f}/`))).toBe(false);
+    // ...and a real extraction succeeds.
+    const out = join(dir, "x");
+    for (const [name, bytes] of Object.entries(entries)) {
+      mkdirSync(dirname(join(out, name)), { recursive: true });
+      writeFileSync(join(out, name), bytes);
+    }
+  });
+
+  it("(3) the other device names Windows reserves: CONIN$, CONOUT$, COM¹-³, LPT¹-³", async () => {
+    await importBundle(exampleBundle() as never, "import-restore");
+    const names = ["CONIN$", "conout$.txt", "COM¹.txt", "com³", "LPT².pdf", "lpt¹", "COM4.ok"];
+    for (const n of names) await documentRepo.upload(file(n, `demo ${n}`));
+    const { manifest } = await createBackup({
+      createdAt: CREATED,
+      passphrase: PASS,
+      scryptWorkFactor: WF,
+    });
+    const live = manifest.documents.map((d) => d.path.replace("documents/Unfiled/", ""));
+    expect(live.toSorted()).toEqual(
+      [
+        "_CONIN$",
+        "_conout$.txt",
+        "_COM¹.txt",
+        "_com³",
+        "_LPT².pdf",
+        "_lpt¹",
+        "_COM4.ok",
+      ].toSorted(),
+    );
   });
 });

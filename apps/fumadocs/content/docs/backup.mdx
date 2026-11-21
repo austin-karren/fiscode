@@ -48,8 +48,9 @@ fiscode-backup-2026-11-21.zip
   device with the memory for it.
 - **Folder and file names are made safe to unzip anywhere,** Windows included. The characters
   `< > : " | ? *` become `_`, trailing dots and spaces are dropped, and a device name such as `CON`
-  or `nul.txt` gets a leading `_`. Only the name in the zip changes: a restore brings back each
-  document's real name.
+  or `nul.txt` gets a leading `_`. A document whose name would match a folder's (ignoring case) gets
+  ` (2)`, so no file sits where a folder goes. Only the name in the zip changes: a restore brings
+  back each document's real name.
 - **Two backups of the same data have the same zip inside** when they're made with the same date
   and time, so a diff of the decrypted zips shows only real changes. The encrypted files always
   differ: age encrypts each one with a new random key.
@@ -87,12 +88,12 @@ and in shell history):
 With none of these, it stops with an error. It never prints the passphrase. A plain `.zip` (already
 decrypted with `age`) needs no passphrase, so the script doesn't look for one.
 
-| Command                                                           | What it does                                                                                                                                                                                           |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `verify <backup.zip.age> [--allow-missing]`                       | Every check a restore makes. Exits 1 and names the problem; exits 3 when the backup lists files as missing (the device that made it didn't have them), naming the documents, unless `--allow-missing`. |
-| `restore <backup.zip.age> --to <dir>`                             | Restores into a new, empty directory: `fiscode.sqlite` and `documents/blobs/…`, the layout the browser uses.                                                                                           |
-| `backup --from <dir> --out <backup.zip.age> [--created-at <iso>]` | A backup of such a directory.                                                                                                                                                                          |
-| `check-roundtrip <backup.zip.age>`                                | Restores into a temporary directory, backs up again with the same date and time, and compares the decrypted zips. Exits 0 when they are the same.                                                      |
-| `summary <backup.zip.age>`                                        | Counts, dates, schema and the document paths, as JSON.                                                                                                                                                 |
+| Command                                                           | What it does                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `verify <backup.zip.age> [--allow-missing]`                       | Every check a restore makes. Exits 1 and names the problem; exits 3 when the backup lists files as missing (the device that made it didn't have them), naming the documents, unless `--allow-missing`.                                                                                                                                                                                            |
+| `restore <backup.zip.age> --to <dir>`                             | Restores into a new, empty directory: `fiscode.sqlite` and `documents/blobs/…`, the layout the browser uses.                                                                                                                                                                                                                                                                                      |
+| `backup --from <dir> --out <backup.zip.age> [--created-at <iso>]` | A backup of such a directory.                                                                                                                                                                                                                                                                                                                                                                     |
+| `check-roundtrip <backup.zip.age>`                                | Restores into a temporary directory, backs up again with the same date and time, and compares what a restore uses: the CSV's bytes, every file's bytes and the missing list. It prints `identical` when the zip is the same byte for byte, or `identical contents (file names in the zip were updated)` for a backup made before names were made Windows-safe. Both exit 0; a difference exits 1. |
+| `summary <backup.zip.age>`                                        | Counts, dates, schema and the document paths, as JSON.                                                                                                                                                                                                                                                                                                                                            |
 
 The script can't read a browser's storage: a backup always starts in the app.
