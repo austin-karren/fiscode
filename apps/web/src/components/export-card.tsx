@@ -5,6 +5,7 @@ import { exportBundle, exportFileName, type ExportOptions } from "@fiscode/csv";
 import { todayIso, yearOf } from "@fiscode/core";
 import { useState } from "react";
 import { toast } from "sonner";
+import { accountantExport, accountantExportFileName } from "../lib/accountant-export";
 import { SectionTitle } from "./section-title";
 
 const downloadCsv = (filename: string, csv: string) => {
@@ -45,6 +46,26 @@ export function ExportCard() {
     }
   };
 
+  // A second file for reading, beside the canonical yearly CSV. Live rows only, as the estimate
+  // counts them; it is never imported.
+  const exportSummary = async () => {
+    setBusy(true);
+    try {
+      const today = todayIso();
+      const bundle = await buildBundle({});
+      downloadCsv(accountantExportFileName(year, today), accountantExport(bundle, year, today));
+    } catch (err) {
+      console.error(err);
+      toast.error("Export failed.", {
+        description: err instanceof Error ? err.message : String(err),
+        duration: Infinity,
+        closeButton: true,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const exportFull = () => run({ scope: "full" });
   const exportYearly = () => run({ scope: "yearly", year });
 
@@ -58,7 +79,8 @@ export function ExportCard() {
       <CardContent className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">
           Yearly export is the artifact you hand to your accountant. Full export is your portable
-          backup.
+          backup. The accountant summary is a second file to read alongside the yearly CSV: totals
+          and the figures fiscode works out. It can't be imported.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button onClick={exportFull} disabled={busy}>
@@ -66,6 +88,9 @@ export function ExportCard() {
           </Button>
           <Button onClick={exportYearly} disabled={busy} variant="outline">
             Download {year} CSV
+          </Button>
+          <Button onClick={exportSummary} disabled={busy} variant="outline">
+            Download accountant summary
           </Button>
         </div>
       </CardContent>

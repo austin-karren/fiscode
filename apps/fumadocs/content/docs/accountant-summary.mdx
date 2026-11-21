@@ -1,0 +1,43 @@
+---
+title: Accountant summary
+description: A second file for your accountant to read, with totals and the figures fiscode works out.
+icon: Sheet
+---
+
+The **accountant summary** is a CSV to read in Excel, Google Sheets or Numbers. Download it from
+**Export CSV** on the dashboard (**Download accountant summary**) and send it with the yearly CSV.
+
+It is **not importable**. It is a summary, and its first table says so. To move data back into
+fiscode, use the yearly CSV ([Accountant handoff](/docs/accountant-handoff)). The yearly CSV and the
+full backup are unchanged by it.
+
+## What is in it
+
+One table after another, with a blank row between. Each table starts with its header row, and
+column 1 of every row names the table, so filtering on that column shows one table.
+
+| Table                           | What it holds                                                                                                                                                                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| About this file                 | The year, the date it was made, filing status, state, self-employment start, and that it can't be imported                                                                                                                                                               |
+| Estimate summary                | Gross 1099 income, Schedule C expenses, mileage and home office, net profit, SE tax and its deductible half, self-employed health insurance (Schedule 1 line 17), AGI, QBI, taxable income, federal and state tax, the safe-harbor floor, and federal paid and remaining |
+| Schedule C expenses by category | Rows and amount per category, then the section 195 amount deducted this year, then the total (equal to the summary's Schedule C expenses)                                                                                                                                |
+| Income                          | Each income row for the year, with 1099 amounts in their own column and totals                                                                                                                                                                                           |
+| Expenses                        | Each expense counted for the year, with the date it counts on (equipment: placed in service; startup costs: the business start)                                                                                                                                          |
+| Mileage                         | Each trip with its standard rate and deduction, and the total                                                                                                                                                                                                            |
+| Start-up costs (section 195)    | Paid before the business began, deducted this year, left to deduct                                                                                                                                                                                                       |
+| W-2 jobs                        | Your own W-2s for the year, by box, with totals                                                                                                                                                                                                                          |
+| Estimated payments              | Each payment with its quarter, and totals for federal and Utah                                                                                                                                                                                                           |
+| Federal payments by quarter     | Required through each due date, paid by then, and the shortfall                                                                                                                                                                                                          |
+
+## How values are written
+
+- Dollars are plain numbers with two decimals (`1234.56`), so a spreadsheet can add them.
+- Dates are `YYYY-MM-DD`.
+- The file is UTF-8 with a byte-order mark and Windows line endings, so Excel, Sheets and Numbers
+  all open it the same way.
+- A text cell that starts with `=`, `+`, `-` or `@` gets a leading `'`, so it can't run as a
+  formula.
+- Rows are the ones the estimate counts: dated in the year, on or after your self-employment
+  start, and not deleted.
+- The mileage total is figured once per rate, as the estimate does, so it can differ from the sum
+  of the trips by a cent.
