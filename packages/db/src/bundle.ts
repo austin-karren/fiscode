@@ -1,6 +1,7 @@
 import type {
   ClientRow,
   EntityRow,
+  EstimatedPaymentRow,
   ExpenseRow,
   HistoryRow,
   HomeOfficeRow,
@@ -11,6 +12,7 @@ import type {
   SpouseRow,
   TimeEntryRow,
   VehicleRow,
+  W2JobRow,
 } from "./schema/index.ts";
 
 /**
@@ -35,6 +37,8 @@ export type Bundle = {
   homeOffice: HomeOfficeRow[];
   expenses: ExpenseRow[];
   retirementContributions: RetirementContributionRow[];
+  w2Jobs: W2JobRow[];
+  estimatedPayments: EstimatedPaymentRow[];
   history: HistoryRow[];
 };
 
@@ -50,5 +54,7 @@ export const emptyBundle = (): Bundle => ({
   homeOffice: [],
   expenses: [],
   retirementContributions: [],
+  w2Jobs: [],
+  estimatedPayments: [],
   history: [],
 });

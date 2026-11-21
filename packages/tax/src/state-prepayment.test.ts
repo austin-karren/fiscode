@@ -38,6 +38,7 @@ describe("Utah prepayment (TC-546)", () => {
       state: "UT",
       dueDate: "2027-04-15",
       minimum: dollars(1_557.03),
+      line5: dollars(1_557.03),
       basis: "currentYear90",
     });
   });

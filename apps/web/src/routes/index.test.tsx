@@ -38,6 +38,7 @@ const loaderData = {
     priorYearAgiCents: null,
     priorYearStateTaxCents: null,
     priorYearFiguresYear: null,
+    priorYearNotFiled: null,
   },
   year: 2026,
   hasExact: true,

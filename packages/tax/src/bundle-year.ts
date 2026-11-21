@@ -18,7 +18,7 @@ import { getYearConfig } from "./config/index.ts";
 import { estimateYear, type EstimateResult } from "./engine.ts";
 import { actualHomeOfficeExpenses, limitToTentativeProfit } from "./home-office.ts";
 import { mileageDeduction } from "./mileage.ts";
-import type { AnnualizedInput, TaxInput } from "./types.ts";
+import type { AnnualizedInput, EstimatedPaymentInput, OwnW2, TaxInput } from "./types.ts";
 
 type ActiveSpouse = {
   annualW2WagesCents: number;
@@ -408,6 +408,12 @@ export type DerivedYear = {
    * for the `year - 1` return.
    */
   priorYearFiguresApplied: boolean;
+  /** The filer's own W-2 wages for the year (box 1, summed). */
+  ownW2Wages: Cents;
+  /** How many of the filer's own W-2s count for the year. */
+  ownW2Count: number;
+  /** Estimated payments entered for the year, by jurisdiction. */
+  estimatedPaymentCount: { federal: number; state: number };
 };
 
 const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
@@ -478,11 +484,54 @@ const deriveYear = (bundle: Bundle, year: number): DerivedYear => {
     seStartDate,
     excludedBeforeSeStart: countExcludedBeforeSeStart(bundle, year, seStartDate),
     priorYearFiguresApplied: priorYearFiguresApply(bundle.profile, year),
+    ownW2Wages: ownW2For(bundle, year).wages,
+    ownW2Count: w2sFor(bundle, year).length,
+    estimatedPaymentCount: {
+      federal: paymentsFor(bundle, year, "federal").length,
+      state: paymentsFor(bundle, year, "UT").length,
+    },
   };
 };
 
 const priorYearFiguresApply = (profile: Bundle["profile"], year: number): boolean =>
   profile?.priorYearFiguresYear === year - 1;
+
+/** The filer's live W-2s for the tax year. */
+const w2sFor = (bundle: Bundle, year: number) =>
+  bundle.w2Jobs.filter((w) => w.deletedAt === null && w.taxYear === year);
+
+/** The year's W-2 boxes, summed. Social Security wages are boxes 3 + 7 (Schedule SE line 8a). */
+const ownW2For = (bundle: Bundle, year: number): OwnW2 => {
+  const sum = (pick: (w: Bundle["w2Jobs"][number]) => number) =>
+    cents(w2sFor(bundle, year).reduce((s, w) => s + pick(w), 0));
+  return {
+    wages: sum((w) => w.wagesCents),
+    federalWithholding: sum((w) => w.federalWithholdingCents),
+    ssWages: sum((w) => w.ssWagesCents + w.ssTipsCents),
+    medicareWages: sum((w) => w.medicareWagesCents),
+    stateWithholding: sum((w) => w.stateWithholdingCents),
+  };
+};
+
+/** The live estimated payments made for the tax year, for one jurisdiction, by date. */
+const paymentsFor = (bundle: Bundle, year: number, jurisdiction: "federal" | "UT") =>
+  bundle.estimatedPayments
+    .filter((p) => p.deletedAt === null && p.taxYear === year && p.jurisdiction === jurisdiction)
+    .toSorted((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+const paymentInputs = (
+  bundle: Bundle,
+  year: number,
+  jurisdiction: "federal" | "UT",
+): EstimatedPaymentInput[] =>
+  paymentsFor(bundle, year, jurisdiction).map((p) => ({
+    date: p.date,
+    amount: cents(p.amountCents),
+    appliedQuarter:
+      p.appliedQuarter !== null && p.appliedQuarter >= 1 && p.appliedQuarter <= 4
+        ? (p.appliedQuarter as 1 | 2 | 3 | 4)
+        : undefined,
+  }));
 
 const centsOrUndefined = (v: number | null | undefined): Cents | undefined =>
   v === null || v === undefined ? undefined : cents(v);
@@ -513,6 +562,14 @@ const buildTaxInput = (bundle: Bundle, year: number): TaxInput => {
           priorYearStateTax: centsOrUndefined(profile.priorYearStateTaxCents),
         }
       : { priorYearTotalTax: undefined, priorYearAgi: undefined, priorYearStateTax: undefined }),
+    // DF-07: the filer's own W-2s and the estimated payments made for the year.
+    ownW2: ownW2For(bundle, year),
+    estimatedPayments: {
+      federal: paymentInputs(bundle, year, "federal"),
+      state: paymentInputs(bundle, year, "UT"),
+    },
+    // Stamped like the figures: it counts only for the year after the stamp.
+    priorYearNotFiled: profile.priorYearNotFiled === true && priorYearFiguresApply(profile, year),
   };
 };
 

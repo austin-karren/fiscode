@@ -12,6 +12,8 @@ import {
   mileage,
   profile,
   retirementContribution,
+  w2Job,
+  estimatedPayment,
   spouse,
   timeEntry,
   vehicle,
@@ -88,6 +90,8 @@ export const importBundle = async (bundle: Bundle, reason: ImportReason): Promis
       db.delete(homeOffice),
       db.delete(expense),
       db.delete(retirementContribution),
+      db.delete(w2Job),
+      db.delete(estimatedPayment),
     );
     queries.push(...insertQueries(bundle, "strict"));
   } else {
@@ -113,6 +117,8 @@ const isEmptyBundle = (b: Bundle): boolean =>
     b.homeOffice,
     b.expenses,
     b.retirementContributions,
+    b.w2Jobs,
+    b.estimatedPayments,
   ].every((rows) => rows.length === 0);
 
 const insertQueries = (
@@ -137,5 +143,7 @@ const insertQueries = (
   for (const row of bundle.retirementContributions) {
     add(db.insert(retirementContribution).values(row));
   }
+  for (const row of bundle.w2Jobs) add(db.insert(w2Job).values(row));
+  for (const row of bundle.estimatedPayments) add(db.insert(estimatedPayment).values(row));
   return queries;
 };

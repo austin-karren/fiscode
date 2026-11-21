@@ -14,8 +14,8 @@ export function UtahPrepaymentLine({ prepayment }: { prepayment: StatePrepayment
   // Which TC-546 line 5 amount was used: line 4 (last year's Utah tax) or line 3 (90% of this year's).
   const basis =
     prepayment.basis === "priorYear"
-      ? `your ${lastYear} Utah tax, which is less than 90% of this year's, less Utah withholding`
-      : "90% of this year's Utah tax, less Utah withholding";
+      ? `your ${lastYear} Utah tax, which is less than 90% of this year's, less Utah withholding and payments made`
+      : "90% of this year's Utah tax, less Utah withholding and payments made";
   return (
     <p className="mt-3 text-sm text-muted-foreground">
       {prepayment.minimum > 0

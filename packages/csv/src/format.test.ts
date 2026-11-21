@@ -301,14 +301,14 @@ describe("layout a person can read", () => {
   it("opens with two comment lines: what the file is, and how to read it", () => {
     const lines = stripBom(csv).split("\r\n");
     expect(lines.slice(0, 3)).toEqual([
-      "# fiscode export (schema: v4; scope: full)",
+      "# fiscode export (schema: v5; scope: full)",
       "# Money is in dollars. Dates are YYYY-MM-DD. Import this file at https://fiscode.app to restore it.",
       "",
     ]);
     const yearly = exportBundle(exampleBundle(), { scope: "yearly", year: 2026 });
-    expect(yearly).toContain("# fiscode export (schema: v4; scope: yearly; year: 2026)");
-    expect(parseCsv(yearly).provenance).toEqual({ schema: "v4", scope: "yearly", year: 2026 });
-    expect(parseCsv(csv).provenance).toEqual({ schema: "v4", scope: "full" });
+    expect(yearly).toContain("# fiscode export (schema: v5; scope: yearly; year: 2026)");
+    expect(parseCsv(yearly).provenance).toEqual({ schema: "v5", scope: "yearly", year: 2026 });
+    expect(parseCsv(csv).provenance).toEqual({ schema: "v5", scope: "full" });
   });
 
   it("gives ambiguous stored names a table-specific header", () => {
@@ -365,9 +365,9 @@ describe("layout a person can read", () => {
       "updated_at",
       "deleted_at",
     ]);
-    // No table drags along another record type's columns. The widest is the profile (18 since
-    // v4 added last year's return and its year).
-    expect(Math.max(...header.map((h) => h.length))).toBeLessThanOrEqual(18);
+    // No table drags along another record type's columns. The widest is the profile (19 since
+    // v5 added prior_year_not_filed).
+    expect(Math.max(...header.map((h) => h.length))).toBeLessThanOrEqual(19);
   });
 
   it("omits a section that has no rows", () => {
@@ -524,7 +524,7 @@ describe("UTF-8 BOM", () => {
   it("imports a file with a BOM", () => {
     const { bundle, provenance, validationErrors } = parseCsv(exportFull(exampleBundle()));
     expect(validationErrors).toEqual([]);
-    expect(provenance.schema).toBe("v4");
+    expect(provenance.schema).toBe("v5");
     expect(bundle.profile?.id).toBe("profile");
   });
 
@@ -592,7 +592,7 @@ describe("import of files a person or a spreadsheet has touched", () => {
     expect(validationErrors).toEqual([]);
     expect(bundle).toEqual(exampleBundle());
     expect(provenance.scope).toBe("full");
-    expect(provenance.schema).toBe("v4");
+    expect(provenance.schema).toBe("v5");
   });
 
   it("reads LF line endings and ignores the label columns", () => {
@@ -741,7 +741,7 @@ describe("import errors a person can act on", () => {
   });
 
   it("refuses a file marked with a schema this build does not know", () => {
-    const csv = exportFull(exampleBundle()).replace("schema: v4", "schema: v9");
+    const csv = exportFull(exampleBundle()).replace("schema: v5", "schema: v9");
     const { bundle, validationErrors } = parseCsv(csv);
     expect(bundle).toEqual(emptyBundle());
     expect(validationErrors).toHaveLength(1);
@@ -795,6 +795,7 @@ describe("no stored field is left out", () => {
         priorYearAgiCents: 160_000_00,
         priorYearStateTaxCents: 2_345_67,
         priorYearFiguresYear: 2025,
+        priorYearNotFiled: false,
         createdAt: stamp(),
         updatedAt: stamp(),
       },
@@ -918,6 +919,37 @@ describe("no stored field is left out", () => {
           account: "sep",
           amountCents: cents(),
           notes: s("retirement notes"),
+          ...tail(),
+        },
+      ],
+      w2Jobs: [
+        {
+          id: "w2_1",
+          taxYear: 2026,
+          employer: s("employer"),
+          startDate: "2026-01-02",
+          endDate: "2026-02-18",
+          wagesCents: cents(),
+          federalWithholdingCents: cents(),
+          ssWagesCents: cents(),
+          ssTaxWithheldCents: cents(),
+          medicareWagesCents: cents(),
+          ssTipsCents: cents(),
+          stateWagesCents: cents(),
+          stateWithholdingCents: cents(),
+          notes: s("w2 notes"),
+          ...tail(),
+        },
+      ],
+      estimatedPayments: [
+        {
+          id: "ep_1",
+          date: "2026-04-15",
+          amountCents: cents(),
+          jurisdiction: "UT",
+          taxYear: 2026,
+          appliedQuarter: 1,
+          notes: s("payment notes"),
           ...tail(),
         },
       ],

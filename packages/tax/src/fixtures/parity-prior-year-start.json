@@ -73,13 +73,67 @@
     "safeHarbor": {
       "currentYearTarget": 440788,
       "firstYear": true,
-      "floor": 440788
+      "floor": 440788,
+      "priorYearBasis": "not_entered"
     },
     "statePrepayment": {
       "basis": "currentYear90",
       "dueDate": "2027-04-15",
       "minimum": 0,
-      "state": "UT"
+      "state": "UT",
+      "line5": 95732
+    },
+    "payments": {
+      "federal": {
+        "withholding": 450000,
+        "estimates": 0,
+        "totalPaid": 450000,
+        "target": 0,
+        "remaining": 0,
+        "quarters": [
+          {
+            "quarter": 1,
+            "dueDate": "2026-04-15",
+            "requiredThrough": 0,
+            "paidByDueDate": 112500,
+            "shortfall": 0,
+            "paidAppliedHere": 0
+          },
+          {
+            "quarter": 2,
+            "dueDate": "2026-06-15",
+            "requiredThrough": 0,
+            "paidByDueDate": 225000,
+            "shortfall": 0,
+            "paidAppliedHere": 0
+          },
+          {
+            "quarter": 3,
+            "dueDate": "2026-09-15",
+            "requiredThrough": 0,
+            "paidByDueDate": 337500,
+            "shortfall": 0,
+            "paidAppliedHere": 0
+          },
+          {
+            "quarter": 4,
+            "dueDate": "2027-01-15",
+            "requiredThrough": 0,
+            "paidByDueDate": 450000,
+            "shortfall": 0,
+            "paidAppliedHere": 0
+          }
+        ],
+        "safeHarborMet": true
+      },
+      "state": {
+        "withholding": 180000,
+        "estimates": 0,
+        "totalPaid": 180000,
+        "minimumBeforePayments": 95732,
+        "remaining": 0,
+        "dueDate": "2027-04-15"
+      }
     }
   },
   "derived": {
@@ -106,7 +160,13 @@
     "totalDeductibleExpenses": 301498,
     "equipmentAssumedSection179": 0,
     "startupIgnoredForEquipment": 0,
-    "priorYearFiguresApplied": false
+    "priorYearFiguresApplied": false,
+    "ownW2Wages": 0,
+    "ownW2Count": 0,
+    "estimatedPaymentCount": {
+      "federal": 0,
+      "state": 0
+    }
   },
   "even": {
     "estimate": {
@@ -182,13 +242,67 @@
     "safeHarbor": {
       "currentYearTarget": 440788,
       "firstYear": true,
-      "floor": 440788
+      "floor": 440788,
+      "priorYearBasis": "not_entered"
     },
     "statePrepayment": {
       "basis": "currentYear90",
       "dueDate": "2027-04-15",
       "minimum": 0,
-      "state": "UT"
+      "state": "UT",
+      "line5": 95732
+    },
+    "payments": {
+      "federal": {
+        "withholding": 450000,
+        "estimates": 0,
+        "totalPaid": 450000,
+        "target": 0,
+        "remaining": 0,
+        "quarters": [
+          {
+            "quarter": 1,
+            "dueDate": "2026-04-15",
+            "requiredThrough": 0,
+            "paidByDueDate": 112500,
+            "shortfall": 0,
+            "paidAppliedHere": 0
+          },
+          {
+            "quarter": 2,
+            "dueDate": "2026-06-15",
+            "requiredThrough": 0,
+            "paidByDueDate": 225000,
+            "shortfall": 0,
+            "paidAppliedHere": 0
+          },
+          {
+            "quarter": 3,
+            "dueDate": "2026-09-15",
+            "requiredThrough": 0,
+            "paidByDueDate": 337500,
+            "shortfall": 0,
+            "paidAppliedHere": 0
+          },
+          {
+            "quarter": 4,
+            "dueDate": "2027-01-15",
+            "requiredThrough": 0,
+            "paidByDueDate": 450000,
+            "shortfall": 0,
+            "paidAppliedHere": 0
+          }
+        ],
+        "safeHarborMet": true
+      },
+      "state": {
+        "withholding": 180000,
+        "estimates": 0,
+        "totalPaid": 180000,
+        "minimumBeforePayments": 95732,
+        "remaining": 0,
+        "dueDate": "2027-04-15"
+      }
     }
   }
 }

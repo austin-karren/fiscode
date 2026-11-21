@@ -33,6 +33,7 @@ export const exampleBundle = (): Bundle => ({
     priorYearAgiCents: null,
     priorYearStateTaxCents: null,
     priorYearFiguresYear: null,
+    priorYearNotFiled: null,
     createdAt: EXAMPLE_FIXED_TIMESTAMP,
     updatedAt: EXAMPLE_FIXED_TIMESTAMP,
   },
@@ -259,6 +260,10 @@ export const exampleBundle = (): Bundle => ({
       deletedAt: null,
     },
   ],
+  // No W-2 or estimated payment: the example is a 1099-only first year. The parity fixtures are
+  // built from it, so adding rows here would move their numbers.
+  w2Jobs: [],
+  estimatedPayments: [],
   // The example is a file to read and to author from, so it carries no edit
   // log. A real full export ends with a History table.
   history: [],

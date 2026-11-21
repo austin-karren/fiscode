@@ -42,6 +42,7 @@ const profile = {
   priorYearAgiCents: null,
   priorYearStateTaxCents: null,
   priorYearFiguresYear: null,
+  priorYearNotFiled: null,
 };
 
 // The database is SQLite over OPFS and the router needs a browser history;
@@ -429,6 +430,7 @@ describe("last year's return (prior-year safe harbor)", () => {
       priorYearAgiCents: null,
       priorYearStateTaxCents: null,
       priorYearFiguresYear: null,
+      priorYearNotFiled: null,
     });
   });
 
