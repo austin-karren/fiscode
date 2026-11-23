@@ -1,15 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// The vault migration state, done unless a test says otherwise.
+const vault = vi.hoisted(() => ({ state: { phase: "done" } as object }));
 vi.mock("@fiscode/db", async () => {
   // SQLite and OPFS don't exist in jsdom: the repos are the in-memory fake.
   const fake = await import("../../test/fake-documents");
   return {
-    // The vault migration is done: every write is on (vault PR 9).
-    getVaultMigrationState: (
-      (done) => () =>
-        done
-    )({ phase: "done" }),
+    getVaultMigrationState: () => vault.state,
     onVaultMigrationState: () => () => {},
 
     folderRepo: fake.folderRepo,
@@ -300,5 +298,18 @@ describe("Choose existing says how many there are (d-ux docs polish 2)", () => {
       target: { value: "demo-count-7" },
     });
     await waitFor(() => expect(line).toBeEmptyDOMElement());
+  });
+});
+
+describe("attach while the vault migration runs (REVIEW #107 r1 F1)", () => {
+  afterEach(() => {
+    vault.state = { phase: "done" };
+  });
+  it("turns off Choose files and Attach, and says why", async () => {
+    vault.state = { phase: "migrating", done: 1, total: 3 };
+    const dialog = await openAttach("ex_readonly");
+    const reason = "Moving your files into the vault… You can change documents when it finishes.";
+    expect(within(dialog).getByText(reason)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Choose files" })).toBeDisabled();
   });
 });

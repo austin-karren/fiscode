@@ -15,16 +15,15 @@ import { BackupCard } from "./backup-card";
 import { ImportCard } from "./import-card";
 import { FolderActions } from "./documents/folder-actions";
 
-const MIGRATING = "Moving your files into the vault… You can change documents when it finishes.";
-const INCOMPLETE = "Moving your files into the vault didn't finish. Resume it to change documents.";
-
 afterEach(cleanup);
 
 describe("read-only until the vault migration is done (vault PR 9)", () => {
   it("turns off backup and restore and says why", () => {
     state.current = { phase: "migrating", done: 2, total: 5 };
     render(<BackupCard />);
-    expect(screen.getByText(MIGRATING)).toBeInTheDocument();
+    expect(
+      screen.getByText("Backup and restore wait until your files are moved into the vault."),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Back up everything" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Restore from backup" })).toBeDisabled();
   });
@@ -32,7 +31,11 @@ describe("read-only until the vault migration is done (vault PR 9)", () => {
   it("turns off CSV import after a stopped migration, with its reason", () => {
     state.current = { phase: "migration-incomplete", reason: "failed", message: "Demo" };
     render(<ImportCard />);
-    expect(screen.getByText(INCOMPLETE)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Import waits until moving your files into the vault finishes. Resume it above.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Choose a CSV file/ })).toBeDisabled();
   });
 
@@ -63,7 +66,7 @@ describe("read-only until the vault migration is done (vault PR 9)", () => {
   it("turns writes back on when done", () => {
     state.current = { phase: "done" };
     render(<BackupCard />);
-    expect(screen.queryByText(MIGRATING)).not.toBeInTheDocument();
+    expect(screen.queryByText(/wait until/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Back up everything" })).toBeEnabled();
   });
 });

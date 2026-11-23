@@ -35,6 +35,12 @@ const { create, update, softDelete, revertTo, invalidate } = vi.hoisted(() => ({
 // The database is SQLite over OPFS and the router needs a browser history;
 // neither exists in jsdom. Both are replaced at the package boundary.
 vi.mock("@fiscode/db", () => ({
+  // The vault migration is done: every write is on (vault PR 9).
+  getVaultMigrationState: (
+    (done) => () =>
+      done
+  )({ phase: "done" }),
+  onVaultMigrationState: () => () => {},
   incomeRepo: { list: async () => [], create, update, softDelete, revertTo },
   clientRepo: { list: async () => [], listIncludingDeleted: async () => [] },
   profileRepo: { get: async () => null },

@@ -60,7 +60,7 @@ export function BackupCard({
     if (window.location.hash === `#${BACKUP_CARD_ID}`) restoreButton.current?.focus();
   }, []);
   // Backup and restore wait for the vault migration (§ 10).
-  const readOnly = useVaultReadOnly();
+  const readOnly = useVaultReadOnly("backup");
   return (
     <Card id={BACKUP_CARD_ID} className="scroll-mt-20">
       <CardHeader>

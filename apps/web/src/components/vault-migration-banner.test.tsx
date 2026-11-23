@@ -46,12 +46,18 @@ describe("vault migration banner (vault PR 9)", () => {
 
   it("after a stop, says why and resumes", () => {
     store.set({ phase: "migration-incomplete", reason: "failed", message: "Demo disk error" });
-    render(<VaultMigrationBanner />);
+    render(
+      <main id="main-content" tabIndex={-1}>
+        <VaultMigrationBanner />
+      </main>,
+    );
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("didn't finish. Resume it to change documents.");
     expect(alert).toHaveTextContent("Demo disk error");
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     expect(store.resume).toHaveBeenCalledOnce();
+    // The button goes away with the banner: focus stays on the page (REVIEW #107 r1 F3).
+    expect(document.activeElement).toBe(screen.getByRole("main"));
   });
 
   it("shows nothing when done", () => {

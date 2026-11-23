@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@fiscode/ui/components/button";
 import { resumeVaultMigration } from "@fiscode/db";
 
+import { MAIN_ID } from "../lib/nav";
 import { useVaultMigration, vaultReadOnlyReason } from "../lib/vault-migration";
 
 // The vault migration's banner (ADR 0001 § 10, § 11.3): progress while it runs, the reason and
@@ -15,9 +16,11 @@ export function VaultMigrationBanner() {
         role="status"
         className="mb-4 flex flex-wrap items-center gap-3 rounded-md border bg-muted/50 px-3 py-2 text-sm"
       >
+        {/* Only the phase is announced; the count changes per file, so it stays out of the live
+            region (the progress bar carries it for a screen reader that asks). */}
         <span>
           Moving your files into the vault
-          {state.total > 0 ? `: ${state.done} of ${state.total}` : "…"}
+          <span aria-hidden>{state.total > 0 ? `: ${state.done} of ${state.total}` : "…"}</span>
         </span>
         {state.total > 0 ? (
           <progress
@@ -45,6 +48,8 @@ export function VaultMigrationBanner() {
           size="sm"
           disabled={resuming}
           onClick={async () => {
+            // This button goes away as the banner changes: keep keyboard focus on the page.
+            document.getElementById(MAIN_ID)?.focus();
             setResuming(true);
             try {
               await resumeVaultMigration();

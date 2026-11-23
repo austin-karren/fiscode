@@ -175,7 +175,7 @@ export function ImportCard({
 
   const setup = variant === "setup";
   // Import waits for the vault migration (§ 10); reading a file to see what it holds is fine.
-  const readOnly = useVaultReadOnly();
+  const readOnly = useVaultReadOnly("import");
 
   return (
     <>

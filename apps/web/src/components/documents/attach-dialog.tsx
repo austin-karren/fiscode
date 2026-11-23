@@ -21,6 +21,8 @@ import { documentLinkRepo, documentRepo, folderRepo, sha256Hex } from "@fiscode/
 import type { DocumentFolderRow, DocumentRow } from "@fiscode/csv";
 import { errorLine, fileKind, folderPath } from "../../lib/documents-view";
 import { uploadFiles } from "../../lib/documents-upload";
+import { ReadOnlyNote } from "../read-only-note";
+import { useVaultReadOnly } from "../../lib/vault-migration";
 import { folderForRecord, type LinkableRecordType } from "../../lib/documents-links";
 
 // The most documents "Choose existing" lists at once; a search narrows the rest.
@@ -105,6 +107,8 @@ function AttachBody({
   const input = useRef<HTMLInputElement>(null);
   const searchBox = useRef<HTMLInputElement>(null);
   const id = useId();
+  // Attaching writes a document or a link: off until the vault migration is done (§ 10).
+  const readOnly = useVaultReadOnly();
 
   // What the dialog reads when it opens: the upload folder, the folders for paths, and what this
   // row already has attached (a subscription to outside state, dropped when the dialog closes).
@@ -229,12 +233,17 @@ function AttachBody({
       </TabsList>
 
       <TabsContent value="upload" className="grid gap-3 pt-2">
+        <ReadOnlyNote reason={readOnly} />
         <p className="text-sm text-muted-foreground">
           Files go into {target ? <span className="text-foreground">{target.path}</span> : "…"}.
           PDF, image or text, up to 25 MB each.
         </p>
         <div>
-          <Button type="button" disabled={!target || busy} onClick={() => input.current?.click()}>
+          <Button
+            type="button"
+            disabled={!target || busy || !!readOnly}
+            onClick={() => input.current?.click()}
+          >
             {busy ? "Uploading…" : "Choose files"}
           </Button>
           <input
@@ -259,6 +268,7 @@ function AttachBody({
       </TabsContent>
 
       <TabsContent value="choose" className="grid min-w-0 gap-3 pt-2">
+        <ReadOnlyNote reason={readOnly} />
         <div className="grid gap-1.5">
           <Label htmlFor={`${id}-q`}>Search documents</Label>
           <Input
@@ -298,6 +308,7 @@ function AttachBody({
                     variant="outline"
                     size="sm"
                     className="shrink-0"
+                    disabled={!!readOnly}
                     onClick={() => void choose(d)}
                   >
                     Attach <span className="sr-only">{d.name}</span>

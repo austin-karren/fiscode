@@ -4,6 +4,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // SQLite over OPFS does not exist in jsdom; the repo is replaced at the
 // package boundary.
 vi.mock("@fiscode/db", () => ({
+  // The vault migration is done: every write is on (vault PR 9).
+  getVaultMigrationState: (
+    (done) => () =>
+      done
+  )({ phase: "done" }),
+  onVaultMigrationState: () => () => {},
+
   expenseRepo: { update: vi.fn() },
   documentLinkRepo: { forRecord: async () => [], countsFor: async () => ({}) },
 }));
