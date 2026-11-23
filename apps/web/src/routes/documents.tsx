@@ -15,12 +15,8 @@ import { NameDialog } from "../components/documents/name-dialog";
 import { MoveDialog } from "../components/documents/move-dialog";
 import { DocumentSheet } from "../components/documents/document-sheet";
 import { FolderTree } from "../components/documents/folder-tree";
-import {
-  ALLOWED_DOCUMENT_MIMES,
-  YEAR_ROOT_KEY,
-  validDocumentName,
-  vaultFolderRules,
-} from "@fiscode/core";
+import { FolderActions } from "../components/documents/folder-actions";
+import { ALLOWED_DOCUMENT_MIMES, YEAR_ROOT_KEY, validDocumentName } from "@fiscode/core";
 import { documentLinkRepo, documentRepo, folderRepo } from "@fiscode/db";
 import type { DocumentRow, DocumentFolderRow } from "@fiscode/csv";
 import { fileKind, folderPath, formatBytes, subtreeOf } from "../lib/documents-view";
@@ -80,8 +76,6 @@ function DocumentsPage() {
   const refresh = () => router.invalidate();
   const { tree, folders, folderId, docs, linkCounts } = data;
   const current = folders.find((f) => f.id === folderId);
-  // Year folders are fixed; a year's default folders can be renamed but stay in their year (§ 5).
-  const rules = vaultFolderRules(current?.defaultKey ?? null);
   const openDoc = data.allDocs.find((d) => d.id === search.doc && d.deletedAt === null);
 
   const [dialog, setDialog] = useState<
@@ -201,31 +195,12 @@ function DocumentsPage() {
                     New folder
                   </Button>
                   {current ? (
-                    <>
-                      {rules.rename ? (
-                        <Button
-                          variant="ghost"
-                          onClick={() => setDialog({ kind: "rename-folder", folder: current })}
-                        >
-                          Rename folder
-                        </Button>
-                      ) : null}
-                      {rules.move ? (
-                        <Button
-                          variant="ghost"
-                          onClick={() => setDialog({ kind: "move-folder", folder: current })}
-                        >
-                          Move folder
-                        </Button>
-                      ) : null}
-                      <Button
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => void askDeleteFolder(current)}
-                      >
-                        Delete folder
-                      </Button>
-                    </>
+                    <FolderActions
+                      folder={current}
+                      onRename={() => setDialog({ kind: "rename-folder", folder: current })}
+                      onMove={() => setDialog({ kind: "move-folder", folder: current })}
+                      onDelete={() => void askDeleteFolder(current)}
+                    />
                   ) : null}
                   <form
                     role="search"
