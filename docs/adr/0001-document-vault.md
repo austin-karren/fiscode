@@ -228,7 +228,8 @@ Bytes that must survive for undo are recorded as their own ops. Soft delete is `
 trash/<sha>` (skipped if there) then `remove live`. **Replace bytes** and a **History revert to
 older bytes** are `copy live → versions/<current sha>` (if not there), then `copy
 versions/<old sha> → <tmp>` and rename over the live path. Restore from Trash is `copy
-trash/<sha> → <path>`. Rollback reverses the ops, and every `remove` it undoes has its bytes in
+<sha> → <path>`, where the sha is looked up in `versions/` first, then `trash/` (a sha lives in
+only one of them, and `versions/` wins, § 2). Rollback reverses the ops, and every `remove` it undoes has its bytes in
 `_fiscode/` from an earlier op of the same plan.
 
 Crash safety: on boot (and before any new tree change) a journal that is present is **rolled
@@ -327,8 +328,10 @@ Backup and restore wait until it is done. Steps:
 4. Keep `documents/blobs/` for one release as a fallback (D9), and delete it in the next release,
    only after this verification has passed.
 5. The same PR puts every repo write through the vault journal (§ 15), so no document is
-   written row-only after the job runs. As a backstop, every boot re-runs step 2 for any live row
-   whose `vault_path` is null or whose file does not hold its sha. This is cheap when there is nothing to do.
+   written row-only after the job runs. As a backstop, every boot re-runs step 2 **only for live
+   rows whose `vault_path` is null**. A row with a path whose file is missing or holds other bytes
+   is left to the reconcile scan (§ 6), so the backstop never overwrites an outside edit or
+   re-creates a file the user moved.
 
 Progress is `{phase:"migrating", done, total}`. It is resumable: each document is done once its
 `vault_path` is set and the file there has the right sha; a crash restarts at the first one not done.
@@ -413,6 +416,12 @@ picked folder, since sync may have changed them (§ 6).
 ## 14. Decisions taken (Austin, 2026-11-23)
 
 Austin accepted every recommendation. The "Chosen" column is binding; the other options are kept for the record.
+
+**Changed after acceptance (2026-11-23): trash and versions in a visible `_fiscode/`; the journal in OPFS.**
+Reason: review r1 found that Nextcloud desktop skips hidden files by default, so a `.fiscode/`
+folder would not sync and History and Trash would break after a mirror or restore. A journal synced
+to another device would also be replayed against that device's different sqlite. No D-number
+changes.
 
 | #   | Decision | Options | Chosen |
 |-----|----------|---------|----------------|
