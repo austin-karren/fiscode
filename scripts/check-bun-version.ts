@@ -23,9 +23,9 @@ for (const path of files) {
   for (const [i, line] of lines.entries()) {
     // FROM lines only, so prose in comments doesn't count.
     const image = /^\s*FROM\s+(?:--\S+\s+)*(\S+)/i.exec(line)?.[1];
-    // Any registry prefix (docker.io/, a mirror:port/); "bun" must end the name, so oven/bunny
+    // Any prefix (docker.io/, mirror:port/, ${REG}/); "bun" must end the name, so oven/bunny
     // isn't ours.
-    const ref = image && /^(?:[\w.-]+(?::\d+)?\/)?oven\/bun(?=[:@]|$)(.*)$/i.exec(image);
+    const ref = image && /^(?:\S*\/)?oven\/bun(?=[:@]|$)(.*)$/i.exec(image);
     if (!ref) continue;
     tags++;
     const rest = ref[1]!;
