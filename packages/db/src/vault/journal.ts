@@ -131,7 +131,11 @@ const rollForward = async (store: VaultStore, plan: Plan, hooks: RunHooks = {}) 
 };
 
 /** Where a tree change is (§ 11.3): file ops done of total, then the commit, then done. */
-export type TreeProgress = { phase: "moving" | "saving" | "done"; done: number; total: number };
+export type TreeProgress = {
+  phase: "moving" | "saving" | "repathing" | "done";
+  done: number;
+  total: number;
+};
 
 /**
  * A cancel is checked before each file op and before the commit, and rolls the files back. Once

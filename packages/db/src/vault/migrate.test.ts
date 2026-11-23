@@ -5,7 +5,13 @@ import { eq } from "drizzle-orm";
 import { setupTestDb, teardownTestDb } from "../test/setup-db.ts";
 import { getDb } from "../client.ts";
 import { document, documentFolder, history, meta } from "../schema/index.ts";
-import { documentRepo, linkedDates, prepareVault, runVaultStartup } from "../repo/index.ts";
+import {
+  documentRepo,
+  linkedDates,
+  prepareVault,
+  REPATH_DONE_KEY,
+  runVaultStartup,
+} from "../repo/index.ts";
 import { memoryDir, type VaultDirHandle } from "./dir.ts";
 import {
   isVaultMigrated,
@@ -266,6 +272,27 @@ describe("app start", () => {
     expect(await pathOf(imported.id)).toBe("documents/Unfiled/2026-01-05 Imported.pdf");
     // Left to the reconcile scan: not overwritten.
     expect(await (await store.read(placedPath))!.text()).toBe("edited outside");
+  });
+
+  it("after the migration, boot re-paths a double-dated file once", async () => {
+    const d = await seed("2026-08-12 Demo bill.pdf", "b");
+    await runVaultStartup();
+    const fixed = (await pathOf(d.id))!;
+    expect(fixed).toBe("documents/Unfiled/2026-08-12 Demo bill.pdf");
+    // Where the old rule put it.
+    const old = "documents/Unfiled/2026-01-05 2026-08-12 Demo bill.pdf";
+    await store.write(old, (await store.read(fixed))!);
+    await store.remove(fixed);
+    await getDb().update(document).set({ vaultPath: old }).where(eq(document.id, d.id));
+    await getDb().delete(meta).where(eq(meta.key, REPATH_DONE_KEY));
+    const seen: string[] = [];
+    await runVaultStartup({ onRepathProgress: (p) => seen.push(p.phase) });
+    expect(await pathOf(d.id)).toBe(fixed);
+    expect(seen).toEqual(["repathing", "done"]);
+    // Once: done is recorded, so the next boot doesn't run it.
+    seen.length = 0;
+    await runVaultStartup({ onRepathProgress: (p) => seen.push(p.phase) });
+    expect(seen).toEqual([]);
   });
 
   it("a migration done in another tab is not run again", async () => {
