@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { documentLinkSearch } from "../../lib/documents-search";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 
@@ -76,7 +77,7 @@ export function LinkedDocuments({
             <li key={l.id} className="flex min-w-0 items-center justify-between gap-2">
               <Link
                 to="/documents"
-                search={{ folder: l.document.folderId ?? undefined, doc: l.document.id }}
+                search={documentLinkSearch(l.document)}
                 className="min-w-0 truncate underline-offset-4 hover:underline"
               >
                 {l.document.name}
