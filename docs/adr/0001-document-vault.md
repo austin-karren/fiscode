@@ -485,7 +485,7 @@ changes.
 | 6 | d-data | Reconcile scan + `ScanReport` (§ 6) | 3 |
 | 7 | d-data | Picked-folder backend, permission state, cache (§ 7, § 11.1-2) | 6 |
 | 8 | d-ux | Upload and rename dialogs show the final path; category rules in the tree (§ 11.5-6) | 1, 3 |
-| 9 | d-ux | Migration banner and read-only Documents during it (§ 10); long-op progress, cancel and error lines (§ 11.3, 11.7); the migration report and the restore/import "shortened to fit" lines, shown in `/documents/check` | 3 (migration and journaled rename/move, which used to be PR 4) |
+| 9 | d-ux | Migration banner and read-only Documents during it (§ 10); long-op progress, cancel and error lines (§ 11.3, 11.7); the migration report and the restore/import "shortened to fit" lines, shown in `/documents/check` | 3 (migration and journaled rename/move, which used to be PR 4); 11 (the `/documents/check` page) |
 | 10 | d-ux | Vault settings: pick folder, reconnect banner, Firefox/Safari line (§ 11.1-2) | 7 |
 | 11 | d-ux | Scan report page `/documents/check`: moved, missing, new, conflicts (§ 11.4) | 6 |
 | 12 | d-ux | Export vault: button, folder choice (picker, or a zip download without one), progress and cancel; "Busy in another tab" line (§ 9, § 11.3, § 11.9) | 2 (lock), 5 |
