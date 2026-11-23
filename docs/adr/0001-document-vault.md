@@ -118,7 +118,8 @@ backup and the dialogs' preview of the final path:
 
 ```ts
 vaultFileName(input: { date: string | null; title: string; ext: string }): string
-vaultPath(doc, folders, takenPathsLowercase): string   // name + collision rule below
+vaultPath(doc, folders, takenPathsLowercase):
+  { path: string; fits: boolean; overBy: number }   // name + collision rule below
 ```
 
 **Derivation.** `<YYYY-MM-DD> <title>.<ext>`.
@@ -185,7 +186,9 @@ subset of what it accepts, so a Drive mirror needs no further rewriting.
   level is renamed on disk to "Unfiled (2)" by the collision rule.
 - **What can be renamed or moved** (d-ux constraint 6): user folders freely. Default category
   folders can be renamed (their key stays, so year defaults never recreate them) but not moved out
-  of their year. A year folder cannot be renamed or moved: its name is the tax year and the
+  of their year. Renaming a category affects **only that year**: each year has its own default
+  folder rows, so renaming 2026's "Other" leaves 2025's alone (the confirm dialog says "Only 2026").
+  New years still get the default names. A year folder cannot be renamed or moved: its name is the tax year and the
   layout's first level. Decision D5.
 
 ## 6. Rename and move: no orphans, no duplicates
@@ -274,7 +277,12 @@ device with a fresh database is restored by importing that CSV and adopting the 
 
 ## 10. Migration from the current storage
 
-A one-off, resumable job on boot after the schema migration (d-data, needs a migration slot):
+A one-off, resumable job (d-data, needs a migration slot). **Entry point:** it starts on its own
+at the first boot after the schema migration, with no click needed, and shows a progress banner. While it runs the
+app stays usable. Every screen without documents (income, expenses, mileage, year-end) works
+normally. The Documents screen and the attach and upload dialogs are **read-only**: preview works from the old
+store, and upload, rename, move, delete and replace are disabled with "Moving your files into the vault…".
+Backup and restore wait until it is done. Steps:
 
 1. Schema: `document.vault_path text` (the current relative path, unique among live rows,
    case-folded index) and optionally `document.title` if D2 separates title from name. Generated
@@ -293,7 +301,8 @@ Cancelling stops between documents and leaves both stores readable (the old stor
 
 1. **Permission state.** `vault.permission(): Promise<"opfs" | "granted" | "prompt" | "denied">`
    ("opfs" = no picked folder). `vault.reconnect()` calls `requestPermission` and must run in a
-   click handler. When not granted, the banner shows; reads come from the OPFS cache (bytes not in
+   click handler. When not granted, the banner shows "Reconnect to see your files" with one
+   Reconnect button; reads come from the OPFS cache (bytes not in
    the cache show "File not on this device"). **Writes are blocked** with `VaultPermissionError`
    ("Reconnect your vault folder to save changes."), not queued: a queue would let sqlite and the
    folder drift while sync runs. Decision D10.
@@ -309,8 +318,19 @@ Cancelling stops between documents and leaves both stores readable (the old stor
    and from a "Check folder" button. Report: `moved[]` (adopt or put back), `missing[]` (row shows the
    existing "File not on this device"), `changed[]` (new version recorded), `unknown[]` ("New in
    folder", one-click import), `conflicts[]` (path shown, user resolves). No silent deletes ever.
+   A focus scan that fires while a long op (rename/move, migration, export, restore) runs is
+   **skipped**, not queued: the op ends with its own scan of what it touched, and the next focus
+   scans again. The report is a **page** (`/documents/check`) reached from a badge on Documents
+   ("3 to review"), not a dialog, because it can list hundreds of rows and is worked through over
+   time. **Unknown** means a file under `documents/` with no row whose type is on the upload
+   allow-list (PDF, PNG, JPEG, WebP, HEIC, GIF, text). Other files (a `.docx`, `.DS_Store`,
+   `desktop.ini`, `Thumbs.db`) are ignored and never listed; `.fiscode/` is never scanned as
+   documents.
 5. **Names.** `vaultFileName` and `vaultPath` in `packages/core` (§ 3, § 4) are pure, so dialogs
-   show the final path before save. The user edits the title; date and extension are derived.
+   show the final path before save. `vaultPath` never throws for length: it returns
+   `{ path, fits, overBy }` after the § 3 shortening, and `fits: false` (only when a name cannot be
+   shortened further, e.g. a deep tree of long folder names) lets the dialog show "Name too long"
+   and disable Save. `VaultPathTooLongError` is thrown only by a write that ignored it. The user edits the title; date and extension are derived.
 6. **Categories.** Defaults per year, renamable, not movable; year folders fixed; user folders
    free, depth ≤ 8 (§ 5).
 7. **Errors.** All extend `DocumentError` with a displayable `message`: `VaultPermissionError`,
@@ -318,10 +338,20 @@ Cancelling stops between documents and leaves both stores readable (the old stor
    `StorageQuotaError` (exists), `VaultFileLockedError` (a write failed with
    `NoModificationAllowedError`/`InvalidStateError`, e.g. a sync client holds it), `VaultConflictError`
    (carries `path` and the conflict copy's `path`), `VaultIntegrityError` (sha256 mismatch on read
-   or restore; carries `path`), `VaultPathTooLongError`.
+   or restore; carries `path`), `VaultPathTooLongError`, `VaultBusyError` (item 9).
 8. **Preview.** `documentRepo.readBytes(id)` and `documentRepo.objectUrl(id)` keep their
    signatures and resolve through the `VaultStore`, so the sheet does not care whether bytes come
    from OPFS, the picked folder or the cache.
+
+9. **More than one tab.** Every tree change, scan, migration, export and restore runs under one
+   Web Lock, `navigator.locks.request("fiscode-vault", …)` (all four engines). A rename in one
+   tab therefore makes the others wait. A user action asks with `ifAvailable: true`: if it doesn't get
+   the lock, it throws `VaultBusyError` ("Busy in another tab. Try again when it finishes."), and the UI shows that line
+   on the action rather than freezing. Background work (focus scan, journal recovery at boot)
+   waits for the lock instead. Journal recovery runs in whichever tab gets the lock first at
+   boot. When one tab finishes a change, it posts to a `BroadcastChannel("fiscode-vault")` so other tabs
+   refresh their loaders (`router.invalidate()`). sqlite writes are already single-writer through
+   SQLocal, and the lock adds the file side.
 
 ## 12. What Nextcloud and Drive sync later needs
 
@@ -353,7 +383,7 @@ picked folder, since sync may have changed them (§ 6).
 | D4  | Path length budget | (a) 240 chars total, 120 bytes per name; (b) no total limit | (a): Windows Nextcloud clients refuse longer paths |
 | D5  | Year folders | (a) fixed; (b) renamable | (a) |
 | D6  | A file moved outside the app | (a) adopt the new place into sqlite; (b) move it back; (c) ask each time | (c) in the scan report, with "adopt all" |
-| D7  | With a picked folder, keep a full OPFS copy? | (a) cache only recently viewed; (b) full mirror | (a): halves storage; the folder is the vault |
+| D7  | With a picked folder, keep a full OPFS copy? | (a) cache only recently viewed; (b) full mirror | (a): halves storage; the folder is the vault. **Trade-off:** while the permission is lapsed, every file not recently viewed shows "File not on this device" until you click Reconnect (the banner says "Reconnect to see your files"). With "Allow on every visit" in Chrome this is rare; (b) avoids it at double the storage |
 | D8  | Write the latest CSV into `exports/` on every backup | yes / no | yes: makes the vault restorable without the app |
 | D9  | After migration, keep `documents/blobs` one release | yes / no | yes, then delete in the next release |
 | D10 | Writes while the folder isn't granted | (a) block with a message; (b) queue and replay | (a) |
@@ -372,8 +402,9 @@ picked folder, since sync may have changed them (§ 6).
 | 6 | d-data | Reconcile scan + `ScanReport` (§ 6) | 4 |
 | 7 | d-data | Picked-folder backend, permission state, cache (§ 7, § 11.1-2) | 6 |
 | 8 | d-ux | Upload and rename dialogs show the final path; category rules in the tree (§ 11.5-6) | 1, 4 |
-| 9 | d-ux | Migration and long-op progress, cancel and error lines (§ 11.3, 11.7) | 3 |
+| 9 | d-ux | Migration banner and read-only Documents during it (§ 10); long-op progress, cancel and error lines (§ 11.3, 11.7) | 3 |
 | 10 | d-ux | Vault settings: pick folder, reconnect banner, Firefox/Safari line (§ 11.1-2) | 7 |
-| 11 | d-ux | Scan report UI: moved, missing, new, conflicts (§ 11.4) | 6 |
+| 11 | d-ux | Scan report page `/documents/check`: moved, missing, new, conflicts (§ 11.4) | 6 |
+| 12 | d-ux | Export vault: button, folder choice (picker, or a zip download without one), progress and cancel; "Busy in another tab" line (§ 9, § 11.3, § 11.9) | 5 |
 
 PRs 1-6 are useful alone (OPFS vault, better backups) before any picked folder exists.
