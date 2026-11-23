@@ -11,7 +11,7 @@
     "./repo": "./src/repo/index.ts",
     "./bundle": "./src/bundle.ts",
     "./test": "./src/test/setup-db.ts",
-    "./blob-store": "./src/blob-store.ts"
+    "./vault": "./src/vault/index.ts"
   },
   "scripts": {
     "check-types": "tsc --noEmit",

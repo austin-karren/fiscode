@@ -8,6 +8,9 @@ import {
   readdirSync,
   readFileSync,
   readSync,
+  renameSync,
+  rmdirSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -17,7 +20,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { strFromU8, unzipSync } from "fflate";
 // Subpaths only: "@fiscode/db" loads boot.ts, which needs Vite's import.meta.glob.
-import { __setBlobStoreForTests, type BlobStore } from "@fiscode/db/blob-store";
+import {
+  __setVaultStoreForTests,
+  vaultStore,
+  type VaultDirHandle,
+  type VaultFileHandle,
+  type VaultStore,
+} from "@fiscode/db/vault";
 import { __resetDbForTests, __setDbForTests } from "@fiscode/db/client";
 import { buildBundle } from "@fiscode/db/repo";
 import { tables } from "@fiscode/db/schema";
@@ -41,22 +50,68 @@ import {
 const MIGRATIONS = fileURLToPath(new URL("../../db/src/migrations", import.meta.url));
 const DB_FILE = "fiscode.sqlite";
 
-/** Document bytes in a directory, laid out as OPFS lays them out. */
-export const fsBlobStore = (dir: string): BlobStore => {
-  const at = (sha: string) => join(dir, "documents", "blobs", sha.slice(0, 2), sha);
+const notFound = (path: string) => new DOMException(`${path} not found`, "NotFoundError");
+
+/** A directory on disk behind the same handle shape as OPFS, so the vault store runs on it. */
+export const fsDir = (path: string): VaultDirHandle => {
+  const file = (at: string): VaultFileHandle => ({
+    kind: "file",
+    async getFile() {
+      if (!existsSync(at)) throw notFound(at);
+      return new Blob([readFileSync(at)]);
+    },
+    async createWritable() {
+      const parts: Blob[] = [];
+      return {
+        async write(data) {
+          parts.push(data);
+        },
+        async close() {
+          writeFileSync(at, new Uint8Array(await new Blob(parts).arrayBuffer()));
+        },
+      };
+    },
+    async move(newName) {
+      renameSync(at, join(dirname(at), newName));
+    },
+  });
   return {
-    async has(sha) {
-      return existsSync(at(sha));
+    kind: "directory",
+    async getDirectoryHandle(name, options) {
+      const at = join(path, name);
+      if (!existsSync(at)) {
+        if (!options?.create) throw notFound(at);
+        mkdirSync(at);
+      } else if (!statSync(at).isDirectory()) throw new DOMException(at, "TypeMismatchError");
+      return fsDir(at);
     },
-    async put(sha, bytes) {
-      if (existsSync(at(sha))) return;
-      mkdirSync(dirname(at(sha)), { recursive: true });
-      writeFileSync(at(sha), new Uint8Array(await bytes.arrayBuffer()));
+    async getFileHandle(name, options) {
+      const at = join(path, name);
+      if (!existsSync(at)) {
+        if (!options?.create) throw notFound(at);
+        writeFileSync(at, new Uint8Array());
+      } else if (statSync(at).isDirectory()) throw new DOMException(at, "TypeMismatchError");
+      return file(at);
     },
-    async get(sha) {
-      return existsSync(at(sha)) ? new Blob([readFileSync(at(sha))]) : undefined;
+    async removeEntry(name, options) {
+      const at = join(path, name);
+      if (!existsSync(at)) throw notFound(at);
+      if (statSync(at).isDirectory() && !options?.recursive) rmdirSync(at);
+      else rmSync(at, { recursive: true });
+    },
+    async *entries() {
+      for (const name of readdirSync(path).sort()) {
+        const at = join(path, name);
+        yield [name, statSync(at).isDirectory() ? fsDir(at) : file(at)];
+      }
     },
   };
+};
+
+/** Document bytes in a directory, laid out as OPFS lays them out. */
+export const fsVaultStore = (dir: string): VaultStore => {
+  mkdirSync(dir, { recursive: true });
+  return vaultStore(fsDir(dir));
 };
 
 /**
@@ -86,10 +141,10 @@ export const openProfileDir = async (dir: string): Promise<() => void> => {
       throw err;
     }
   });
-  __setBlobStoreForTests(fsBlobStore(dir));
+  __setVaultStoreForTests(fsVaultStore(dir));
   return () => {
     __resetDbForTests();
-    __setBlobStoreForTests(undefined);
+    __setVaultStoreForTests(undefined);
     sqlite.close();
   };
 };
@@ -170,7 +225,7 @@ export const restoreBackupToDir = async (
   if (!file.ok) throw new Error(refusal(file));
   const close = await openProfileDir(dir);
   try {
-    await restoreBackupInto(file, fsBlobStore(dir));
+    await restoreBackupInto(file, fsVaultStore(dir));
   } finally {
     close();
   }
@@ -187,7 +242,7 @@ const zipDir = async (
   try {
     return await buildBackupZip(
       await buildBundle({ includeDeleted: true, includeHistory: true }),
-      fsBlobStore(dir),
+      fsVaultStore(dir),
       options,
     );
   } finally {

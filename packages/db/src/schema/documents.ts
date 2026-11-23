@@ -3,7 +3,7 @@ import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqli
 
 // Document folders, documents and their links to records (contract: d-data
 // drafts/contract-documents.md). Bytes never live here: a document's bytes are a
-// content-addressed blob in OPFS at documents/blobs/<sha[0:2]>/<sha256> (blob-store.ts).
+// content-addressed blob in OPFS at documents/blobs/<sha[0:2]>/<sha256> (vault/store.ts).
 
 /** A folder. `parentId` null = a root folder. Names are unique among live siblings (repo). */
 export const documentFolder = sqliteTable(

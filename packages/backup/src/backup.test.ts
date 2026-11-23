@@ -17,16 +17,17 @@ import {
 } from "@fiscode/core";
 import { exampleBundle, exportBundle } from "@fiscode/csv";
 import {
-  __setBlobStoreForTests,
+  __setVaultStoreForTests,
   buildBundle,
   historyRepo,
   documentLinkRepo,
   documentRepo,
   folderRepo,
   importBundle,
-  memoryBlobStore,
+  memoryDir,
+  vaultStore,
 } from "@fiscode/db";
-import { sha256Hex } from "@fiscode/db/blob-store";
+import { sha256Hex } from "@fiscode/db/vault";
 import { setupTestDb, teardownTestDb } from "@fiscode/db/test";
 import {
   createBackup,
@@ -58,10 +59,10 @@ const plain = async (blob: Blob) => decryptBackup(new Uint8Array(await blob.arra
 let sqlite: Database.Database;
 beforeEach(() => {
   sqlite = setupTestDb();
-  __setBlobStoreForTests(memoryBlobStore());
+  __setVaultStoreForTests(vaultStore(memoryDir()));
 });
 afterEach(() => {
-  __setBlobStoreForTests(undefined);
+  __setVaultStoreForTests(undefined);
   teardownTestDb(sqlite);
 });
 
@@ -69,7 +70,7 @@ afterEach(() => {
 const emptyProfile = () => {
   teardownTestDb(sqlite);
   sqlite = setupTestDb();
-  __setBlobStoreForTests(memoryBlobStore());
+  __setVaultStoreForTests(vaultStore(memoryDir()));
 };
 
 const file = (name: string, text: string) =>
@@ -309,7 +310,7 @@ describe("backup: refusals (nothing written)", () => {
 describe("backup: a device without some bytes (after a CSV-only restore)", () => {
   it("backs up anyway, lists them as missing, and restores the rows", async () => {
     await seed();
-    __setBlobStoreForTests(memoryBlobStore()); // this device has none of the files
+    __setVaultStoreForTests(vaultStore(memoryDir())); // this device has none of the files
     const backup = await createBackup({
       createdAt: CREATED,
       passphrase: PASS,
@@ -423,7 +424,7 @@ describe("review #85 r1", () => {
 
   it("(2) missing files are reported with the documents' names; counts.blobs is cross-checked", async () => {
     await seed();
-    __setBlobStoreForTests(memoryBlobStore());
+    __setVaultStoreForTests(vaultStore(memoryDir()));
     const backup = await createBackup({
       createdAt: CREATED,
       passphrase: PASS,
@@ -494,7 +495,7 @@ describe("review #85 r1: the script reports missing files", () => {
 
   it("(2) verify exits 3 and names them, unless --allow-missing; summary and restore print them", async () => {
     await seed();
-    __setBlobStoreForTests(memoryBlobStore());
+    __setVaultStoreForTests(vaultStore(memoryDir()));
     const backup = await createBackup({
       createdAt: CREATED,
       passphrase: PASS,
