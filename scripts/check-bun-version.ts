@@ -3,7 +3,7 @@
 //   bun scripts/check-bun-version.ts
 import { Glob } from "bun";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = `${import.meta.dir}/../`;
 const pkg = await Bun.file(`${root}package.json`).json();
 const want = /^bun@(\d+\.\d+\.\d+)$/.exec(pkg.packageManager ?? "")?.[1];
 if (!want) {
@@ -13,16 +13,17 @@ if (!want) {
 
 const problems: string[] = [];
 let tags = 0;
-for await (const path of new Glob("**/Dockerfile*").scan({ cwd: root })) {
-  if (path.includes("node_modules/")) continue;
+for await (const path of new Glob("{apps,packages}/*/Dockerfile*").scan({ cwd: root })) {
   const lines = (await Bun.file(`${root}${path}`).text()).split("\n");
   lines.forEach((line, i) => {
-    // Only versioned tags; the prose "oven/bun:alpine" in a comment has no version.
-    for (const m of line.matchAll(/oven\/bun:(\d+\.\d+\.\d+)/g)) {
-      tags++;
-      if (m[1] !== want)
-        problems.push(`${path}:${i + 1}: oven/bun:${m[1]}, packageManager is bun@${want}`);
-    }
+    // FROM lines only, so prose in comments doesn't count. A tag without an exact x.y.z
+    // (latest, alpine, 1.4) fails too: it can't be checked against packageManager.
+    const m = /^\s*FROM\s+(?:--\S+\s+)*oven\/bun(?::(\S+))?/i.exec(line);
+    if (!m) return;
+    tags++;
+    const got = /^(\d+\.\d+\.\d+)(?:-|$)/.exec(m[1] ?? "")?.[1];
+    if (got !== want)
+      problems.push(`${path}:${i + 1}: oven/bun:${m[1] ?? ""}, packageManager is bun@${want}`);
   });
 }
 
