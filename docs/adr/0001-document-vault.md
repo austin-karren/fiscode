@@ -69,23 +69,36 @@ exists outside a zip.
     accountant-summary-2026.pdf
   backups/
     fiscode-backup-2026-11-23.zip.age
-  .fiscode/
+  _fiscode/
     versions/<sha[0:2]>/<sha256>     older bytes History still references (no extension)
     trash/<sha[0:2]>/<sha256>        bytes of soft-deleted documents
-    journal.json                     pending tree operations (§ 6)
 ```
 
-- `documents/` is the only part a person is meant to browse. Everything the app needs but a person
-  doesn't (old versions, trash, journal) is under the dot-folder `.fiscode/`, which Finder,
-  Explorer, Nextcloud and Drive show but sort out of the way, and which sync carries like any file.
+OPFS only, never in the vault folder (device-local):
+```
+vault-journal.json                   pending tree operations (§ 6)
+```
+
+- `documents/` is the only part a person is meant to browse. Old versions and trash, which the app
+  needs and a person doesn't, are under `_fiscode/`. The folder is **visible, not a dot-folder**:
+  Nextcloud desktop skips hidden files by default ("Sync hidden files" is off) and Finder hides
+  dot-folders, so a `.fiscode/` would silently fail to sync. The leading `_` sorts it out of the
+  way. This keeps History and Trash working after a 1:1 mirror or restore.
+- The **journal never lives in the vault**: it is in OPFS. Another device has its own sqlite, so
+  recovering against a journal synced from a foreign device would be wrong.
 - A soft-deleted document leaves the readable tree (it is in Trash in the app), so a person browsing
-  Drive never sees deleted files mixed with live ones. Its bytes move to `.fiscode/trash/` so undo
-  still works. Purging Trash is out of scope here; today blobs are never deleted and that stays.
+  Drive never sees deleted files mixed with live ones. Its bytes are copied to `_fiscode/trash/` (then the
+  live file is removed) so undo still works. Purging Trash is out of scope here; today blobs are never deleted and that stays.
 - One file per live document, even when two documents share bytes (today's dedupe). The tree must
-  read correctly without the app, so duplicates are real copies; `.fiscode/versions` and `trash`
-  stay deduplicated by sha.
-- The backup zip's contents become exactly `fiscode.json` + `documents/` + `.fiscode/versions` +
-  `.fiscode/trash` + the CSV, so unzipping a backup *is* a vault (§ 9).
+  read correctly without the app, so duplicates are real copies; `_fiscode/versions` and `trash`
+  stay deduplicated by sha. A sha is stored in at most one of them: if History references it,
+  it is in `versions/` (which wins), else in `trash/`.
+- **Bytes leave `_fiscode/` only by copy, never by move** (temp name, then rename into place).
+  Two documents can share one sha there (D12), so moving it out for one would strip the other.
+  A `_fiscode/` file is removed only when no row and no History entry references its sha, which
+  today means never.
+- The backup zip's contents become exactly `fiscode.json` + `documents/` + `_fiscode/versions` +
+  `_fiscode/trash` + the CSV, so unzipping a backup *is* a vault (§ 9).
 
 ### Manifest `fiscode.json`
 
@@ -100,7 +113,7 @@ exists outside a zip.
                        "sha256": "<64 hex>", "sizeBytes": 123456 }
   },
   "blobs": {                     // every other referenced byte file
-    "<sha256>": { "path": ".fiscode/versions/ab/<sha256>", "sizeBytes": 999 }
+    "<sha256>": { "path": "_fiscode/versions/ab/<sha256>", "sizeBytes": 999 }
   },
   "missing": ["<sha256>"]        // referenced but not on this device (as the backup has today)
 }
@@ -194,26 +207,36 @@ subset of what it accepts, so a Drive mirror needs no further rewriting.
 ## 6. Rename and move: no orphans, no duplicates
 
 A rename or move changes sqlite rows and one or many file paths. Neither store has a transaction
-that spans both, so we use a **write-ahead journal** in the vault.
+that spans both, so we use a **write-ahead journal**, kept in OPFS (§ 2).
 
 Order of operations for any tree change (upload, rename, move, replace bytes, soft delete,
-restore):
-1. Compute the plan in memory: the new rows and a list of file ops `{from, to, sha256}`.
-2. Write the plan to `.fiscode/journal.json` (write to `journal.json.tmp`, then move over; OPFS
-   and FSA writables already commit only on `close()`).
+restore from Trash, and **a History revert** that changes a document's name, folder, bytes or
+deleted state, or a folder's name or parent; a History revert of notes only is not a tree change):
+1. Compute the plan in memory: a new `planId` (uuid), the new rows, and a list of file ops
+   `{op: "copy" | "move" | "remove", from, to, sha256}`.
+2. Write the plan to OPFS `vault-journal.json` (writables commit only on `close()`).
 3. Do the file ops. Each op is idempotent: a move whose `to` already holds `sha256` and whose
-   `from` is gone is done; a new file is written to `<to>.fiscode-tmp` and then moved into place,
-   so a half-written file never has its final name.
-4. Commit the sqlite rows and their History rows in one `runAtomic` transaction (as the tree
-   operations do today).
-5. Rewrite `fiscode.json`, then delete the journal.
+   `from` is gone is done; a copy whose `to` holds `sha256` is done; a new file is written to a
+   hidden temp name `.<name>.fiscode-tmp` in the same directory and then renamed into place, so a
+   half-written file never has its final name (Nextcloud skips dot-files, so it does not upload
+   the temp file).
+4. Commit the sqlite rows, their History rows and `INSERT INTO vault_applied(plan_id)` in one
+   `runAtomic` transaction.
+5. Rewrite `fiscode.json`, delete the journal, then delete the `vault_applied` row.
+
+Bytes that must survive for undo are recorded as their own ops. Soft delete is `copy live →
+trash/<sha>` (skipped if there) then `remove live`. **Replace bytes** and a **History revert to
+older bytes** are `copy live → versions/<current sha>` (if not there), then `copy
+versions/<old sha> → <tmp>` and rename over the live path. Restore from Trash is `copy
+trash/<sha> → <path>`. Rollback reverses the ops, and every `remove` it undoes has its bytes in
+`_fiscode/` from an earlier op of the same plan.
 
 Crash safety: on boot (and before any new tree change) a journal that is present is **rolled
-forward** if the sqlite rows show step 4 committed (the plan carries the new `updatedAt`), and
-**rolled back** (ops reversed in reverse order) if not. Either way the tree and sqlite agree
-before anything else runs, and no file exists twice or nowhere. Upload is the simple case: bytes
-land first under a temp name, so a crash before the commit leaves only a `*.fiscode-tmp` that the
-scan deletes.
+forward** if a `vault_applied` row with its `planId` exists, and **rolled back** (ops reversed in
+reverse order) if not. The check is exact. It does not rely on `updatedAt`, which a later write or
+a clock step can change. The `vault_applied` table is created in PR 3's migration. Either way
+the tree and sqlite agree before anything else runs, and no file exists twice or nowhere. A crash
+before the commit of an upload leaves only a `.*.fiscode-tmp` file, which the scan deletes.
 
 Folder rename/move on disk moves each file into the new directory and then removes the old
 empty directories; we do not rely on a directory `move()` because the File System Access API's
@@ -228,9 +251,14 @@ sqlite wins for metadata and the tree wins for bytes, through a **reconcile scan
 | Row's path holds the right sha                             | ok                                             |
 | Row's path missing, same sha found elsewhere in `documents/` | treat as an outside move: offer to adopt the new folder/name (D6) or move it back |
 | Row's path missing, sha nowhere                            | row shows "File not on this device" (existing state) |
-| Row's path holds a different sha                           | an outside edit: keep the new bytes as a new version (old bytes to `.fiscode/versions`), History records it |
+| Row's path holds a different sha                           | an outside edit: keep the new bytes as a new version (old bytes to `_fiscode/versions`), History records it |
 | File with no row                                           | listed as "New in folder": one click to import it as a document in that folder |
-| `*.fiscode-tmp`, or a sync conflict copy (`* (conflicted copy *)`, `* (1).pdf` of Drive) | conflict files listed, never imported silently |
+| `.*.fiscode-tmp`                                           | deleted (leftover of a crashed write)          |
+| A sync conflict copy: Nextcloud `* (conflicted copy *)`; Drive `<stem> (1).<ext>` **only when** `<stem>.<ext>` exists beside it and has a row | listed as a conflict, never imported silently. A lone `Invoice (1).pdf` is an ordinary "New in folder" file |
+
+**Two devices, one synced folder** is out of scope for phase 1: one device writes the vault. A
+second device's scan would list the first device's uploads as "New in folder", and it imports
+nothing unless the user clicks. Multi-device sync is the phase 2 ADR (§ 12).
 
 ## 7. How the browser holds a real tree
 
@@ -249,7 +277,7 @@ Two backends behind one interface (replacing `BlobStore` with a `VaultStore`):
   visit", which makes `granted` stick; otherwise the user re-grants with one click per session.
 - **sqlite never moves to the picked folder** (Austin, 2026-11-23). `fiscode.sqlite` always stays
   in OPFS (§ 8). The picked folder holds what Austin opens outside the app: `documents/`,
-  `exports/` and `backups/`, plus `fiscode.json` and `.fiscode/`, which the app needs to keep
+  `exports/` and `backups/`, plus `fiscode.json` and `_fiscode/`, which the app needs to keep
   them consistent.
 - When a folder is picked, the vault lives there and OPFS keeps a read cache of recently viewed
   files only (D7). Without a folder, OPFS is the vault and the user gets the tree out through
@@ -272,8 +300,8 @@ device with a fresh database is restored by importing that CSV and adopting the 
   zip where there is no picker.
 - **Backup** stays as it is: one deterministic zip, age-encrypted, `fiscode-backup-<date>.zip.age`.
   Only the paths inside change: `manifest.json` becomes `fiscode.json` (format bumps to
-  `formatVersion: 2`), live files use the § 3 names, `.versions` moves to `.fiscode/versions`,
-  soft-deleted bytes go to `.fiscode/trash`. Readers keep accepting format 1.
+  `formatVersion: 2`), live files use the § 3 names, `.versions` moves to `_fiscode/versions`,
+  soft-deleted bytes go to `_fiscode/trash`. Readers keep accepting format 1.
 - **Restore** is 1:1: every file in the zip or folder is checked against `fiscode.json` (size and
   sha256) before anything is written, as `readBackup` does now; then rows are imported and each
   file is written to its manifest path. A test restores a vault into an empty store and asserts the
@@ -291,11 +319,16 @@ Backup and restore wait until it is done. Steps:
 1. Schema: `document.vault_path text` (the current relative path, unique among live rows,
    case-folded index) and optionally `document.title` if D2 separates title from name. Generated
    with `bun run db:generate`.
+   Also the `vault_applied(plan_id text primary key)` table (§ 6).
 2. For each live document (sorted by `added_at, id` so collision suffixes are stable): compute its
    path, copy `documents/blobs/<sha>` to `vault/<path>` via temp name, set `vault_path`. Then copy
-   every other referenced blob to `.fiscode/versions` or `.fiscode/trash`.
+   every other referenced blob to `_fiscode/versions` or `_fiscode/trash`.
 3. Write `fiscode.json`, verify every sha256, then mark the migration done in a `meta` row.
-4. Only after verification: delete `documents/blobs/` (D9: or keep it one release as a fallback).
+4. Keep `documents/blobs/` for one release as a fallback (D9), and delete it in the next release,
+   only after this verification has passed.
+5. The same PR puts every repo write through the vault journal (§ 15), so no document is
+   written row-only after the job runs. As a backstop, every boot re-runs step 2 for any live row
+   whose `vault_path` is null or whose file does not hold its sha. This is cheap when there is nothing to do.
 
 Progress is `{phase:"migrating", done, total}`. It is resumable: each document is done once its
 `vault_path` is set and the file there has the right sha; a crash restarts at the first one not done.
@@ -328,7 +361,7 @@ Cancelling stops between documents and leaves both stores readable (the old stor
    ("3 to review"), not a dialog, because it can list hundreds of rows and is worked through over
    time. **Unknown** means a file under `documents/` with no row whose type is on the upload
    allow-list (PDF, PNG, JPEG, WebP, HEIC, GIF, text). Other files (a `.docx`, `.DS_Store`,
-   `desktop.ini`, `Thumbs.db`) are ignored and never listed; `.fiscode/` is never scanned as
+   `desktop.ini`, `Thumbs.db`) are ignored and never listed; `_fiscode/` is never scanned as
    documents.
 5. **Names.** `vaultFileName` and `vaultPath` in `packages/core` (§ 3, § 4) are pure, so dialogs
    show the final path before save. `vaultPath` never throws for length: it returns
@@ -389,7 +422,7 @@ Austin accepted every recommendation. The "Chosen" column is binding; the other 
 | D4  | Path length budget | (a) 240 chars total, 120 bytes per name; (b) no total limit | (a): Windows Nextcloud clients refuse longer paths |
 | D5  | Year folders | (a) fixed; (b) renamable | (a) |
 | D6  | A file moved outside the app | (a) adopt the new place into sqlite; (b) move it back; (c) ask each time | (c) in the scan report, with "adopt all" |
-| D7  | With a picked folder, keep a full OPFS copy? | (a) cache only recently viewed; (b) full mirror | (a): OPFS holds sqlite plus a document cache; the picked folder holds `documents/`, `exports/` and `backups/`, and sqlite never moves there (Austin, 2026-11-23). halves storage; the folder is the vault. **Trade-off:** while the permission is lapsed, every file not recently viewed shows "File not on this device" until you click Reconnect (the banner says "Reconnect to see your files"). With "Allow on every visit" in Chrome this is rare; (b) avoids it at double the storage |
+| D7  | With a picked folder, keep a full OPFS copy? | (a) cache only recently viewed; (b) full mirror | (a): OPFS holds sqlite plus a document cache; the picked folder holds `documents/`, `exports/` and `backups/`, and sqlite never moves there (Austin, 2026-11-23). Halves storage; the folder is the vault. **Trade-off:** while the permission is lapsed, every file not recently viewed shows "File not on this device" until you click Reconnect (the banner says "Reconnect to see your files"). With "Allow on every visit" in Chrome this is rare; (b) avoids it at double the storage |
 | D8  | Write the latest CSV into `exports/` on every backup | yes / no | yes: makes the vault restorable without the app |
 | D9  | After migration, keep `documents/blobs` one release | yes / no | yes, then delete in the next release |
 | D10 | Writes while the folder isn't granted | (a) block with a message; (b) queue and replay | (a) |
@@ -401,16 +434,16 @@ Austin accepted every recommendation. The "Chosen" column is binding; the other 
 | # | Owner | PR | Depends on |
 |---|-------|----|-----------|
 | 1 | d-data | `vaultFileName`/`vaultPath` pure functions + tests in `packages/core` (§ 3, § 4) | — |
-| 2 | d-data | `VaultStore` interface, OPFS backend, journal and roll-forward/back (§ 6, § 7); `BlobStore` callers move over; preview getter unchanged | 1 |
-| 3 | d-data | **Migration** (needs a migration slot): `vault_path` column via `db:generate`, the resumable blob→tree job, verification (§ 10) | 2 |
-| 4 | d-data | Repo tree ops write through the journal (upload, rename, move, replace, delete, restore) | 3 |
-| 5 | d-data | Backup format 2 and Export vault, 1:1 restore test (§ 9) | 4 |
-| 6 | d-data | Reconcile scan + `ScanReport` (§ 6) | 4 |
+| 2 | d-data | `VaultStore` interface, OPFS backend, journal and roll-forward/back, the `fiscode-vault` **Web Lock and `BroadcastChannel`**, `VaultBusyError` (§ 6, § 7, § 11.9); `BlobStore` callers move over. Until PR 3 the OPFS backend still reads and writes by sha (`documents/blobs`), since no `vault_path` exists yet; preview getter unchanged | 1 |
+| 3 | d-data | **Migration and journaled writes, one PR** (needs a migration slot): `vault_path` column and `vault_applied` table via `db:generate`, the resumable blob→tree job with its every-boot backstop, verification (§ 10), **and** every repo tree op through the journal (upload, rename, move, replace, soft delete, restore, History revert; § 6). They ship together so no write lands row-only after the job has run | 2 |
+| 4 | — | (folded into PR 3) | — |
+| 5 | d-data | Backup format 2 and Export vault, 1:1 restore test (§ 9) | 3 |
+| 6 | d-data | Reconcile scan + `ScanReport` (§ 6) | 3 |
 | 7 | d-data | Picked-folder backend, permission state, cache (§ 7, § 11.1-2) | 6 |
-| 8 | d-ux | Upload and rename dialogs show the final path; category rules in the tree (§ 11.5-6) | 1, 4 |
-| 9 | d-ux | Migration banner and read-only Documents during it (§ 10); long-op progress, cancel and error lines (§ 11.3, 11.7) | 3 |
+| 8 | d-ux | Upload and rename dialogs show the final path; category rules in the tree (§ 11.5-6) | 1, 3 |
+| 9 | d-ux | Migration banner and read-only Documents during it (§ 10); long-op progress, cancel and error lines (§ 11.3, 11.7) | 3 (migration and journaled rename/move, which used to be PR 4) |
 | 10 | d-ux | Vault settings: pick folder, reconnect banner, Firefox/Safari line (§ 11.1-2) | 7 |
 | 11 | d-ux | Scan report page `/documents/check`: moved, missing, new, conflicts (§ 11.4) | 6 |
-| 12 | d-ux | Export vault: button, folder choice (picker, or a zip download without one), progress and cancel; "Busy in another tab" line (§ 9, § 11.3, § 11.9) | 5 |
+| 12 | d-ux | Export vault: button, folder choice (picker, or a zip download without one), progress and cancel; "Busy in another tab" line (§ 9, § 11.3, § 11.9) | 2 (lock), 5 |
 
-PRs 1-6 are useful alone (OPFS vault, better backups) before any picked folder exists.
+PRs 1-3, 5 and 6 are useful alone (OPFS vault, better backups) before any picked folder exists.
