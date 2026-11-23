@@ -1,3 +1,4 @@
+import { VaultIntegrityError, VaultNameTakenError } from "@fiscode/core";
 import { describe, expect, it } from "vitest";
 import { memoryDir } from "./dir.ts";
 import {
@@ -46,8 +47,8 @@ const setup = async () => {
   const before = async () =>
     (await store.holds("documents/a.pdf", a)) &&
     (await store.holds("documents/b.pdf", b)) &&
-    !(await store.read("documents/x/c.pdf")) &&
-    !(await store.read(oldBytesPath("trash", a)));
+    !(await store.read("documents/x/c.pdf"));
+  // A rollback leaves the trash copy: old bytes are never removed (ADR § 2).
   const after = async () =>
     !(await store.read("documents/a.pdf")) &&
     !(await store.read("documents/b.pdf")) &&
@@ -137,5 +138,43 @@ describe("vaultJournal.recover: a crash after each step", () => {
     await applyOp(s.store, s.plan.ops[0]!);
     await s.journal.run({ planId: "p3", ops: [] }, async () => {});
     expect(await s.before()).toBe(true);
+  });
+
+  it("never removes old bytes a rolled-back plan found already kept", async () => {
+    const s = await setup();
+    const a = await sha256Hex(bytes("a"));
+    await s.store.write(oldBytesPath("trash", a), bytes("a")); // another document's soft delete
+    await writeJournal(s.root, s.plan);
+    await applyOp(s.store, s.plan.ops[0]!);
+    expect(await s.journal.recover()).toBe("rolled-back");
+    expect(await s.store.holds(oldBytesPath("trash", a), a)).toBe(true);
+  });
+
+  it("refuses a plan whose move lands on a taken path, before touching anything", async () => {
+    const s = await setup();
+    await s.store.write("documents/x/c.pdf", bytes("someone else"));
+    await expect(s.journal.run(s.plan, async () => {})).rejects.toBeInstanceOf(VaultNameTakenError);
+    expect(await readJournal(s.root)).toBeUndefined();
+    expect(await s.store.holds("documents/a.pdf", await sha256Hex(bytes("a")))).toBe(true);
+  });
+
+  it("won't restore old bytes that don't match their sha", async () => {
+    const s = await setup();
+    const a = await sha256Hex(bytes("a"));
+    await writeJournal(s.root, s.plan);
+    for (const op of s.plan.ops.slice(0, 2)) await applyOp(s.store, op);
+    await s.store.write(oldBytesPath("trash", a), bytes("damaged"));
+    await expect(s.journal.recover()).rejects.toBeInstanceOf(VaultIntegrityError);
+    expect(await readJournal(s.root)).toBeDefined(); // kept for the next try
+  });
+
+  it("reports the real error when the rollback fails too", async () => {
+    const s = await setup();
+    const a = await sha256Hex(bytes("a"));
+    const err = s.journal.run(s.plan, async () => {
+      await s.store.write(oldBytesPath("trash", a), bytes("damaged"));
+      throw new Error("sqlite said no");
+    });
+    await expect(err).rejects.toThrow('Rolling back after "Error: sqlite said no" failed');
   });
 });

@@ -37,18 +37,6 @@ describe("vaultStore by path", () => {
     expect(await (await store.read("documents/2026/Expenses/a.pdf"))!.text()).toBe("two");
   });
 
-  it("falls back to write then remove when a handle can't move", async () => {
-    const root = memoryDir();
-    const noMove = (dir: VaultDirHandle): VaultDirHandle => ({
-      ...dir,
-      getDirectoryHandle: async (n, o) => noMove(await dir.getDirectoryHandle(n, o)),
-      getFileHandle: async (n, o) => ({ ...(await dir.getFileHandle(n, o)), move: undefined }),
-    });
-    const store = vaultStore(noMove(root));
-    await store.write("x/a.pdf", bytes("one"));
-    expect(await names(root, ["vault", "x"])).toEqual(["a.pdf"]);
-  });
-
   it("moves idempotently, and finishes a half-done move", async () => {
     const { store } = setup();
     const sha = await sha256Hex(bytes("a"));

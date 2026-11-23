@@ -8,8 +8,8 @@ export type VaultFileHandle = {
   readonly kind: "file";
   getFile(): Promise<Blob>;
   createWritable(): Promise<VaultWritable>;
-  /** Rename within the same directory. Optional: without it the store copies, then removes. */
-  move?(newName: string): Promise<void>;
+  /** Rename within the same directory, replacing a file already at `newName`. */
+  move(newName: string): Promise<void>;
 };
 
 export type VaultDirHandle = {

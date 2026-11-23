@@ -144,14 +144,8 @@ export const vaultStore = (root: VaultDirHandle): VaultStore => {
       const dir = await walk(await vaultDir(true), dirs, true);
       const tmpName = `.${name}${TMP_SUFFIX}`;
       const tmp = await writeFile(dir, tmpName, bytes, path);
-      if (tmp.move) {
-        // A rename onto an existing name replaces it, as POSIX rename does.
-        await removeIn(dir, name);
-        await tmp.move(name);
-      } else {
-        await writeFile(dir, name, bytes, path);
-        await removeIn(dir, tmpName);
-      }
+      // One rename that replaces any file at `name`, so the final name never lacks a file.
+      await tmp.move(name);
     },
     async copy(from, to, sha) {
       if (await store.holds(to, sha)) return;
@@ -236,10 +230,16 @@ const isEmpty = async (dir: VaultDirHandle) => {
 };
 
 /** OPFS: the browser's origin-private file system. */
-export const opfsRoot = (): Promise<VaultDirHandle> =>
-  (
-    navigator as unknown as { storage: { getDirectory(): Promise<VaultDirHandle> } }
-  ).storage.getDirectory();
+export const opfsRoot = (): Promise<VaultDirHandle> => {
+  const storage = (
+    navigator as unknown as {
+      storage: { getDirectory(): Promise<VaultDirHandle>; persist?(): Promise<boolean> };
+    }
+  ).storage;
+  // ADR § 7: ask once that the browser not evict the vault. Refusal changes nothing here.
+  void storage.persist?.().catch(() => false);
+  return storage.getDirectory();
+};
 
 /** A handle that resolves on first use, so creating the store doesn't touch OPFS. */
 export const lazyDir = (open: () => Promise<VaultDirHandle>): VaultDirHandle => {
