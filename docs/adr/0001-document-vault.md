@@ -169,9 +169,19 @@ to folder and file names alike; this extends today's `safeSegment`:
    extension; the whole path from the vault root ≤ 240 characters, so a vault under a typical
    `C:\Users\<name>\Nextcloud\` stays inside Windows' 260 MAX_PATH. If the path is too long,
    `vaultPath` shortens **only the document title** (never the date prefix or the extension) and
-   never renames a folder. The folder path's budget is enforced when a folder is created or
-   renamed: a folder whose path, plus room for the date prefix, a short title and ` (n)`, would not
-   fit is refused with `VaultPathTooLongError`. That check belongs to PR 3 (repo tree ops). Decision D4.
+   never renames a folder. The folder path's budget is enforced on folder **create, rename and move**.
+   - **File reserve** = 30 characters: `/` (1) + date prefix `YYYY-MM-DD ` (11) + the shortest legal
+     title, 8 characters (8) + ` (99)` (5) + the longest extension `.jpeg` (5).
+   - A folder path fits if `path length + 30 ≤ 240`. A create checks the new folder. A rename or move
+     checks the **deepest descendant folder** after the change (its new path + 30), so no file
+     already below it can end up over budget. A failing user action is refused with
+     `VaultPathTooLongError`.
+   - **Restore, History revert and import never refuse.** When a restored or imported folder would
+     not fit, its name is shortened (cut at a grapheme boundary until it fits, then the § 4 ` (n)` collision rule
+     if the shorter name is taken), and the result line reports it ("Restored *Long name…* as
+     *Long na (2)*: the full name was too long for the vault").
+   - `folderPathFits(newPath, deepestDescendantSuffix = ""): { fits, overBy }` in `packages/core`
+     is the pure check the dialogs use before saving, so they can show "Name too long" (PR 1). The repo enforces it in PR 3. Decision D4.
 
 Google Drive allows almost anything (including `/` in names via its API); these rules are a strict
 subset of what it accepts, so a Drive mirror needs no further rewriting.
@@ -343,6 +353,10 @@ Backup and restore wait until it is done. Steps:
    every other referenced blob into `_fiscode/` under the § 2 copy rule: History-referenced shas
    to `versions/`, the rest to `trash/`.
 3. Write `fiscode.json`, verify every sha256, then mark the migration done in a `meta` row.
+   **Paths already over budget:** a folder whose path fails the § 3.8 check gets the same fallback
+   as restore (shortened with the collision rule), and a title that cannot fit is shortened by
+   `vaultPath`. Neither ever stops the job. Each change is listed in the **migration report**
+   ("3 folder names shortened to fit the vault"), which the banner links to when the job finishes.
 4. Keep `documents/blobs/` for one release as a fallback (D9), and delete it in the next release,
    only after this verification has passed.
 5. The same PR puts every repo write through the vault journal (§ 15), so no document is
@@ -461,7 +475,7 @@ changes.
 
 | # | Owner | PR | Depends on |
 |---|-------|----|-----------|
-| 1 | d-data | `vaultFileName`/`vaultPath` pure functions + tests in `packages/core` (§ 3, § 4) | — |
+| 1 | d-data | `vaultFileName`, `vaultPath` and `folderPathFits` pure functions + tests in `packages/core` (§ 3, § 4) | — |
 | 2 | d-data | `VaultStore` interface, OPFS backend, journal and roll-forward/back, the `fiscode-vault` **Web Lock and `BroadcastChannel`**, `VaultBusyError` (§ 6, § 7, § 11.9); `BlobStore` callers move over. Until PR 3 the OPFS backend still reads and writes by sha (`documents/blobs`), since no `vault_path` exists yet; preview getter unchanged | 1 |
 | 3 | d-data | **Migration and journaled writes, one PR** (needs a migration slot): `vault_path` column and `vault_applied` table via `db:generate`, the resumable blob→tree job with its every-boot backstop, verification (§ 10), **and** every repo tree op through the journal (upload, rename, move, replace, soft delete, restore, History revert; § 6). They ship together so no write lands row-only after the job has run | 2 |
 | 4 | — | (folded into PR 3) | — |
