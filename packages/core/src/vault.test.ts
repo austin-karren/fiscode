@@ -59,6 +59,14 @@ describe("vaultFileName", () => {
       "2026-03-04 Demo.pdf",
     );
   });
+  it("ignores a date that isn't YYYY-MM-DD", () => {
+    expect(vaultFileName({ date: "3/4/2026", title: "Demo", ext: "pdf" })).toBe("Demo.pdf");
+    expect(vaultFileName({ date: "2026-3-4", title: "Demo", ext: "pdf" })).toBe("Demo.pdf");
+  });
+  it("guards a .filepart ending", () => {
+    expect(vaultSegment("scan.filepart")).toBe("scan.filepart_");
+    expect(vaultSegment("SCAN.FILEPART")).toBe("SCAN.FILEPART_");
+  });
   it("works without a date or a title", () => {
     expect(vaultFileName({ date: null, title: "Demo", ext: "png" })).toBe("Demo.png");
     expect(vaultFileName({ date: "2026-01-31", title: "  ", ext: "png" })).toBe("2026-01-31.png");
@@ -128,6 +136,17 @@ describe("vaultPath", () => {
     expect(vaultPath({ ...base, folders: ["unfiled", "x"] }).path).toBe(
       "documents/unfiled (2)/x/2026-03-04 Demo NAS.pdf",
     );
+  });
+  it("numbers a top-level Unfiled past taken siblings", () => {
+    expect(
+      vaultPath({ ...base, folders: ["Unfiled"], topLevelSiblings: ["unfiled (2)", "2026"] }).path,
+    ).toBe("documents/Unfiled (3)/2026-03-04 Demo NAS.pdf");
+  });
+  it("re-sanitises a folder name after the cut", () => {
+    const cut = vaultFolderName(`${"a".repeat(114)} .part ~ bbbb`);
+    expect(cut).not.toMatch(/[. ]$|\.part$|~$/);
+    expect(bytes(cut)).toBeLessThanOrEqual(120);
+    expect(vaultFolderName(`${"a".repeat(118)}..xyz`)).toBe("a".repeat(118));
   });
   it("caps a malformed extension and keeps its dot", () => {
     const name = vaultFileName({ date: null, title: "Demo", ext: "p".repeat(115) });

@@ -1,7 +1,7 @@
 // Vault names (ADR 0001 § 3-5, § 11.5): pure rules for the readable tree
 // `documents/<year>/<category>/<YYYY-MM-DD> <title>.<ext>`. No I/O; the repos and the dialogs call these.
 
-import { DocumentError, YEAR_ROOT_KEY } from "./documents.ts";
+import { DocumentError, freeFolderName, YEAR_ROOT_KEY } from "./documents.ts";
 
 /** The longest path from the vault root, in UTF-16 units (Windows MAX_PATH 260 less a typical root). D4. */
 export const MAX_VAULT_PATH = 240;
@@ -85,7 +85,8 @@ export const vaultSegment = (raw: string): string => {
 
 /** A folder name as it goes on disk: `vaultSegment`, cut to 120 UTF-8 bytes. */
 export const vaultFolderName = (name: string): string =>
-  cutBytes(vaultSegment(name), MAX_VAULT_SEGMENT_BYTES) || "_";
+  // Sanitise again after the cut, so it can't expose a trailing dot, space, ".part" or "~".
+  vaultSegment(cutBytes(vaultSegment(name), MAX_VAULT_SEGMENT_BYTES - 1));
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -149,6 +150,8 @@ export const vaultFileName = (input: VaultFileNameInput): string =>
 export interface VaultPathInput extends VaultFileNameInput {
   /** Folder names from the top down (e.g. ["2026", "Expenses"]); null for Unfiled. */
   folders: readonly string[] | null;
+  /** Disk names of the other top-level folders, so a top-level "Unfiled" gets a free " (n)". */
+  topLevelSiblings?: readonly string[];
 }
 
 export interface VaultPathResult {
@@ -176,8 +179,8 @@ export const vaultPath = (input: VaultPathInput, taken: Iterable<string> = []): 
   const takenKeys = new Set([...taken].map(vaultPathKey));
   const dirs = input.folders === null ? [VAULT_UNFILED_DIR] : input.folders.map(vaultFolderName);
   // A top-level user folder named "Unfiled" must not share the Unfiled directory (§ 5).
-  if (input.folders !== null && dirs[0] !== undefined && vaultPathKey(dirs[0]) === "unfiled") {
-    dirs[0] = `${dirs[0]} (2)`;
+  if (input.folders !== null && dirs[0] !== undefined) {
+    dirs[0] = freeFolderName(dirs[0], [VAULT_UNFILED_DIR, ...(input.topLevelSiblings ?? [])]);
   }
   const dir = [VAULT_DOCUMENTS_DIR, ...dirs].join("/");
   const parts = nameParts(input);
