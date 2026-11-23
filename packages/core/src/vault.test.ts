@@ -10,6 +10,7 @@ import {
   vaultFileName,
   vaultFolderName,
   vaultFolderRules,
+  titleHasDate,
   vaultPath,
   vaultSegment,
   VaultPathTooLongError,
@@ -72,6 +73,24 @@ describe("vaultFileName", () => {
     it("a leading number that isn't a date: prefixed", () => {
       expect(name("2026 budget")).toBe("2026-11-23 2026 budget.pdf");
       expect(name("2026-08-12x")).toBe("2026-11-23 2026-08-12x.pdf");
+    });
+    it("a leading date that isn't a calendar day: prefixed", () => {
+      expect(name("2026-13-40 notes")).toBe("2026-11-23 2026-13-40 notes.pdf");
+      expect(name("2026-02-30")).toBe("2026-11-23 2026-02-30.pdf");
+      expect(name("2028-02-29")).toBe("2028-02-29.pdf");
+    });
+  });
+  describe("titleHasDate", () => {
+    it("tests the title without its extension when given one", () => {
+      expect(titleHasDate("2026-08-12.pdf", "pdf")).toBe(true);
+      expect(titleHasDate("2026-08-12 Bill.PDF", "pdf")).toBe(true);
+      expect(titleHasDate("2026-08-12.pdf")).toBe(false);
+      expect(titleHasDate("Bill.pdf", "pdf")).toBe(false);
+    });
+    it("only counts a valid calendar date", () => {
+      expect(titleHasDate("2026-13-40 notes")).toBe(false);
+      expect(titleHasDate("2026-02-30")).toBe(false);
+      expect(titleHasDate("2026-02-28")).toBe(true);
     });
   });
   it("prefixes the date and lower-cases the extension", () => {

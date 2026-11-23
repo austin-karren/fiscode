@@ -10,7 +10,14 @@ import {
   type VaultDirHandle,
   type VaultStore,
 } from "../vault/index.ts";
-import { documentRepo, repathDocuments, REPATH_DONE_KEY, type TreeProgress } from "./index.ts";
+import {
+  buildBundle,
+  documentRepo,
+  repathDocuments,
+  REPATH_DONE_KEY,
+  type TreeProgress,
+} from "./index.ts";
+import { importBundle } from "./import.ts";
 
 // The one-time re-path job: files named "<date> <date> ..." by the old rule lose the second date.
 
@@ -129,5 +136,34 @@ describe("repathDocuments", () => {
     expect(await repathDocuments({ signal: ctl.signal })).toBe(0);
     expect(doneFlag()).toBeUndefined();
     expect(await repathDocuments()).toBe(2);
+  });
+});
+
+describe("a restore of an older backup", () => {
+  it("clears the flag, so the re-path runs again and no double dates come back", async () => {
+    const { a } = await setUp();
+    const old = (await documentRepo.get(a.id))!.vaultPath!;
+    const backup = await buildBundle({ includeDeleted: true });
+    await repathDocuments();
+    expect(doneFlag()).toBe("done");
+    const fixed = (await documentRepo.get(a.id))!.vaultPath!;
+    // The backup's rows carry the old paths; its files come back there too.
+    // An export leaves vault_path out (the restore re-places those rows); an older bundle that
+    // carries one is the case to cover.
+    const withPaths = {
+      ...backup,
+      documents: backup.documents.map((d) => (d.id === a.id ? { ...d, vaultPath: old } : d)),
+    };
+    await importBundle(withPaths, "backup-restore");
+    await store.write(old, (await store.read(fixed))!);
+    await store.remove(fixed);
+    expect(doneFlag()).toBeUndefined();
+    expect((await documentRepo.get(a.id))!.vaultPath).toBe(old);
+    await repathDocuments();
+    expect((await documentRepo.get(a.id))!.vaultPath).toBe(fixed);
+    expect((await tree()).some((p) => /\/\d{4}-\d{2}-\d{2} \d{4}-\d{2}-\d{2}[ .]/.test(p))).toBe(
+      false,
+    );
+    expect(doneFlag()).toBe("done");
   });
 });

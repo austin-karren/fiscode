@@ -232,14 +232,23 @@ export const folderRepo = {
     return folderUpdate(folder, { parentId: newParentId }, hooks);
   },
 
-  /** Field changes through the tree, so a name or parent change moves the files below (§ 6). */
+  /**
+   * Field changes through the tree, so a name or parent change moves the files below (§ 6). A
+   * name or parent change goes through `rename` / `move`, so it has their rules and errors
+   * (FolderFixedError and the rest). Revert, restore and import never come through here.
+   */
   async update(
     id: string,
     patch: Partial<DocumentFolderInsert>,
   ): Promise<DocumentFolderRow | undefined> {
     const folder = await folderCrud.get(id);
     if (!folder) return undefined;
-    return folderUpdate(folder, patch as Partial<DocumentFolderRow>);
+    const { name, parentId, ...rest } = patch as Partial<DocumentFolderRow>;
+    if (name !== undefined && name !== folder.name) await folderRepo.rename(id, name);
+    if (parentId !== undefined && parentId !== folder.parentId) {
+      await folderRepo.move(id, parentId);
+    }
+    return folderUpdate(await requireFolder(id), rest);
   },
 
   /** A folder never goes alone: its subtree and documents go with it (`softDeleteTree`). */

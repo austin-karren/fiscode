@@ -310,7 +310,7 @@ describe("review #84 r1", () => {
     const other = first.find((f) => f.name === "Other")!;
     // A user move of a default folder is refused now (FolderFixedError); one moved before that
     // rule, or by a revert, still isn't made again.
-    await folderRepo.update(other.id, { parentId: null });
+    await folderRepo.revertTo(other.id, { ...other, parentId: null });
     const before = (await folderRepo.listIncludingDeleted()).length;
     await folderRepo.ensureYearDefaults(2026);
     expect((await folderRepo.listIncludingDeleted()).length).toBe(before);

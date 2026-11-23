@@ -145,6 +145,20 @@ describe("a title that starts with a date", () => {
     expect(r.vaultPath).toBe(`documents/Unfiled/${today()} Demo bill.pdf`);
     expect(p.path).toBe(r.vaultPath);
   });
+
+  it("a bare-date title (2026-08-12.pdf) renamed to an undated one takes the D2 date", async () => {
+    const d = await documentRepo.upload(file("2026-08-12.pdf", "b"));
+    expect(d.vaultPath).toBe("documents/Unfiled/2026-08-12.pdf");
+    const p = await documentRepo.previewPath({ id: d.id, folderId: null, name: "Bill.pdf" });
+    const r = await documentRepo.rename(d.id, "Bill.pdf");
+    expect(r.vaultPath).toBe(`documents/Unfiled/${today()} Bill.pdf`);
+    expect(p.path).toBe(r.vaultPath);
+  });
+
+  it("an invalid date (2026-13-40) is not a date: it gets the D2 prefix", async () => {
+    const d = await documentRepo.upload(file("2026-13-40 notes.pdf", "n"));
+    expect(d.vaultPath).toBe(`documents/Unfiled/${today()} 2026-13-40 notes.pdf`);
+  });
 });
 
 describe("folderRepo.previewPath", () => {
@@ -203,6 +217,22 @@ describe("fixed folders (D5, ADR § 5)", () => {
     expect(await snapshot()).toEqual(before);
     // A default category can still be renamed.
     expect((await folderRepo.rename(expenses!.id, "Receipts")).name).toBe("Receipts");
+  });
+
+  it("update() has the same rules: a year folder's name or parent change is refused", async () => {
+    const [year, expenses] = await folderRepo.ensureYearDefaults(2026);
+    const other = await folderRepo.create({ name: "Other things" });
+    const before = await snapshot();
+    await expect(folderRepo.update(year!.id, { name: "Y" })).rejects.toBeInstanceOf(
+      FolderFixedError,
+    );
+    await expect(folderRepo.update(year!.id, { parentId: other.id })).rejects.toBeInstanceOf(
+      FolderFixedError,
+    );
+    await expect(folderRepo.update(expenses!.id, { parentId: null })).rejects.toBeInstanceOf(
+      FolderFixedError,
+    );
+    expect(await snapshot()).toEqual(before);
   });
 
   it("History revert, Trash restore and import never refuse a fixed folder", async () => {

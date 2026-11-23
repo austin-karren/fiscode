@@ -9,6 +9,7 @@ import {
 } from "../schema/index.ts";
 import {
   byAdded,
+  extForMime,
   withoutSuffix,
   documentVaultPath,
   fitFolders,
@@ -185,7 +186,8 @@ const targetFor = (
   taken: readonly string[],
 ) => {
   // A file named after a dated title has no prefix of its own to keep.
-  const kept = prev && !titleHasDate(prev.name) ? keptDate(prev.vaultPath) : undefined;
+  const kept =
+    prev && !titleHasDate(prev.name, extForMime(prev.mime)) ? keptDate(prev.vaultPath) : undefined;
   const useDates = change?.dates ?? (kept ? [kept] : dates);
   // Place it as if at its old path, so an unchanged name keeps its suffix.
   return placeDocument({ ...next, vaultPath: prev?.vaultPath ?? null }, ctx, useDates, taken);
