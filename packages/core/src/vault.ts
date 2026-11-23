@@ -1,7 +1,7 @@
 // Vault names (ADR 0001 § 3-5, § 11.5): pure rules for the readable tree
 // `documents/<year>/<category>/<YYYY-MM-DD> <title>.<ext>`. No I/O; the repos and the dialogs call these.
 
-import { DocumentError } from "./documents.ts";
+import { DocumentError, YEAR_ROOT_KEY } from "./documents.ts";
 
 /** The longest path from the vault root, in UTF-16 units (Windows MAX_PATH 260 less a typical root). D4. */
 export const MAX_VAULT_PATH = 240;
@@ -100,7 +100,8 @@ export interface VaultFileNameInput {
 
 // The parts of a file name: "<prefix><title><suffix>.<ext>", sanitised, title not yet cut.
 const nameParts = ({ date, title, ext }: VaultFileNameInput) => {
-  const e = vaultSegment(ext.toLowerCase().replace(/^\.+/, "")).replace(/\./g, "_");
+  // Capped so a malformed extension can never crowd out the name.
+  const e = vaultSegment(ext.toLowerCase().replace(/^\.+/, "")).replace(/\./g, "_").slice(0, 16);
   let t = title.normalize("NFC").trim();
   if (e !== "_" && t.toLowerCase().endsWith(`.${e}`)) t = t.slice(0, -(e.length + 1));
   const prefix = date !== null && ISO_DATE.test(date) ? `${date} ` : "";
@@ -174,6 +175,10 @@ export const vaultPathKey = (path: string): string => path.normalize("NFC").toLo
 export const vaultPath = (input: VaultPathInput, taken: Iterable<string> = []): VaultPathResult => {
   const takenKeys = new Set([...taken].map(vaultPathKey));
   const dirs = input.folders === null ? [VAULT_UNFILED_DIR] : input.folders.map(vaultFolderName);
+  // A top-level user folder named "Unfiled" must not share the Unfiled directory (§ 5).
+  if (input.folders !== null && dirs[0] !== undefined && vaultPathKey(dirs[0]) === "unfiled") {
+    dirs[0] = `${dirs[0]} (2)`;
+  }
   const dir = [VAULT_DOCUMENTS_DIR, ...dirs].join("/");
   const parts = nameParts(input);
   for (let n = 1; ; n++) {
@@ -200,7 +205,7 @@ export const vaultPath = (input: VaultPathInput, taken: Iterable<string> = []): 
 
 /** What the user may do with a folder, by its `default_key` (ADR § 5, D5). */
 export const vaultFolderRules = (defaultKey: string | null): { rename: boolean; move: boolean } => {
-  if (defaultKey === "year-root") return { rename: false, move: false };
+  if (defaultKey === YEAR_ROOT_KEY) return { rename: false, move: false };
   if (defaultKey !== null) return { rename: true, move: false };
   return { rename: true, move: true };
 };

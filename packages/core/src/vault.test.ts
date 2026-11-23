@@ -124,6 +124,15 @@ describe("vaultPath", () => {
     expect(r.overBy).toBe(r.path.length - MAX_VAULT_PATH);
     expect(r.overBy).toBeGreaterThan(0);
   });
+  it("keeps a top-level user folder named Unfiled apart from Unfiled", () => {
+    expect(vaultPath({ ...base, folders: ["unfiled", "x"] }).path).toBe(
+      "documents/unfiled (2)/x/2026-03-04 Demo NAS.pdf",
+    );
+  });
+  it("caps a malformed extension and keeps its dot", () => {
+    const name = vaultFileName({ date: null, title: "Demo", ext: "p".repeat(115) });
+    expect(name).toBe(`Demo.${"p".repeat(16)}`);
+  });
   it("cuts folder names to 120 bytes", () => {
     expect(bytes(vaultFolderName("ü".repeat(100)))).toBeLessThanOrEqual(120);
   });
