@@ -45,15 +45,15 @@ const journal = () => vaultJournal(getVaultRoot(), getVaultStore(), sqliteLedger
  * there, back when not. Background work, so it waits for the lock. Run on boot.
  */
 export const recoverVault = (): Promise<Recovery> =>
-  withVaultLock(
-    async () => {
-      const outcome = await journal().recover();
-      // The plan's own step 5 may not have run: the manifest follows sqlite again.
-      if (outcome !== "none") await writeManifest(getVaultStore());
-      return outcome;
-    },
-    { wait: true },
-  );
+  withVaultLock(() => recoverVaultHeld(), { wait: true });
+
+/** `recoverVault` for a caller that already holds the lock (the scan). */
+export const recoverVaultHeld = async (): Promise<Recovery> => {
+  const outcome = await journal().recover();
+  // The plan's own step 5 may not have run: the manifest follows sqlite again.
+  if (outcome !== "none") await writeManifest(getVaultStore());
+  return outcome;
+};
 
 /** Bytes waiting to become a document, hidden like a crashed write (the scan deletes leftovers). */
 const stagingPath = (planId: string) => `_fiscode/.${planId}${TMP_SUFFIX}`;
@@ -189,37 +189,48 @@ export const historyQuery = (
  * Runs one tree change. `build` plans it with the builder and returns the row queries; they commit
  * in one transaction with the plan's vault_applied row, after the file ops. A failure before the
  * commit rolls the files back. Throws VaultMigratingError while the migration runs, and
- * VaultBusyError when another tab holds the vault.
+ * VaultBusyError when another tab holds the vault. `long` marks a long op (a folder rename or
+ * move, § 11.3), which a focus scan skips rather than waits for.
  */
 export const runTreeChange = async <T>(
+  build: (plan: PlanBuilder) => Promise<{ queries: AtomicQuery[]; result: T }>,
+  options: { long?: boolean } = {},
+): Promise<T> => {
+  assertVaultWritable();
+  const out = await withVaultLock(() => runTreeChangeHeld(build), options);
+  announceVaultChange();
+  return out;
+};
+
+/**
+ * `runTreeChange` for a caller that already holds the fiscode-vault lock (the scan). It neither
+ * takes the lock nor announces the change: the caller does both.
+ */
+export const runTreeChangeHeld = async <T>(
   build: (plan: PlanBuilder) => Promise<{ queries: AtomicQuery[]; result: T }>,
 ): Promise<T> => {
   assertVaultWritable();
   const store = getVaultStore();
-  const out = await withVaultLock(async () => {
-    const j = journal();
-    await j.recover();
-    const plan = new PlanBuilder(store);
-    try {
-      const { queries, result } = await build(plan);
-      if (plan.ops.length === 0) {
-        await runAtomic(queries);
-      } else {
-        const applied = getDb().insert(vaultApplied).values({ planId: plan.planId });
-        // Step 5 order: the manifest is rewritten before the journal and ledger row go, so a
-        // crash after the commit still has a journal to roll forward and then rewrite it.
-        await j.run({ planId: plan.planId, ops: plan.ops }, async () => {
-          await runAtomic([...queries, applied]);
-          await writeManifest(store);
-        });
-        return result;
-      }
-      await writeManifest(store);
+  const j = journal();
+  await j.recover();
+  const plan = new PlanBuilder(store);
+  try {
+    const { queries, result } = await build(plan);
+    if (plan.ops.length === 0) {
+      await runAtomic(queries);
+    } else {
+      const applied = getDb().insert(vaultApplied).values({ planId: plan.planId });
+      // Step 5 order: the manifest is rewritten before the journal and ledger row go, so a
+      // crash after the commit still has a journal to roll forward and then rewrite it.
+      await j.run({ planId: plan.planId, ops: plan.ops }, async () => {
+        await runAtomic([...queries, applied]);
+        await writeManifest(store);
+      });
       return result;
-    } finally {
-      await plan.cleanUp();
     }
-  });
-  announceVaultChange();
-  return out;
+    await writeManifest(store);
+    return result;
+  } finally {
+    await plan.cleanUp();
+  }
 };
