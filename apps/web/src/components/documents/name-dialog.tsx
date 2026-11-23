@@ -3,6 +3,7 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -28,12 +29,15 @@ export function NameDialog(props: {
   places?: { id: string | null; label: string }[];
   /** Why a name can't be used, checked on blur and on submit (documents: validDocumentName). */
   validate?: (name: string) => string | undefined;
+  /** One line under the title about what the change touches ("Only 2026: ..."). */
+  note?: string;
 }) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{props.title}</DialogTitle>
+          {props.note ? <DialogDescription>{props.note}</DialogDescription> : null}
         </DialogHeader>
         {/* Mounted each time the dialog opens, so it starts from `initial` (the current name for a
             rename, blank for a new folder), never from what was typed last time. */}

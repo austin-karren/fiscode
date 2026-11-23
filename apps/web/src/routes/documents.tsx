@@ -15,6 +15,7 @@ import { NameDialog } from "../components/documents/name-dialog";
 import { MoveDialog } from "../components/documents/move-dialog";
 import { DocumentSheet } from "../components/documents/document-sheet";
 import { FolderTree } from "../components/documents/folder-tree";
+import { FolderActions } from "../components/documents/folder-actions";
 import { ALLOWED_DOCUMENT_MIMES, YEAR_ROOT_KEY, validDocumentName } from "@fiscode/core";
 import { documentLinkRepo, documentRepo, folderRepo } from "@fiscode/db";
 import type { DocumentRow, DocumentFolderRow } from "@fiscode/csv";
@@ -115,8 +116,8 @@ function DocumentsPage() {
       action: {
         label: "Undo",
         onClick: async () => {
-          await folderRepo.restoreTree(deleted);
-          toast(await landedLine(folder));
+          const { shortened } = await folderRepo.restoreTree(deleted);
+          toast(await landedLine(folder, shortened));
           await refresh();
         },
       },
@@ -194,27 +195,12 @@ function DocumentsPage() {
                     New folder
                   </Button>
                   {current ? (
-                    <>
-                      <Button
-                        variant="ghost"
-                        onClick={() => setDialog({ kind: "rename-folder", folder: current })}
-                      >
-                        Rename folder
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        onClick={() => setDialog({ kind: "move-folder", folder: current })}
-                      >
-                        Move folder
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => void askDeleteFolder(current)}
-                      >
-                        Delete folder
-                      </Button>
-                    </>
+                    <FolderActions
+                      folder={current}
+                      onRename={() => setDialog({ kind: "rename-folder", folder: current })}
+                      onMove={() => setDialog({ kind: "move-folder", folder: current })}
+                      onDelete={() => void askDeleteFolder(current)}
+                    />
                   ) : null}
                   <form
                     role="search"
@@ -371,6 +357,7 @@ function DocumentsPage() {
         title="Rename folder"
         label="Folder name"
         initial={dialog?.kind === "rename-folder" ? dialog.folder.name : ""}
+        note={dialog?.kind === "rename-folder" ? renameNote(dialog.folder) : undefined}
         submitLabel="Rename"
         onSubmit={async (name) => {
           if (dialog?.kind !== "rename-folder") return;
@@ -452,6 +439,12 @@ const documentNameProblem = (name: string): string | undefined => {
     return err instanceof Error ? err.message : "That name can't be used.";
   }
 };
+
+// A year's default folder is renamed in that year only: other years keep their own (§ 5, D5).
+const renameNote = (folder: DocumentFolderRow): string | undefined =>
+  folder.defaultKey !== null && folder.defaultKey !== YEAR_ROOT_KEY && folder.taxYear !== null
+    ? `Only ${folder.taxYear}: other years keep their own ${folder.name} folder.`
+    : undefined;
 
 const n = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 

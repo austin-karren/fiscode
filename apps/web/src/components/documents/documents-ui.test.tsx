@@ -25,13 +25,14 @@ vi.mock("@tanstack/react-router", () => ({
   ),
 }));
 
-import { validDocumentName } from "@fiscode/core";
+import { MAX_FOLDER_DEPTH, validDocumentName, YEAR_ROOT_KEY } from "@fiscode/core";
 import { documentRepo, folderRepo } from "@fiscode/db";
 
 import { dropBytesForStub } from "../../test/fake-documents";
 import { DocumentSheet } from "./document-sheet";
 import { MoveDialog } from "./move-dialog";
 import { NameDialog } from "./name-dialog";
+import { FolderActions } from "./folder-actions";
 
 afterEach(cleanup);
 
@@ -264,6 +265,68 @@ describe("a new folder can go at the top level (d-ux docs polish 1)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(async () =>
       expect((await folderRepo.list()).find((f) => f.name === "Demo 2024")?.parentId).toBeNull(),
+    );
+  });
+});
+
+describe("name dialog note (vault PR 8)", () => {
+  it("describes the dialog with its note, such as a default folder's 'Only <year>'", () => {
+    render(
+      <NameDialog
+        open
+        onOpenChange={() => {}}
+        title="Rename folder"
+        label="Folder name"
+        submitLabel="Rename"
+        note="Only 2031: other years keep their own Expenses folder."
+        onSubmit={async () => {}}
+      />,
+    );
+    expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
+      "Only 2031: other years keep their own Expenses folder.",
+    );
+  });
+});
+
+describe("folder actions by kind (vault PR 8, ADR § 5)", () => {
+  const actions = async (defaultKey: string | null) => {
+    const folder = { ...(await folderRepo.create({ name: `Demo ${defaultKey}` })), defaultKey };
+    render(
+      <FolderActions folder={folder} onRename={() => {}} onMove={() => {}} onDelete={() => {}} />,
+    );
+    const names = screen.getAllByRole("button").map((b) => b.textContent);
+    cleanup();
+    return names;
+  };
+  it("hides Rename and Move on a year folder, Move on a default folder, nothing on a user folder", async () => {
+    expect(await actions(YEAR_ROOT_KEY)).toEqual(["Delete folder"]);
+    expect(await actions("expenses")).toEqual(["Rename folder", "Delete folder"]);
+    expect(await actions(null)).toEqual(["Rename folder", "Move folder", "Delete folder"]);
+  });
+});
+
+describe("folder depth (vault PR 8: user folders to a depth of 8)", () => {
+  it("shows the repo's too-deep message in New folder at depth 8", async () => {
+    let parent = await folderRepo.create({ name: "Demo depth 1" });
+    for (let d = 2; d <= MAX_FOLDER_DEPTH; d++) {
+      parent = await folderRepo.create({ name: `Demo depth ${d}`, parentId: parent.id });
+    }
+    render(
+      <NameDialog
+        open
+        onOpenChange={() => {}}
+        title="New folder"
+        label="Folder name"
+        submitLabel="Create"
+        onSubmit={async (name) => {
+          await folderRepo.create({ name, parentId: parent.id });
+        }}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Folder name"), { target: { value: "Demo depth 9" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Folders can be nested 8 deep at most.",
     );
   });
 });
