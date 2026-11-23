@@ -72,9 +72,10 @@ export type VaultStore = {
   remove(path: string): Promise<void>;
   /**
    * The entries of a directory, sorted; empty when it doesn't exist. Hides `.<name>.fiscode-tmp`
-   * leftovers of a crashed write: they are never documents (the PR 6 scan deletes them).
+   * leftovers of a crashed write: they are never documents. The scan asks for them with
+   * `withTmp` to delete them.
    */
-  list(dir: string): Promise<VaultEntry[]>;
+  list(dir: string, options?: { withTmp?: boolean }): Promise<VaultEntry[]>;
 
   /** Old bytes: `_fiscode/versions/`, then `_fiscode/trash/` (ADR § 2). */
   resolveOldBytes(sha256: string): Promise<{ path: string; bytes: Blob } | undefined>;
@@ -91,6 +92,9 @@ export type VaultStore = {
 
 export const VAULT_DIR = "vault";
 export const TMP_SUFFIX = ".fiscode-tmp";
+
+/** `.<name>.fiscode-tmp`: a write in progress, or the leftover of a crashed one (§ 6 step 3). */
+export const isTmpName = (name: string) => name.startsWith(".") && name.endsWith(TMP_SUFFIX);
 
 const isQuotaError = (err: unknown): boolean =>
   err instanceof DOMException && (err.name === "QuotaExceededError" || err.code === 22);
@@ -252,7 +256,7 @@ export const vaultStore = (root: VaultDirHandle): VaultStore => {
         await removeIn(chain[i]!, dirs[i]!);
       }
     },
-    async list(path) {
+    async list(path, options) {
       let dir: VaultDirHandle;
       try {
         dir = await walk(
@@ -267,7 +271,7 @@ export const vaultStore = (root: VaultDirHandle): VaultStore => {
       }
       const out: VaultEntry[] = [];
       for await (const [name, handle] of dir.entries()) {
-        if (name.startsWith(".") && name.endsWith(TMP_SUFFIX)) continue;
+        if (!options?.withTmp && isTmpName(name)) continue;
         out.push({ name, kind: handle.kind });
       }
       return out.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));

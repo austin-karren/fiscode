@@ -281,3 +281,23 @@ export type { FolderNode, LinkedRecord } from "./documents.ts";
 export { linkedDates } from "./documents.ts";
 export { prepareVault, resumeVaultMigration, runVaultStartup } from "./vault-boot.ts";
 export type { ShortenedFolder } from "./document-tree.ts";
+export {
+  acknowledgeChanged,
+  adoptMoved,
+  applyRecordDates,
+  importNewFiles,
+  moveBack,
+  readLastScanReport,
+  scanReviewCount,
+  scanVault,
+  type ScanChanged,
+  type ScanConflict,
+  type ScanMissing,
+  type ScanMoved,
+  type ScanNewFile,
+  type ScanProgress,
+  type ScanRedated,
+  type ScanReport,
+  type ScanResult,
+  type ScanTrigger,
+} from "./vault-scan.ts";

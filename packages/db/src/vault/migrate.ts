@@ -332,7 +332,7 @@ export const migrateToVault = async (options: MigrationOptions): Promise<VaultMi
         throw err;
       }
     },
-    { wait: true },
+    { wait: true, long: true },
   );
 };
 
