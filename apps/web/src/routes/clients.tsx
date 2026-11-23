@@ -278,6 +278,7 @@ function ClientsPage() {
                           itemName={c.name}
                           recordName={recordLabel.client(c)}
                           references={referencesTo(c.id)}
+                          documents={linkCounts[c.id] ?? 0}
                           onConfirm={() => archive(c)}
                         />
                       </div>

@@ -50,7 +50,7 @@ vi.mock("@fiscode/db", () => ({
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useLoaderData: () => ({
-    linkCounts: {},
+    linkCounts: { c_live: 2 },
     clients: loaded.clients ?? [liveClient, archivedClient],
     income: [...pointsAt("c_live", 2), ...pointsAt("c_arch", 4)],
     timeEntries: pointsAt("c_live", 1),
@@ -90,6 +90,7 @@ describe("archiving a client", () => {
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText("Archive Demo Live Co?")).toBeInTheDocument();
     expect(dialog).toHaveTextContent("2 income rows and 1 time entry reference it.");
+    expect(dialog).toHaveTextContent("2 linked documents stay in Documents.");
     expect(softDelete).not.toHaveBeenCalled();
 
     const buttons = within(dialog).getAllByRole("button");

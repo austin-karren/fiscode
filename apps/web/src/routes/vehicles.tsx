@@ -318,6 +318,7 @@ function VehiclesPage() {
                               plural: "mileage entries",
                             },
                           ]}
+                          documents={linkCounts[v.id] ?? 0}
                           onConfirm={() => archive(v)}
                         />
                       </div>
