@@ -1,7 +1,7 @@
 // Vault names (ADR 0001 § 3-5, § 11.5): pure rules for the readable tree
 // `documents/<year>/<category>/<YYYY-MM-DD> <title>.<ext>`. No I/O; the repos and the dialogs call these.
 
-import { DocumentError, freeFolderName, YEAR_ROOT_KEY } from "./documents.ts";
+import { DocumentError, freeFolderName, sameName, YEAR_ROOT_KEY } from "./documents.ts";
 
 /** The longest path from the vault root, in UTF-16 units (Windows MAX_PATH 260 less a typical root). D4. */
 export const MAX_VAULT_PATH = 240;
@@ -163,23 +163,20 @@ export interface VaultPathResult {
   overBy: number;
 }
 
-/** Lower-cased NFC: how the vault compares paths (case-insensitive file systems). */
-export const vaultPathKey = (path: string): string => path.normalize("NFC").toLowerCase();
-
 /**
  * Where a document goes: its folder path plus `vaultFileName`, the title shortened until the
  * path is ≤ 240, and " (2)", " (3)"... before the extension when `taken` holds that path (files
- * or folders, compared by `vaultPathKey`). Never throws: `fits: false` means the dialog shows
+ * or folders, compared by `sameName`). Never throws: `fits: false` means the dialog shows
  * "Name too long" and disables Save.
  *
  * Folder names are not shortened here: a folder's disk name must be the same for every file in
  * it, so that is decided per folder (`vaultFolderName`), not per file.
  */
 export const vaultPath = (input: VaultPathInput, taken: Iterable<string> = []): VaultPathResult => {
-  const takenKeys = new Set([...taken].map(vaultPathKey));
+  const takenPaths = [...taken];
   const dirs = input.folders === null ? [VAULT_UNFILED_DIR] : input.folders.map(vaultFolderName);
   // A top-level user folder named "Unfiled" must not share the Unfiled directory (§ 5).
-  if (input.folders !== null && dirs[0] !== undefined) {
+  if (input.folders !== null && dirs[0] !== undefined && sameName(dirs[0], VAULT_UNFILED_DIR)) {
     dirs[0] = freeFolderName(dirs[0], [VAULT_UNFILED_DIR, ...(input.topLevelSiblings ?? [])]);
   }
   const dir = [VAULT_DOCUMENTS_DIR, ...dirs].join("/");
@@ -205,7 +202,7 @@ export const vaultPath = (input: VaultPathInput, taken: Iterable<string> = []): 
       return { path, fits: false, overBy: Math.max(path.length - MAX_VAULT_PATH, 0) };
     }
     const path = `${dir}/${name}`;
-    if (!takenKeys.has(vaultPathKey(path))) {
+    if (!takenPaths.some((t) => sameName(t, path))) {
       const overBy = Math.max(path.length - MAX_VAULT_PATH, 0);
       return { path, fits: overBy === 0, overBy };
     }

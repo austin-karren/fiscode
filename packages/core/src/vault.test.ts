@@ -3,6 +3,7 @@ import {
   MAX_VAULT_PATH,
   safeSegment,
   folderPathFits,
+  freeFolderName,
   VAULT_FILE_RESERVE,
   VAULT_MIN_TITLE,
   vaultFileName,
@@ -150,6 +151,18 @@ describe("vaultPath", () => {
     expect(cut).not.toMatch(/[. ]$|\.part$|~$/);
     expect(bytes(cut)).toBeLessThanOrEqual(120);
     expect(vaultFolderName(`${"a".repeat(118)}..xyz`)).toBe("a".repeat(118));
+  });
+  it("never renames a real top-level folder for being among its siblings", () => {
+    expect(
+      vaultPath({ ...base, folders: ["2026"], topLevelSiblings: ["2026", "Unfiled"] }).path,
+    ).toBe("documents/2026/2026-03-04 Demo NAS.pdf");
+  });
+  it("compares paths ignoring case and accents, like freeFolderName", () => {
+    const r = vaultPath({ ...base, title: "Cafe", folders: null }, [
+      "documents/unfiled/2026-03-04 CAFÉ.pdf",
+    ]);
+    expect(r.path).toBe("documents/Unfiled/2026-03-04 Cafe (2).pdf");
+    expect(freeFolderName("Cafe", ["CAFÉ"])).toBe("Cafe (2)");
   });
   it("caps a malformed extension and keeps its dot", () => {
     const name = vaultFileName({ date: null, title: "Demo", ext: "p".repeat(115) });
