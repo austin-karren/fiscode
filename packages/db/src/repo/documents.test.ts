@@ -440,7 +440,7 @@ describe("review #84 r3: two tabs", () => {
 
 describe("documentLinkRepo: home office, profile, client, vehicle", () => {
   const stamp = { createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" };
-  const resolve = async (type: string, id: string) => {
+  const linkAndRead = async (type: string, id: string) => {
     const d = await documentRepo.upload(file(`${type}.pdf`, type));
     await documentLinkRepo.link(d.id, type, id);
     const [l] = await documentLinkRepo.forDocument(d.id);
@@ -455,7 +455,7 @@ describe("documentLinkRepo: home office, profile, client, vehicle", () => {
       deletedAt: null,
       ...stamp,
     } as never);
-    const { record } = await resolve("home_office", h.id);
+    const { record } = await linkAndRead("home_office", h.id);
     expect(record).toEqual({
       recordType: "home_office",
       id: h.id,
@@ -473,7 +473,7 @@ describe("documentLinkRepo: home office, profile, client, vehicle", () => {
       deletedAt: null,
       ...stamp,
     } as never);
-    expect((await resolve("vehicle", v.id)).record).toEqual({
+    expect((await linkAndRead("vehicle", v.id)).record).toEqual({
       recordType: "vehicle",
       id: v.id,
       date: "2026-04-02",
@@ -485,7 +485,7 @@ describe("documentLinkRepo: home office, profile, client, vehicle", () => {
       deletedAt: null,
       ...stamp,
     } as never);
-    expect((await resolve("vehicle", w.id)).record).toEqual({
+    expect((await linkAndRead("vehicle", w.id)).record).toEqual({
       recordType: "vehicle",
       id: w.id,
       date: "",
@@ -499,7 +499,7 @@ describe("documentLinkRepo: home office, profile, client, vehicle", () => {
       deletedAt: null,
       ...stamp,
     } as never);
-    expect((await resolve("client", c.id)).record).toEqual({
+    expect((await linkAndRead("client", c.id)).record).toEqual({
       recordType: "client",
       id: c.id,
       date: "",
@@ -513,7 +513,7 @@ describe("documentLinkRepo: home office, profile, client, vehicle", () => {
       state: "UT",
       seStartDate: "2026-01-01",
     } as never);
-    expect((await resolve("profile", "profile")).record).toEqual({
+    expect((await linkAndRead("profile", "profile")).record).toEqual({
       recordType: "profile",
       id: "profile",
       date: "",
@@ -529,7 +529,7 @@ describe("documentLinkRepo: home office, profile, client, vehicle", () => {
       );
     }
     const c = await clientRepo.create({ name: "Gone Co", deletedAt: null, ...stamp } as never);
-    const { d: cd } = await resolve("client", c.id);
+    const { d: cd } = await linkAndRead("client", c.id);
     expect(await documentLinkRepo.countsByDocument()).toEqual(new Map([[cd.id, 1]]));
     await clientRepo.softDelete(c.id);
     expect(await documentLinkRepo.forDocument(cd.id)).toEqual([]);
