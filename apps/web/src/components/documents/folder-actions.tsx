@@ -9,22 +9,25 @@ export function FolderActions(props: {
   onRename: () => void;
   onMove: () => void;
   onDelete: () => void;
+  /** Read-only (the vault migration): shown, but off. */
+  disabled?: boolean;
 }) {
   const rules = vaultFolderRules(props.folder.defaultKey);
   return (
     <>
       {rules.rename ? (
-        <Button variant="ghost" onClick={props.onRename}>
+        <Button variant="ghost" disabled={props.disabled} onClick={props.onRename}>
           Rename folder
         </Button>
       ) : null}
       {rules.move ? (
-        <Button variant="ghost" onClick={props.onMove}>
+        <Button variant="ghost" disabled={props.disabled} onClick={props.onMove}>
           Move folder
         </Button>
       ) : null}
       <Button
         variant="ghost"
+        disabled={props.disabled}
         className="text-destructive hover:text-destructive"
         onClick={props.onDelete}
       >

@@ -5,6 +5,13 @@ vi.mock("@fiscode/db", async () => {
   // SQLite and OPFS don't exist in jsdom: the repos are the in-memory fake.
   const fake = await import("../../test/fake-documents");
   return {
+    // The vault migration is done: every write is on (vault PR 9).
+    getVaultMigrationState: (
+      (done) => () =>
+        done
+    )({ phase: "done" }),
+    onVaultMigrationState: () => () => {},
+
     folderRepo: fake.folderRepo,
     documentRepo: fake.documentRepo,
     documentLinkRepo: fake.documentLinkRepo,

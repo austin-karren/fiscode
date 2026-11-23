@@ -26,6 +26,8 @@ import { buildBundle, importBundle } from "@fiscode/db";
 import { CircleAlert, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { ReadOnlyNote } from "./read-only-note";
+import { useVaultReadOnly } from "../lib/vault-migration";
 import { SectionTitle } from "./section-title";
 
 type ReadableFile = Extract<ImportFile, { ok: true }>;
@@ -172,6 +174,8 @@ export function ImportCard({
   };
 
   const setup = variant === "setup";
+  // Import waits for the vault migration (§ 10); reading a file to see what it holds is fine.
+  const readOnly = useVaultReadOnly();
 
   return (
     <>
@@ -200,7 +204,13 @@ export function ImportCard({
               e.target.value = "";
             }}
           />
-          <Button type="button" variant="outline" onClick={() => input.current?.click()}>
+          <ReadOnlyNote reason={readOnly} />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!!readOnly}
+            onClick={() => input.current?.click()}
+          >
             <Upload />
             Choose a CSV file
           </Button>
@@ -298,7 +308,9 @@ export function ImportCard({
                 </Button>
                 <Button
                   onClick={confirm}
-                  disabled={busy || !plan || plan.refusal !== undefined || addsNothing(plan)}
+                  disabled={
+                    busy || !!readOnly || !plan || plan.refusal !== undefined || addsNothing(plan)
+                  }
                 >
                   {busy && mode ? BUSY_LABELS[mode] : mode ? MODE_LABELS[mode] : "Choose an option"}
                 </Button>

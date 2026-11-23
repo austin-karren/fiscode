@@ -33,6 +33,8 @@ import { downloadBlob, passphraseStrength, progressLine } from "../lib/backup-vi
 import { errorLine, formatBytes } from "../lib/documents-view";
 import { formatDateTime } from "../lib/format-date";
 import { describePlan, Refusal } from "./import-card";
+import { ReadOnlyNote } from "./read-only-note";
+import { useVaultReadOnly } from "../lib/vault-migration";
 import { SectionTitle } from "./section-title";
 
 /** The id of the card, so "restore a backup" elsewhere can link to it. */
@@ -57,6 +59,8 @@ export function BackupCard({
   useEffect(() => {
     if (window.location.hash === `#${BACKUP_CARD_ID}`) restoreButton.current?.focus();
   }, []);
+  // Backup and restore wait for the vault migration (§ 10).
+  const readOnly = useVaultReadOnly();
   return (
     <Card id={BACKUP_CARD_ID} className="scroll-mt-20">
       <CardHeader>
@@ -72,13 +76,17 @@ export function BackupCard({
             ? "An encrypted backup (.zip.age) from Back up everything brings back every row, your history and your document files."
             : "One encrypted file (.zip.age) with every row, your history and your document files. Restore it here or on another device."}
         </p>
+        <ReadOnlyNote reason={readOnly} />
         <div className="flex flex-wrap gap-2">
           {variant === "dashboard" ? (
-            <Button onClick={() => setDialog("backup")}>Back up everything</Button>
+            <Button disabled={!!readOnly} onClick={() => setDialog("backup")}>
+              Back up everything
+            </Button>
           ) : null}
           <Button
             ref={restoreButton}
             variant={variant === "dashboard" ? "outline" : "default"}
+            disabled={!!readOnly}
             onClick={() => setDialog("restore")}
           >
             Restore from backup

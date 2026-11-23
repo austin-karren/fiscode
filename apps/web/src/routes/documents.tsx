@@ -16,10 +16,12 @@ import { MoveDialog } from "../components/documents/move-dialog";
 import { DocumentSheet } from "../components/documents/document-sheet";
 import { FolderTree } from "../components/documents/folder-tree";
 import { FolderActions } from "../components/documents/folder-actions";
+import { ReadOnlyNote } from "../components/read-only-note";
+import { useVaultReadOnly } from "../lib/vault-migration";
 import { ALLOWED_DOCUMENT_MIMES, YEAR_ROOT_KEY, validDocumentName } from "@fiscode/core";
 import { documentLinkRepo, documentRepo, folderRepo } from "@fiscode/db";
 import type { DocumentRow, DocumentFolderRow } from "@fiscode/csv";
-import { fileKind, folderPath, formatBytes, subtreeOf } from "../lib/documents-view";
+import { errorLine, fileKind, folderPath, formatBytes, subtreeOf } from "../lib/documents-view";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { uploadFiles, type UploadResult } from "../lib/documents-upload";
 import { landedLine, restoreDocument } from "../lib/documents-restore";
@@ -76,6 +78,8 @@ function DocumentsPage() {
   const refresh = () => router.invalidate();
   const { tree, folders, folderId, docs, linkCounts } = data;
   const current = folders.find((f) => f.id === folderId);
+  // Read-only until the vault migration is done (§ 10): writes off, preview still works.
+  const readOnly = useVaultReadOnly();
   const openDoc = data.allDocs.find((d) => d.id === search.doc && d.deletedAt === null);
 
   const [dialog, setDialog] = useState<
@@ -107,32 +111,37 @@ function DocumentsPage() {
   const deleteFolder = async () => {
     if (!confirmDelete) return;
     const { folder } = confirmDelete;
-    const deleted = await folderRepo.softDeleteTree(folder.id);
     setConfirmDelete(null);
+    const deleted = await showingError(() => folderRepo.softDeleteTree(folder.id));
+    if (!deleted) return;
     await navigate({ search: (s) => ({ ...s, folder: folder.parentId ?? undefined }) });
     await refresh();
     toast(`Deleted ${folder.name}.`, {
       duration: 8000,
       action: {
         label: "Undo",
-        onClick: async () => {
-          const { shortened } = await folderRepo.restoreTree(deleted);
-          toast(await landedLine(folder, shortened));
-          await refresh();
-        },
+        onClick: () =>
+          void showingError(async () => {
+            const { shortened } = await folderRepo.restoreTree(deleted);
+            toast(await landedLine(folder, shortened));
+            await refresh();
+          }),
       },
     });
   };
 
   const removeDoc = async (doc: DocumentRow, from: HTMLElement) => {
     const refocus = focusAfterRemoval(from);
-    await softDeleteWithUndo({
-      repo: documentRepo,
-      row: doc,
-      message: `Deleted ${doc.name}.`,
-      undoneMessage: `Restored ${doc.name}.`,
-      onChange: refresh,
-    });
+    const done = await showingError(() =>
+      softDeleteWithUndo({
+        repo: documentRepo,
+        row: doc,
+        message: `Deleted ${doc.name}.`,
+        undoneMessage: `Restored ${doc.name}.`,
+        onChange: refresh,
+      }).then(() => true),
+    );
+    if (!done) return;
     await refresh();
     refocus();
   };
@@ -151,6 +160,7 @@ function DocumentsPage() {
               folders={data.trashFolders}
               docs={data.trashDocs}
               allFolders={folders}
+              readOnly={readOnly}
               onRestored={refresh}
             />
           ) : (
@@ -158,13 +168,13 @@ function DocumentsPage() {
               className={dragging ? "ring-2 ring-ring" : undefined}
               onDragOver={(e) => {
                 e.preventDefault();
-                setDragging(true);
+                if (!readOnly) setDragging(true);
               }}
               onDragLeave={() => setDragging(false)}
               onDrop={(e) => {
                 e.preventDefault();
                 setDragging(false);
-                void upload([...e.dataTransfer.files]);
+                if (!readOnly) void upload([...e.dataTransfer.files]);
               }}
             >
               <CardHeader>
@@ -175,8 +185,9 @@ function DocumentsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3">
+                <ReadOnlyNote reason={readOnly} />
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button onClick={() => fileInput.current?.click()}>
+                  <Button disabled={!!readOnly} onClick={() => fileInput.current?.click()}>
                     <Upload />
                     Upload
                   </Button>
@@ -191,12 +202,17 @@ function DocumentsPage() {
                       e.target.value = "";
                     }}
                   />
-                  <Button variant="outline" onClick={() => setDialog({ kind: "new-folder" })}>
+                  <Button
+                    variant="outline"
+                    disabled={!!readOnly}
+                    onClick={() => setDialog({ kind: "new-folder" })}
+                  >
                     New folder
                   </Button>
                   {current ? (
                     <FolderActions
                       folder={current}
+                      disabled={!!readOnly}
                       onRename={() => setDialog({ kind: "rename-folder", folder: current })}
                       onMove={() => setDialog({ kind: "move-folder", folder: current })}
                       onDelete={() => void askDeleteFolder(current)}
@@ -298,6 +314,7 @@ function DocumentsPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                disabled={!!readOnly}
                                 onClick={() => setDialog({ kind: "rename-doc", doc: d })}
                               >
                                 Rename <span className="sr-only">{d.name}</span>
@@ -305,6 +322,7 @@ function DocumentsPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                disabled={!!readOnly}
                                 onClick={() => setDialog({ kind: "move-doc", doc: d })}
                               >
                                 Move <span className="sr-only">{d.name}</span>
@@ -313,6 +331,7 @@ function DocumentsPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="text-destructive hover:text-destructive"
+                                disabled={!!readOnly}
                                 onClick={(e) => void removeDoc(d, e.currentTarget)}
                               >
                                 Delete <span className="sr-only">{d.name}</span>
@@ -446,6 +465,16 @@ const renameNote = (folder: DocumentFolderRow): string | undefined =>
     ? `Only ${folder.taxYear}: other years keep their own ${folder.name} folder.`
     : undefined;
 
+// A refused write (VaultMigratingError, a taken name...) shows its own message; undefined then.
+const showingError = async <T,>(write: () => Promise<T>): Promise<T | undefined> => {
+  try {
+    return await write();
+  } catch (err) {
+    toast.error(errorLine(err));
+    return undefined;
+  }
+};
+
 const n = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 // Deleted folders and documents, each with Restore.
@@ -453,22 +482,26 @@ function TrashView({
   folders,
   docs,
   allFolders,
+  readOnly,
   onRestored,
 }: {
   folders: DocumentFolderRow[];
   docs: DocumentRow[];
   allFolders: DocumentFolderRow[];
+  readOnly: string | undefined;
   onRestored: () => Promise<void>;
 }) {
-  const restoreFolder = async (f: DocumentFolderRow) => {
-    await folderRepo.revertTo(f.id, { ...f, deletedAt: null });
-    toast(await landedLine(f));
-    await onRestored();
-  };
-  const restoreDoc = async (d: DocumentRow) => {
-    toast(await restoreDocument(d));
-    await onRestored();
-  };
+  const restoreFolder = (f: DocumentFolderRow) =>
+    showingError(async () => {
+      await folderRepo.revertTo(f.id, { ...f, deletedAt: null });
+      toast(await landedLine(f));
+      await onRestored();
+    });
+  const restoreDoc = (d: DocumentRow) =>
+    showingError(async () => {
+      toast(await restoreDocument(d));
+      await onRestored();
+    });
   return (
     <Card>
       <CardHeader>
@@ -477,6 +510,7 @@ function TrashView({
         </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-3">
+        <ReadOnlyNote reason={readOnly} />
         {folders.length === 0 && docs.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">Trash is empty.</p>
         ) : (
@@ -487,7 +521,12 @@ function TrashView({
                   <Folder className="size-4 text-muted-foreground" aria-hidden />
                   {folderPath([...allFolders, f], f.id)}
                 </span>
-                <Button variant="ghost" size="sm" onClick={() => void restoreFolder(f)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!!readOnly}
+                  onClick={() => void restoreFolder(f)}
+                >
                   Restore <span className="sr-only">folder {f.name}</span>
                 </Button>
               </li>
@@ -498,7 +537,12 @@ function TrashView({
                   <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                   {d.name}
                 </span>
-                <Button variant="ghost" size="sm" onClick={() => void restoreDoc(d)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!!readOnly}
+                  onClick={() => void restoreDoc(d)}
+                >
                   Restore <span className="sr-only">{d.name}</span>
                 </Button>
               </li>

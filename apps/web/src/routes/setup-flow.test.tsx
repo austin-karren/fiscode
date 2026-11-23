@@ -15,6 +15,13 @@ vi.mock("@tanstack/react-router-devtools", () => ({ TanStackRouterDevtools: () =
 const { store } = vi.hoisted(() => ({ store: { profile: undefined as object | undefined } }));
 
 vi.mock("@fiscode/db", () => ({
+  // The vault migration is done: every write is on (vault PR 9).
+  getVaultMigrationState: (
+    (done) => () =>
+      done
+  )({ phase: "done" }),
+  onVaultMigrationState: () => () => {},
+
   profileRepo: {
     get: async () => store.profile,
     exists: async () => store.profile !== undefined,
