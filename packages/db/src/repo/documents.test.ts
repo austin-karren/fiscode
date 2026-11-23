@@ -308,7 +308,9 @@ describe("review #84 r1", () => {
     const expenses = first.find((f) => f.name === "Expenses")!;
     await folderRepo.rename(expenses.id, "Receipts");
     const other = first.find((f) => f.name === "Other")!;
-    await folderRepo.move(other.id, null);
+    // A user move of a default folder is refused now (FolderFixedError); one moved before that
+    // rule, or by a revert, still isn't made again.
+    await folderRepo.update(other.id, { parentId: null });
     const before = (await folderRepo.listIncludingDeleted()).length;
     await folderRepo.ensureYearDefaults(2026);
     expect((await folderRepo.listIncludingDeleted()).length).toBe(before);

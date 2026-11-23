@@ -218,6 +218,18 @@ export const vaultFolderRules = (defaultKey: string | null): { rename: boolean; 
 
 // Errors (ADR § 11.7). StorageQuotaError already exists in documents.ts.
 
+/** A user rename or move that `vaultFolderRules` forbids (D5, § 5). */
+export class FolderFixedError extends DocumentError {
+  override readonly name = "FolderFixedError";
+}
+/** A folder rename or move cancelled before its commit: nothing changed (§ 11.3). */
+export class OperationCancelledError extends DocumentError {
+  override readonly name = "OperationCancelledError";
+  constructor() {
+    super("Cancelled. Nothing was changed.");
+  }
+}
+
 export class VaultPermissionError extends DocumentError {
   override readonly name = "VaultPermissionError";
   constructor() {

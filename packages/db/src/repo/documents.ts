@@ -17,6 +17,8 @@ import {
   YEAR_DEFAULT_FOLDERS,
   YEAR_DEFAULT_FOLDER_KEYS,
   YEAR_ROOT_KEY,
+  FolderFixedError,
+  vaultFolderRules,
   validDocumentName,
   freeFolderName,
   documentMimeFor,
@@ -29,7 +31,15 @@ import {
 import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getVaultStore, sha256Hex } from "../vault/store.ts";
 import { assertVaultWritable } from "../vault/state.ts";
-import { changeTree, type DocumentChange, type ShortenedFolder } from "./document-tree.ts";
+import {
+  changeTree,
+  previewDocumentPath,
+  previewFolderPath,
+  type DocumentChange,
+  type PathPreview,
+  type RunHooks,
+  type ShortenedFolder,
+} from "./document-tree.ts";
 import { historyQuery } from "../vault/tree.ts";
 import { getDb, runAtomic, type AtomicQuery } from "../client.ts";
 import {
@@ -153,17 +163,64 @@ export const folderRepo = {
     return row;
   },
 
-  /** Throws FolderNameTakenError, VaultPathTooLongError (a file below would be over budget). */
-  async rename(id: string, rawName: string): Promise<DocumentFolderRow> {
-    const name = validFolderName(rawName);
-    const folder = await requireFolder(id);
-    assertNameFree(name, folder.parentId ?? null, await liveFolders(), id);
-    return folderUpdate(folder, { name });
+  /**
+   * Where a folder would be on disk if saved now (new when `id` is absent), by the same rules as
+   * the save: read-only. `fits` is false when it or a file it relocates would be over budget.
+   */
+  async previewPath(input: {
+    id?: string;
+    parentId: string | null;
+    name: string;
+  }): Promise<PathPreview> {
+    const existing = input.id ? await requireFolder(input.id) : undefined;
+    const at = nowIso();
+    const next: DocumentFolderRow = existing
+      ? { ...existing, parentId: input.parentId, name: input.name, updatedAt: at }
+      : {
+          id: newId(),
+          name: input.name,
+          parentId: input.parentId,
+          taxYear: null,
+          sortOrder: 0,
+          defaultKey: null,
+          deletedAt: null,
+          createdAt: at,
+          updatedAt: at,
+        };
+    return previewFolderPath(next, !existing, linkedDates);
   },
 
-  /** Move under `newParentId` (null = root). Throws FolderCycleError, FolderNameTakenError, FolderTooDeepError. */
-  async move(id: string, newParentId: string | null): Promise<DocumentFolderRow> {
+  /**
+   * Throws FolderFixedError (a year folder), FolderNameTakenError, VaultPathTooLongError (a file
+   * below would be over budget), OperationCancelledError (`hooks.signal`, before the commit).
+   */
+  async rename(id: string, rawName: string, hooks: RunHooks = {}): Promise<DocumentFolderRow> {
+    const name = validFolderName(rawName);
     const folder = await requireFolder(id);
+    if (!vaultFolderRules(folder.defaultKey).rename) {
+      throw new FolderFixedError("Year folders can't be renamed or moved.");
+    }
+    assertNameFree(name, folder.parentId ?? null, await liveFolders(), id);
+    return folderUpdate(folder, { name }, hooks);
+  },
+
+  /**
+   * Move under `newParentId` (null = root). Throws FolderFixedError (a year or default folder),
+   * FolderCycleError, FolderNameTakenError, FolderTooDeepError, OperationCancelledError.
+   */
+  async move(
+    id: string,
+    newParentId: string | null,
+    hooks: RunHooks = {},
+  ): Promise<DocumentFolderRow> {
+    const folder = await requireFolder(id);
+    if (!vaultFolderRules(folder.defaultKey).move) {
+      throw new FolderFixedError(
+        folder.defaultKey === YEAR_ROOT_KEY
+          ? "Year folders can't be renamed or moved."
+          : "Default folders can't be moved.",
+      );
+    }
     const folders = await liveFolders();
     if (newParentId !== null) {
       await requireFolder(newParentId);
@@ -175,7 +232,7 @@ export const folderRepo = {
       1 + Math.max(0, ...folders.filter((f) => f.parentId === fid).map((f) => height(f.id)));
     if (depthOf(newParentId, all) + height(id) > MAX_FOLDER_DEPTH) throw new FolderTooDeepError();
     assertNameFree(folder.name, newParentId, folders, id);
-    return folderUpdate(folder, { parentId: newParentId });
+    return folderUpdate(folder, { parentId: newParentId }, hooks);
   },
 
   /** Field changes through the tree, so a name or parent change moves the files below (§ 6). */
@@ -556,10 +613,11 @@ const lenient = { strict: false, datesFor: linkedDates };
 const folderUpdate = async (
   folder: DocumentFolderRow,
   patch: Partial<DocumentFolderRow>,
+  hooks: RunHooks = {},
 ): Promise<DocumentFolderRow> => {
   const next = { ...folder, ...patch, updatedAt: nowIso() };
   if (changesNothing(folder, patch)) return folder;
-  await changeTree({ folders: [{ next, op: "update" }] }, strict);
+  await changeTree({ folders: [{ next, op: "update" }] }, strict, hooks);
   return next;
 };
 
@@ -645,6 +703,41 @@ export const documentRepo = {
       }
     }
     return { ok, failed };
+  },
+
+  /**
+   * Where a document would be in the vault if saved now (an upload when `id` is absent), by the
+   * same rules as the save: read-only. `fits` false means the save would refuse it.
+   */
+  async previewPath(input: {
+    id?: string;
+    folderId: string | null;
+    name: string;
+  }): Promise<PathPreview> {
+    const at = nowIso();
+    if (input.id) {
+      const doc = await requireDocument(input.id);
+      return previewDocumentPath(
+        { ...doc, folderId: input.folderId, name: input.name, updatedAt: at },
+        false,
+        linkedDates,
+      );
+    }
+    const next: DocumentRow = {
+      id: newId(),
+      folderId: input.folderId,
+      name: input.name,
+      mime: documentMimeFor(input.name, "") ?? "application/octet-stream",
+      sizeBytes: 0,
+      sha256: "",
+      addedAt: at,
+      notes: null,
+      vaultPath: null,
+      deletedAt: null,
+      createdAt: at,
+      updatedAt: at,
+    } as DocumentRow;
+    return previewDocumentPath(next, true, linkedDates);
   },
 
   /** Throws DocumentNameInvalidError for an empty, over-long or "/" name (as folders). */

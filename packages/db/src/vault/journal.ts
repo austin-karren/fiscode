@@ -1,4 +1,4 @@
-import { VaultIntegrityError, VaultNameTakenError } from "@fiscode/core";
+import { OperationCancelledError, VaultIntegrityError, VaultNameTakenError } from "@fiscode/core";
 import { isNotFound, type VaultDirHandle } from "./dir.ts";
 import { withVaultLock, type LockManagerLike } from "./lock.ts";
 import { sha256Hex, type VaultStore } from "./store.ts";
@@ -119,9 +119,25 @@ const checkPlan = async (store: VaultStore, plan: Plan) => {
   }
 };
 
-const rollForward = async (store: VaultStore, plan: Plan) => {
-  for (const op of plan.ops) await applyOp(store, op);
+const rollForward = async (store: VaultStore, plan: Plan, hooks: RunHooks = {}) => {
+  const total = plan.ops.length;
+  for (const [i, op] of plan.ops.entries()) {
+    if (hooks.signal?.aborted) throw new OperationCancelledError();
+    hooks.onProgress?.({ phase: "moving", done: i, total });
+    await applyOp(store, op);
+  }
+  if (hooks.signal?.aborted) throw new OperationCancelledError();
+  hooks.onProgress?.({ phase: "moving", done: total, total });
 };
+
+/** Where a tree change is (§ 11.3): file ops done of total, then the commit, then done. */
+export type TreeProgress = { phase: "moving" | "saving" | "done"; done: number; total: number };
+
+/**
+ * A cancel is checked before each file op and before the commit, and rolls the files back. Once
+ * the commit starts it is ignored: roll-forward owns the change from there.
+ */
+export type RunHooks = { onProgress?: (p: TreeProgress) => void; signal?: AbortSignal };
 const rollBack = async (store: VaultStore, plan: Plan) => {
   for (const op of [...plan.ops].reverse()) await undoOp(store, op);
 };
@@ -132,7 +148,7 @@ export type VaultJournal = {
    * `commit` (the caller's runAtomic with the rows and the ledger row), then clear the journal.
    * A failure before the commit lands rolls the files back and rethrows.
    */
-  run(plan: Plan, commit: () => Promise<void>): Promise<void>;
+  run(plan: Plan, commit: () => Promise<void>, hooks?: RunHooks): Promise<void>;
   /** On boot and before any change: finish or undo a plan a crash left behind (ADR § 6). */
   recover(): Promise<Recovery>;
 };
@@ -159,14 +175,15 @@ export const vaultJournal = (
   // lock throws VaultBusyError; recovery is background work, so it waits.
   return {
     recover: () => withVaultLock(recover, { wait: true, locks }),
-    run: (plan, commit) =>
+    run: (plan, commit, hooks = {}) =>
       withVaultLock(
         async () => {
           await recover();
           await checkPlan(store, plan);
           await writeJournal(root, plan);
           try {
-            await rollForward(store, plan);
+            await rollForward(store, plan, hooks);
+            hooks.onProgress?.({ phase: "saving", done: plan.ops.length, total: plan.ops.length });
             await commit();
           } catch (err) {
             // The commit may have landed before the error (e.g. a lost reply): the ledger decides.

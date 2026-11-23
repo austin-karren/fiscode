@@ -280,4 +280,4 @@ export { folderRepo, documentRepo, documentLinkRepo };
 export type { FolderNode, LinkedRecord } from "./documents.ts";
 export { linkedDates } from "./documents.ts";
 export { prepareVault, resumeVaultMigration, runVaultStartup } from "./vault-boot.ts";
-export type { ShortenedFolder } from "./document-tree.ts";
+export type { PathPreview, RunHooks, ShortenedFolder, TreeProgress } from "./document-tree.ts";
