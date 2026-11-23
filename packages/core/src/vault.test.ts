@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_VAULT_PATH,
   safeSegment,
+  folderPathFits,
+  VAULT_FILE_RESERVE,
+  VAULT_MIN_TITLE,
   vaultFileName,
   vaultFolderName,
   vaultFolderRules,
@@ -171,5 +174,30 @@ describe("vault errors", () => {
     expect(e).toBeInstanceOf(DocumentError);
     expect(e.path).toBe("documents/x.pdf");
     expect(e.message).toMatch(/Name too long/);
+  });
+});
+
+describe("folderPathFits", () => {
+  it("fits when path + 30 is at most 240", () => {
+    expect(VAULT_FILE_RESERVE).toBe(30);
+    const at = `documents/${"a".repeat(240 - 30 - 10)}`;
+    expect(folderPathFits(at)).toEqual({ fits: true, overBy: 0 });
+    expect(folderPathFits(`${at}b`)).toEqual({ fits: false, overBy: 1 });
+  });
+  it("counts the deepest descendant on a rename or move", () => {
+    expect(folderPathFits("documents/2026/Trips", "/Spring")).toEqual({ fits: true, overBy: 0 });
+    const r = folderPathFits(`documents/2026/${"b".repeat(100)}`, `/${"c".repeat(100)}`);
+    expect(r).toEqual({ fits: false, overBy: 15 + 100 + 101 + 30 - 240 });
+  });
+});
+
+describe("vaultPath title floor", () => {
+  it("never cuts the title below 8 characters; reports fits false instead", () => {
+    const folders = [`${"a".repeat(110)}`, `${"b".repeat(100)}`];
+    const r = vaultPath({ date: "2026-03-04", title: "t".repeat(50), ext: "pdf", folders });
+    const title = r.path.split("/").pop()!.slice(11, -4);
+    expect(title).toBe("t".repeat(VAULT_MIN_TITLE));
+    expect(r.fits).toBe(false);
+    expect(r.overBy).toBe(r.path.length - 240);
   });
 });

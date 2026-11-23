@@ -157,7 +157,7 @@ export interface VaultPathInput extends VaultFileNameInput {
 export interface VaultPathResult {
   /** `documents/<folders>/<name>`, with " (2)" when taken. */
   path: string;
-  /** False when the path is over 240 even with the title at one character. */
+  /** False when the path is over 240 even with the title at 8 characters (§ 3.8). */
   fits: boolean;
   /** How many characters over 240 (0 when it fits). */
   overBy: number;
@@ -191,10 +191,16 @@ export const vaultPath = (input: VaultPathInput, taken: Iterable<string> = []): 
     if (name !== undefined && dir.length + 1 + name.length > MAX_VAULT_PATH) {
       const over = dir.length + 1 + name.length - MAX_VAULT_PATH;
       const titleUnits = name.length - parts.prefix.length - suffix.length - parts.ext.length - 1;
-      name = buildName(parts, suffix, MAX_VAULT_SEGMENT_BYTES, titleUnits - over);
+      name = buildName(
+        parts,
+        suffix,
+        MAX_VAULT_SEGMENT_BYTES,
+        Math.max(titleUnits - over, VAULT_MIN_TITLE),
+      );
     }
     if (name === undefined) {
-      const shortest = buildName(parts, suffix, MAX_VAULT_SEGMENT_BYTES, 1) ?? full ?? "_";
+      const shortest =
+        buildName(parts, suffix, MAX_VAULT_SEGMENT_BYTES, VAULT_MIN_TITLE) ?? full ?? "_";
       const path = `${dir}/${shortest}`;
       return { path, fits: false, overBy: Math.max(path.length - MAX_VAULT_PATH, 0) };
     }
@@ -262,3 +268,29 @@ export class VaultBusyError extends DocumentError {
     super("Busy in another tab. Try again when it finishes.");
   }
 }
+
+/** `vaultPath` never cuts a title below this many characters (§ 3.8). */
+export const VAULT_MIN_TITLE = 8;
+
+/**
+ * What a folder path must leave for any file below it (§ 3.8): "/" (1) + "YYYY-MM-DD " (11) +
+ * the 8-character title floor (8) + " (99)" (5) + ".jpeg" (5) = 30.
+ */
+export const VAULT_FILE_RESERVE = 30;
+
+/**
+ * Whether a folder path fits the D4 budget: `newPath + deepestDescendantSuffix` plus the
+ * 30-character file reserve is ≤ 240. `newPath` is from the vault root ("documents/2026/Trips");
+ * for a rename or move, `deepestDescendantSuffix` is the deepest folder below it ("/Spring/Day 1").
+ * Never throws: the dialog shows "Name too long" and disables Save when `fits` is false.
+ */
+export const folderPathFits = (
+  newPath: string,
+  deepestDescendantSuffix = "",
+): { fits: boolean; overBy: number } => {
+  const overBy = Math.max(
+    (newPath + deepestDescendantSuffix).length + VAULT_FILE_RESERVE - MAX_VAULT_PATH,
+    0,
+  );
+  return { fits: overBy === 0, overBy };
+};
