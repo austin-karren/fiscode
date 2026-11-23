@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { LINKABLE_RECORD_TYPES } from "@fiscode/core";
 import { exportBundle } from "./export.ts";
 import { parseCsv } from "./import.ts";
 import type { Bundle } from "./bundle-types.ts";
@@ -434,6 +435,24 @@ describe("CSV round-trip", () => {
     expect(exportBundle(round, { scope: "full" })).toBe(csv);
     const yearly = parseCsv(exportBundle(b, { scope: "yearly", year: 2026 })).bundle;
     expect([yearly.documentFolders, yearly.documents, yearly.documentLinks]).toEqual([[], [], []]);
+  });
+
+  it("a link to every linkable record type round-trips byte-identical", () => {
+    const b = fullBundle();
+    const base = b.documentLinks[0]!;
+    b.documentLinks = LINKABLE_RECORD_TYPES.map((t, i) => ({
+      ...base,
+      id: `dl_${t}`,
+      recordType: t,
+      recordId: t === "profile" ? "profile" : `${t}_${i}`,
+    }));
+    const csv = exportBundle(b, { scope: "full" });
+    const { bundle: round, validationErrors } = parseCsv(csv);
+    expect(validationErrors).toEqual([]);
+    expect(round.documentLinks.map((l) => l.recordType).toSorted()).toEqual(
+      [...LINKABLE_RECORD_TYPES].toSorted(),
+    );
+    expect(exportBundle(round, { scope: "full" })).toBe(csv);
   });
 
   it("a v4 file (no W-2 or payment rows, no prior_year_not_filed) imports with them empty", () => {

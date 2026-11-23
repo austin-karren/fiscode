@@ -58,6 +58,17 @@ export type HistoryEntry = {
 
 const NONE = "none";
 
+/** What a document link points at, in words, per `document_link.record_type`. */
+const LINKED_RECORD_NOUN: Record<string, string> = {
+  expense: "an expense",
+  income: "an income row",
+  mileage: "a mileage trip",
+  home_office: "the home office",
+  profile: "the tax profile",
+  client: "a client",
+  vehicle: "a vehicle",
+};
+
 const text = (v: unknown): string => (v === null || v === undefined || v === "" ? NONE : String(v));
 const money = (v: unknown): string => (typeof v === "number" ? formatUSD(cents(v)) : NONE);
 const yesNo = (v: unknown): string => (v ? "yes" : "no");
@@ -266,8 +277,7 @@ const KINDS: Record<string, KindSpec> = {
   },
   document_link: {
     noun: "document link",
-    title: (r) =>
-      `attached to ${r.recordType === "income" ? "an income row" : r.recordType === "mileage" ? "a mileage trip" : "an expense"}`,
+    title: (r) => `attached to ${LINKED_RECORD_NOUN[String(r.recordType)] ?? "a record"}`,
     fields: [],
     facts: [],
   },

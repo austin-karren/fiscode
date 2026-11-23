@@ -68,7 +68,15 @@ export const YEAR_DEFAULT_FOLDER_KEYS: Record<(typeof YEAR_DEFAULT_FOLDERS)[numb
 };
 
 /** Record types a document can link to (CSV record-type names; open for later ones). */
-export const LINKABLE_RECORD_TYPES = ["expense", "income", "mileage"] as const;
+export const LINKABLE_RECORD_TYPES = [
+  "expense",
+  "income",
+  "mileage",
+  "home_office",
+  "profile",
+  "client",
+  "vehicle",
+] as const;
 export type LinkableRecordType = (typeof LINKABLE_RECORD_TYPES)[number];
 
 /** The base of every error the document repos throw on purpose; `message` can be shown as is. */

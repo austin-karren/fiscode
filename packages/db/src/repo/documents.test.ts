@@ -13,7 +13,17 @@ import {
 } from "@fiscode/core";
 import { setupTestDb, teardownTestDb } from "../test/setup-db.ts";
 import { __setBlobStoreForTests, memoryBlobStore, sha256Hex } from "../blob-store.ts";
-import { documentLinkRepo, documentRepo, expenseRepo, folderRepo, historyRepo } from "./index.ts";
+import {
+  clientRepo,
+  documentLinkRepo,
+  documentRepo,
+  expenseRepo,
+  folderRepo,
+  historyRepo,
+  homeOfficeRepo,
+  profileRepo,
+  vehicleRepo,
+} from "./index.ts";
 import { __setEnsureRaceHookForTests } from "./documents.ts";
 import { getDb } from "../client.ts";
 import { documentFolder } from "../schema/index.ts";
@@ -425,5 +435,131 @@ describe("review #84 r3: two tabs", () => {
         updatedAt: at,
       }),
     ).rejects.toThrow(/UNIQUE/);
+  });
+});
+
+describe("documentLinkRepo: home office, profile, client, vehicle", () => {
+  const stamp = { createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" };
+  const linkAndRead = async (type: string, id: string) => {
+    const d = await documentRepo.upload(file(`${type}.pdf`, type));
+    await documentLinkRepo.link(d.id, type, id);
+    const [l] = await documentLinkRepo.forDocument(d.id);
+    return { d, record: l!.record };
+  };
+
+  it("home_office: dated by its start date, labeled with method and office size", async () => {
+    const h = await homeOfficeRepo.create({
+      startDate: "2026-02-01",
+      method: "simplified",
+      officeSqft: 120,
+      deletedAt: null,
+      ...stamp,
+    } as never);
+    const { record } = await linkAndRead("home_office", h.id);
+    expect(record).toEqual({
+      recordType: "home_office",
+      id: h.id,
+      date: "2026-02-01",
+      label: "2026-02-01 · Home office · Simplified · 120 sq ft",
+    });
+  });
+
+  it("vehicle: dated by its in-service date when set, else none", async () => {
+    const v = await vehicleRepo.create({
+      make: "Demo",
+      model: "Wagon",
+      year: 2020,
+      inServiceDate: "2026-04-02",
+      deletedAt: null,
+      ...stamp,
+    } as never);
+    expect((await linkAndRead("vehicle", v.id)).record).toEqual({
+      recordType: "vehicle",
+      id: v.id,
+      date: "2026-04-02",
+      label: "2026-04-02 · 2020 Demo Wagon",
+    });
+    const w = await vehicleRepo.create({
+      make: "Demo",
+      model: "Van",
+      deletedAt: null,
+      ...stamp,
+    } as never);
+    expect((await linkAndRead("vehicle", w.id)).record).toEqual({
+      recordType: "vehicle",
+      id: w.id,
+      date: "",
+      label: "Demo Van",
+    });
+  });
+
+  it("client: labeled by name, no date", async () => {
+    const c = await clientRepo.create({
+      name: "Demo Client Co",
+      deletedAt: null,
+      ...stamp,
+    } as never);
+    expect((await linkAndRead("client", c.id)).record).toEqual({
+      recordType: "client",
+      id: c.id,
+      date: "",
+      label: "Demo Client Co",
+    });
+  });
+
+  it("profile: the singleton, labeled by filing status and state, no date", async () => {
+    await profileRepo.upsert({
+      filingStatus: "single",
+      state: "UT",
+      seStartDate: "2026-01-01",
+    } as never);
+    expect((await linkAndRead("profile", "profile")).record).toEqual({
+      recordType: "profile",
+      id: "profile",
+      date: "",
+      label: "Tax profile · Single · UT",
+    });
+  });
+
+  it("a missing row of each new type is RecordNotFoundError; a deleted one hides like expense", async () => {
+    const d = await documentRepo.upload(file("x.pdf", "x"));
+    for (const t of ["home_office", "profile", "client", "vehicle"]) {
+      await expect(documentLinkRepo.link(d.id, t, "nope")).rejects.toBeInstanceOf(
+        RecordNotFoundError,
+      );
+    }
+    const c = await clientRepo.create({ name: "Gone Co", deletedAt: null, ...stamp } as never);
+    const { d: cd } = await linkAndRead("client", c.id);
+    expect(await documentLinkRepo.countsByDocument()).toEqual(new Map([[cd.id, 1]]));
+    await clientRepo.softDelete(c.id);
+    expect(await documentLinkRepo.forDocument(cd.id)).toEqual([]);
+    expect(await documentLinkRepo.countsByDocument()).toEqual(new Map());
+    await expect(documentLinkRepo.link(cd.id, "client", c.id)).rejects.toBeInstanceOf(
+      RecordNotFoundError,
+    );
+  });
+
+  it("countsByDocument counts links to every linkable type", async () => {
+    const v = await vehicleRepo.create({
+      make: "A",
+      model: "B",
+      deletedAt: null,
+      ...stamp,
+    } as never);
+    const h = await homeOfficeRepo.create({
+      startDate: "2026-01-01",
+      deletedAt: null,
+      ...stamp,
+    } as never);
+    await profileRepo.upsert({
+      filingStatus: "single",
+      state: "UT",
+      seStartDate: "2026-01-01",
+    } as never);
+    const d = await documentRepo.upload(file("all.pdf", "all"));
+    await documentLinkRepo.link(d.id, "vehicle", v.id);
+    await documentLinkRepo.link(d.id, "home_office", h.id);
+    await documentLinkRepo.link(d.id, "profile", "profile");
+    expect(await documentLinkRepo.countsByDocument()).toEqual(new Map([[d.id, 3]]));
   });
 });

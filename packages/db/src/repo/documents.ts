@@ -4,6 +4,8 @@ import {
   DocumentTooLargeError,
   DocumentTypeNotAllowedError,
   EXPENSE_CATEGORY_LABELS,
+  FILING_STATUS_LABELS,
+  HOME_OFFICE_METHOD_LABELS,
   FolderCycleError,
   FolderNameTakenError,
   FolderNotFoundError,
@@ -34,8 +36,11 @@ import {
   documentLink,
   expense,
   history as historyTable,
+  homeOffice,
   income,
   mileage,
+  profile,
+  vehicle,
   type DocumentFolderInsert,
   type DocumentFolderRow,
   type DocumentInsert,
@@ -592,6 +597,7 @@ export const documentRepo = {
 export type LinkedRecord = {
   recordType: string;
   id: string;
+  /** ISO date, or "" for a record without one (client, profile, an undated vehicle). */
   date: string;
   label: string;
   amountCents?: number;
@@ -642,6 +648,47 @@ const recordFor = async (
       date: r.date,
       label: `${r.date}${what} · ${r.businessMiles} mi`,
       deletedAt: r.deletedAt,
+    };
+  }
+  if (recordType === "home_office") {
+    const [r] = await db.select().from(homeOffice).where(eq(homeOffice.id, id)).limit(1);
+    if (!r) return undefined;
+    const size = r.officeSqft ? ` · ${r.officeSqft} sq ft` : "";
+    return {
+      recordType,
+      id,
+      date: r.startDate,
+      label: `${r.startDate} · Home office · ${labelFor(HOME_OFFICE_METHOD_LABELS, r.method)}${size}`,
+      deletedAt: r.deletedAt,
+    };
+  }
+  if (recordType === "vehicle") {
+    const [r] = await db.select().from(vehicle).where(eq(vehicle.id, id)).limit(1);
+    if (!r) return undefined;
+    const name = [r.year, r.make, r.model].filter((x) => x != null && x !== "").join(" ");
+    const date = r.inServiceDate ?? "";
+    return {
+      recordType,
+      id,
+      date,
+      label: date ? `${date} · ${name}` : name,
+      deletedAt: r.deletedAt,
+    };
+  }
+  if (recordType === "client") {
+    const [r] = await db.select().from(client).where(eq(client.id, id)).limit(1);
+    if (!r) return undefined;
+    return { recordType, id, date: "", label: r.name, deletedAt: r.deletedAt };
+  }
+  if (recordType === "profile") {
+    const [r] = await db.select().from(profile).where(eq(profile.id, id)).limit(1);
+    if (!r) return undefined;
+    return {
+      recordType,
+      id,
+      date: "",
+      label: `Tax profile · ${labelFor(FILING_STATUS_LABELS, r.filingStatus)} · ${r.state}`,
+      deletedAt: null,
     };
   }
   return undefined;
@@ -762,6 +809,22 @@ export const documentLinkRepo = {
         mileage,
         and(eq(documentLink.recordType, "mileage"), eq(mileage.id, documentLink.recordId)),
       )
+      .leftJoin(
+        homeOffice,
+        and(eq(documentLink.recordType, "home_office"), eq(homeOffice.id, documentLink.recordId)),
+      )
+      .leftJoin(
+        vehicle,
+        and(eq(documentLink.recordType, "vehicle"), eq(vehicle.id, documentLink.recordId)),
+      )
+      .leftJoin(
+        client,
+        and(eq(documentLink.recordType, "client"), eq(client.id, documentLink.recordId)),
+      )
+      .leftJoin(
+        profile,
+        and(eq(documentLink.recordType, "profile"), eq(profile.id, documentLink.recordId)),
+      )
       .where(
         and(
           isNull(documentLink.deletedAt),
@@ -770,6 +833,11 @@ export const documentLinkRepo = {
             and(isNotNull(expense.id), isNull(expense.deletedAt)),
             and(isNotNull(income.id), isNull(income.deletedAt)),
             and(isNotNull(mileage.id), isNull(mileage.deletedAt)),
+            and(isNotNull(homeOffice.id), isNull(homeOffice.deletedAt)),
+            and(isNotNull(vehicle.id), isNull(vehicle.deletedAt)),
+            and(isNotNull(client.id), isNull(client.deletedAt)),
+            // The profile has no soft delete: a row there is live.
+            isNotNull(profile.id),
           ),
         ),
       )
