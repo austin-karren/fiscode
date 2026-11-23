@@ -5,7 +5,7 @@ import { Input } from "@fiscode/ui/components/input";
 import { FieldCheckbox } from "../components/forms/field-checkbox";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
-import { entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
+import { documentLinkRepo, entityRepo, profileRepo, spouseRepo } from "@fiscode/db";
 import {
   EntityPeriodError,
   cents,
@@ -56,6 +56,8 @@ import { SectionTitle } from "../components/section-title";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { recordLabel } from "../lib/record-label";
 import { submitForm } from "../lib/submit-form";
+import { AttachDialog } from "../components/documents/attach-dialog";
+import { rowAnchor } from "../lib/documents-links";
 
 const FILING_OPTIONS = labelOptions(FILING_STATUS_LABELS);
 
@@ -114,12 +116,14 @@ export const Route = createFileRoute("/profile")({
     profile: await profileRepo.get(),
     entities: await entityRepo.list(),
     spouses: await spouseRepo.list(),
+    // The profile is one row, linked as "profile".
+    linkCount: (await documentLinkRepo.countsFor("profile", ["profile"])).profile ?? 0,
   }),
   component: ProfilePage,
 });
 
 function ProfilePage() {
-  const { profile, entities, spouses } = useLoaderData({ from: "/profile" });
+  const { profile, entities, spouses, linkCount } = useLoaderData({ from: "/profile" });
   if (!profile) {
     return (
       <Page
@@ -131,14 +135,23 @@ function ProfilePage() {
       </Page>
     );
   }
-  return <ProfileFormPanel profile={profile} entities={entities} spouses={spouses} />;
+  return (
+    <ProfileFormPanel
+      profile={profile}
+      entities={entities}
+      spouses={spouses}
+      linkCount={linkCount}
+    />
+  );
 }
 
 function ProfileFormPanel({
   profile,
   entities,
   spouses,
+  linkCount,
 }: {
+  linkCount: number;
   profile: NonNullable<Awaited<ReturnType<typeof profileRepo.get>>>;
   entities: Awaited<ReturnType<typeof entityRepo.list>>;
   spouses: Awaited<ReturnType<typeof spouseRepo.list>>;
@@ -705,6 +718,28 @@ function ProfileFormPanel({
           </CardFooter>
         </Card>
       </EnterToSubmitForm>
+
+      {/* Outside the profile form, so nothing in the dialog can submit it. */}
+      <Card id={rowAnchor("profile")}>
+        <CardHeader>
+          <CardTitle>
+            <SectionTitle>Documents</SectionTitle>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Last year's return, an extension or a letter from the IRS or your state.
+          </p>
+          <AttachDialog
+            recordType="profile"
+            recordId="profile"
+            recordDate=""
+            recordLabel="your tax profile"
+            count={linkCount}
+            onChanged={() => router.invalidate()}
+          />
+        </CardContent>
+      </Card>
 
       <EnterToSubmitForm
         onSubmit={(e) => {

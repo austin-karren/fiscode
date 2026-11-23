@@ -48,6 +48,7 @@ const profile = {
 // The database is SQLite over OPFS and the router needs a browser history;
 // neither exists in jsdom. Both are replaced at the package boundary.
 vi.mock("@fiscode/db", () => ({
+  documentLinkRepo: { forRecord: async () => [], countsFor: async () => ({}) },
   profileRepo: { get: async () => profile, upsert },
   entityRepo: { list: async () => [], create: vi.fn(), update: vi.fn(), moveFirstStart },
   spouseRepo: {
@@ -61,8 +62,9 @@ vi.mock("@fiscode/db", () => ({
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
-  useLoaderData: () => loaded,
+  useLoaderData: () => ({ linkCounts: {}, linkCount: 0, ...loaded }),
   useRouter: () => ({ invalidate }),
+  useLocation: () => "",
 }));
 
 import { Route } from "./profile";

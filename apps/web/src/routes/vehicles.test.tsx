@@ -33,6 +33,7 @@ const { create, softDelete, revertTo, invalidate, loaded } = vi.hoisted(() => ({
 // The database is SQLite over OPFS and the router needs a browser history;
 // neither exists in jsdom. Both are replaced at the package boundary.
 vi.mock("@fiscode/db", () => ({
+  documentLinkRepo: { forRecord: async () => [], countsFor: async () => ({}) },
   vehicleRepo: {
     list: async () => [],
     listIncludingDeleted: async () => [],
@@ -47,6 +48,7 @@ vi.mock("@fiscode/db", () => ({
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useLoaderData: () => ({
+    linkCounts: {},
     vehicles: loaded.vehicles ?? [liveVehicle, archivedVehicle],
     mileage: [
       { id: "m_1", vehicleId: "v_live" },
@@ -54,6 +56,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
     ],
   }),
   useRouter: () => ({ invalidate }),
+  useLocation: () => "",
 }));
 
 import { Route } from "./vehicles";
