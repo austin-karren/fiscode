@@ -15,7 +15,7 @@ import {
 // Where rows go in the vault tree (ADR 0001 § 2-5), as pure functions over rows. The repo, the
 // migration and the boot backstop all compute paths here, so they never disagree.
 
-type FolderLike = {
+export type FolderLike = {
   deletedAt?: string | null;
   id: string;
   parentId: string | null;

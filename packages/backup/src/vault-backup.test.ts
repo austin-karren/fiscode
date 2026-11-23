@@ -30,7 +30,7 @@ import {
   type VaultStore,
 } from "@fiscode/db/vault";
 import { getDb } from "@fiscode/db/client";
-import { document } from "@fiscode/db/schema";
+import { document, documentFolder } from "@fiscode/db/schema";
 import { setupTestDb, teardownTestDb } from "@fiscode/db/test";
 import { eq } from "drizzle-orm";
 import {
@@ -238,6 +238,51 @@ describe("restore never refuses a path over budget (§ 3.8)", () => {
     for (const [other, o] of Object.entries(vault.documents)) {
       if (other !== id) expect((await documentVaultPaths()).get(other)).toBe(o.path);
     }
+  });
+});
+
+describe("restore renames an over-budget folder to its shortened disk name (§ 3.8, P1)", () => {
+  it("the folder row matches the disk segment, it is reported, and a later upload there fits", async () => {
+    await seed();
+    const a = await folderRepo.create({ name: "A".repeat(100) });
+    const b = await folderRepo.create({ name: "B".repeat(90), parentId: a.id });
+    const doc = await documentRepo.upload(file("Demo note.pdf", "demo note"), { folderId: b.id });
+    // A folder that went over budget outside the app: its row and the manifest path say 100.
+    getDb()
+      .update(documentFolder)
+      .set({ name: "B".repeat(100) })
+      .where(eq(documentFolder.id, b.id))
+      .run();
+    const entries = await zipOf((await backup()).blob);
+    const vault = JSON.parse(strFromU8(entries["fiscode.json"]!)) as {
+      documents: Record<string, { path: string; sha256: string; sizeBytes: number }>;
+    } & Record<string, unknown>;
+    const d = vault.documents[doc.id]!;
+    const long = `documents/${"A".repeat(100)}/${"B".repeat(100)}/${d.path.split("/").at(-1)}`;
+    const moved = { ...entries, [long]: entries[d.path]! };
+    delete moved[d.path];
+    const v = { ...vault, documents: { ...vault.documents, [doc.id]: { ...d, path: long } } };
+
+    emptyProfile();
+    const result = await restoreBackup(
+      await open(rezip({ ...moved, "fiscode.json": strToU8(JSON.stringify(v)) })),
+    );
+
+    expect(result.foldersShortened.length).toBeGreaterThan(0);
+    const rows = await getDb().select().from(documentFolder);
+    const disk = (await documentVaultPaths()).get(doc.id)!.split("/");
+    expect(disk.length).toBe(4);
+    const rowA = rows.find((f) => f.id === a.id)!;
+    const rowB = rows.find((f) => f.id === b.id)!;
+    expect([rowA.name, rowB.name]).toEqual([disk[1], disk[2]]);
+    for (const f of result.foldersShortened) {
+      expect(rows.find((r) => r.id === f.folderId)!.name).toBe(f.to);
+    }
+    expect(result.shortened[0]!.to).toBe(disk.join("/"));
+    const later = await documentRepo.upload(file("Later.pdf", "later"), { folderId: b.id });
+    const at = (await documentVaultPaths()).get(later.id)!;
+    expect(at.startsWith(`${disk.slice(0, 3).join("/")}/`)).toBe(true);
+    expect(at.length).toBeLessThanOrEqual(240);
   });
 });
 

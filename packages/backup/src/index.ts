@@ -34,7 +34,11 @@ import {
 import {
   assertVaultWritable,
   documentVaultPaths,
+  folderDir,
+  folderSegments,
   getVaultStore,
+  pathContext,
+  type FolderLike,
   MANIFEST_FILE,
   oldBytesPath,
   placeUnplacedDocuments,
@@ -48,7 +52,7 @@ import {
 } from "@fiscode/db/vault";
 import { buildBundle, importBundleQueries, linkedDates } from "@fiscode/db/repo";
 import { getDb } from "@fiscode/db/client";
-import { document } from "@fiscode/db/schema";
+import { document, documentFolder } from "@fiscode/db/schema";
 import { eq } from "drizzle-orm";
 import { strToU8, strFromU8, unzipSync, zipSync, type Zippable } from "fflate";
 
@@ -869,18 +873,39 @@ export const planBackupRestore = (
 export type RestoreShortened = { documentId: string; from: string; to: string };
 
 /** What a restore did that the user should see: the paths it shortened to fit (§ 3.8). */
-export type RestoreResult = { shortened: RestoreShortened[] };
+/** A folder a restore renamed so its row matches its shortened disk name (§ 3.8, P1). */
+export type RestoreFolderShortened = { folderId: string; from: string; to: string };
+
+export type RestoreResult = {
+  shortened: RestoreShortened[];
+  foldersShortened: RestoreFolderShortened[];
+};
 
 /**
  * The never-refuse fallback for a restore (§ 3.8): each manifest path whose folder part fails
  * `folderPathFits` gets its folder names shortened in one pass (`shortenFolderNames`, then the
  * § 4 " (n)" rule among its new siblings), and a file name still too long has its title shortened
  * by `vaultPath`. Paths that fit are kept as they are, so a restore stays 1:1 where it can.
- * Deepest folders first, so a folder shared by several paths gets one disk name.
+ * Deepest folders first, so a folder shared by several paths gets one disk name. Each shortened
+ * level that is one of `folders` (the backup's rows) is renamed to its new disk name, so the
+ * row and the disk agree and a later change doesn't recompute the long path.
  */
 export const fitRestorePaths = (
   documents: ReadonlyMap<string, { path: string }>,
-): { paths: Map<string, string>; shortened: RestoreShortened[] } => {
+  folders: readonly FolderLike[] = [],
+): {
+  paths: Map<string, string>;
+  shortened: RestoreShortened[];
+  foldersShortened: RestoreFolderShortened[];
+} => {
+  const live = folders.filter((f) => f.deletedAt === null);
+  const ctx = pathContext(live);
+  const folderAt = new Map<string, FolderLike>();
+  for (const f of live) {
+    const segs = folderSegments(f.id, ctx.folders, ctx.disk);
+    if (segs) folderAt.set(folderDir(segs), f);
+  }
+  const foldersShortened: RestoreFolderShortened[] = [];
   const dirOf = (p: string) => p.slice(0, p.lastIndexOf("/"));
   const entries = [...documents].toSorted(
     ([a, x], [b, y]) => byString(x.path, y.path) || byString(a, b),
@@ -893,7 +918,8 @@ export const fitRestorePaths = (
     if (!list.includes(name)) list.push(name);
     children.set(parent, list);
   };
-  const dirs = [...new Set(entries.map(([, d]) => dirOf(d.path)))];
+  // Empty folders too: an over-budget one is shortened even with no file in it.
+  const dirs = [...new Set([...entries.map(([, d]) => dirOf(d.path)), ...folderAt.keys()])];
   for (const dir of dirs) {
     const segs = dir.split("/");
     for (let i = 1; i < segs.length; i++) childOf(segs.slice(0, i).join("/"), segs[i]!);
@@ -915,6 +941,8 @@ export const fitRestorePaths = (
           const siblings = (children.get(parentNew) ?? []).filter((n) => n !== segs[i]);
           name = freeFolderName(fitted[i]!, siblings);
           childOf(parentNew, name);
+          const row = folderAt.get(old);
+          if (row) foldersShortened.push({ folderId: row.id, from: row.name, to: name });
         }
         next = `${parentNew}/${name}`;
         dirMap.set(old, next);
@@ -951,7 +979,7 @@ export const fitRestorePaths = (
     paths.set(id, to);
     if (to !== path) shortened.push({ documentId: id, from: path, to });
   }
-  return { paths, shortened };
+  return { paths, shortened, foldersShortened };
 };
 
 /**
@@ -1039,13 +1067,21 @@ export const restoreBackup = async (
       await store.put(sha, new Blob([part(bytes)]));
     }
   }
-  const fitted = fitRestorePaths(file.vault?.documents ?? new Map());
+  const fitted = fitRestorePaths(
+    file.vault?.documents ?? new Map(),
+    file.vault ? (file.bundle.documentFolders as FolderLike[]) : [],
+  );
   await runTreeChange(async (plan) => {
     // Its own reason in History (not a CSV import's "import-restore"), with the backup's time.
     const queries = await importBundleQueries(file.bundle as never, "backup-restore", {
       backup: { createdAt: file.manifest.createdAt },
     });
     await planRestoreFiles(plan, store, file, fitted.paths, step);
+    for (const f of fitted.foldersShortened) {
+      queries.push(
+        getDb().update(documentFolder).set({ name: f.to }).where(eq(documentFolder.id, f.folderId)),
+      );
+    }
     for (const [id, path] of fitted.paths) {
       queries.push(getDb().update(document).set({ vaultPath: path }).where(eq(document.id, id)));
     }
@@ -1055,7 +1091,7 @@ export const restoreBackup = async (
   // by the boot backstop's rules (§ 10 step 5), not on the next reload.
   await withVaultLock(() => placeUnplacedDocuments(store, linkedDates), { wait: true });
   options.onProgress?.({ phase: "writing", done: total, total });
-  return { shortened: fitted.shortened };
+  return { shortened: fitted.shortened, foldersShortened: fitted.foldersShortened };
 };
 
 // ─── Export vault (ADR § 9, for d-ux's PR 12) ────────────────────────────────────────────────
