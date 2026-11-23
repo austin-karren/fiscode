@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ current: { phase: "done" } as object }));
@@ -96,27 +96,36 @@ describe("Export vault", () => {
 
   it("shows progress by phase; Cancel counts the file in flight and keeps focus", async () => {
     picker(async () => ({ name: "Drive" }));
-    // exportVault's real order: tick writing done=i, write file i, then check the signal.
-    let release = () => {};
+    // exportVault's real order: tick writing done=i, write file i, then check the signal. The
+    // write of file 0 waits on `gate`, so the abort lands at a known step: during that write.
+    let openGate!: () => void;
+    const gate = new Promise<void>((r) => (openGate = r));
+    let writing!: () => void;
+    const inWrite = new Promise<void>((r) => (writing = r));
     run.mockImplementation(async (o) => {
       const { onProgress, signal } = o as Opts;
       onProgress({ phase: "reading", done: 1, total: 1 });
       for (let i = 0; i < 2; i++) {
         signal.throwIfAborted();
         onProgress({ phase: "writing", done: i, total: 2 });
-        await new Promise<void>((r) => (release = r));
+        if (i === 0) {
+          writing();
+          await gate;
+        }
       }
       return { kind: "folder", files: 2 } as never;
     });
     render(<VaultExportCard />);
     fireEvent.click(screen.getByRole("button", { name: "Export to a folder" }));
-    expect(await screen.findByText("Writing files (0 of 2)…")).toBeVisible();
+    await act(() => inWrite);
+    expect(screen.getByText("Writing files (0 of 2)…")).toBeVisible();
     const cancel = screen.getByRole("button", { name: "Cancel export" });
     expect(cancel).toHaveFocus();
     expect(screen.getByRole("button", { name: "Export to a folder" })).toBeDisabled();
     fireEvent.click(cancel);
-    release();
-    const note = await screen.findByText(/Export cancelled: 1 of 2 files written\./);
+    // The write of file 0 finishes after the abort; the export then stops before file 1.
+    await act(async () => openGate());
+    const note = screen.getByText(/Export cancelled: 1 of 2 files written\./);
     expect(note).toHaveTextContent(/no fiscode\.json/);
     expect(note).toHaveFocus();
     expect(screen.queryByRole("button", { name: "Cancel export" })).toBeNull();
