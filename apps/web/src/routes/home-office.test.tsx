@@ -9,13 +9,15 @@ const { create, invalidate } = vi.hoisted(() => ({
 }));
 
 vi.mock("@fiscode/db", () => ({
+  documentLinkRepo: { forRecord: async () => [], countsFor: async () => ({}) },
   homeOfficeRepo: { list: async () => [], create },
 }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
-  useLoaderData: () => loaded,
+  useLoaderData: () => ({ linkCounts: {}, linkCount: 0, ...loaded }),
   useRouter: () => ({ invalidate }),
+  useLocation: () => "",
 }));
 
 import { Route } from "./home-office";

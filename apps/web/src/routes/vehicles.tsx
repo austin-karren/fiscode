@@ -1,14 +1,17 @@
 import { useState } from "react";
-import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useLoaderData, useLocation, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
-import { mileageRepo, vehicleRepo } from "@fiscode/db";
+import { documentLinkRepo, mileageRepo, vehicleRepo } from "@fiscode/db";
 import { useForm } from "@tanstack/react-form";
 import { Car } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+
+import { AttachDialog } from "../components/documents/attach-dialog";
+import { rowAnchor } from "../lib/documents-links";
 
 import { optionalMpg, optionalVehicleYear } from "../lib/field-schemas";
 import { Page } from "../components/page";
@@ -37,18 +40,27 @@ const vehicleSchema = z.object({
 const fs = vehicleSchema.shape;
 
 export const Route = createFileRoute("/vehicles")({
-  loader: async () => ({
-    // Archived vehicles too, for the "Show archived" view.
-    vehicles: await vehicleRepo.listIncludingDeleted(),
-    // Mileage rows point at a vehicle; counted in the archive dialog.
-    mileage: await mileageRepo.list(),
-  }),
+  loader: async () => {
+    const all = await vehicleRepo.listIncludingDeleted();
+    return {
+      // Archived vehicles too, for the "Show archived" view.
+      vehicles: all,
+      // Live rows' documents, in one query for the screen.
+      linkCounts: await documentLinkRepo.countsFor(
+        "vehicle",
+        all.filter((r) => !r.deletedAt).map((r) => r.id),
+      ),
+      // Mileage rows point at a vehicle; counted in the archive dialog.
+      mileage: await mileageRepo.list(),
+    };
+  },
   component: VehiclesPage,
 });
 
 function VehiclesPage() {
-  const { vehicles: allVehicles, mileage } = useLoaderData({ from: "/vehicles" });
+  const { vehicles: allVehicles, mileage, linkCounts } = useLoaderData({ from: "/vehicles" });
   const router = useRouter();
+  const hash = useLocation({ select: (l) => l.hash });
   const [showArchived, setShowArchived] = useState(false);
   const archivedCount = allVehicles.filter((v) => v.deletedAt).length;
   const vehicles = allVehicles.filter((v) => showArchived || !v.deletedAt);
@@ -257,7 +269,11 @@ function VehiclesPage() {
             </DataTable.Head>
             <DataTable.Body>
               {vehicles.map((v) => (
-                <DataTable.Row key={v.id}>
+                <DataTable.Row
+                  key={v.id}
+                  id={rowAnchor(v.id)}
+                  highlighted={hash === rowAnchor(v.id)}
+                >
                   <DataTable.Cell label="Make">{v.make}</DataTable.Cell>
                   <DataTable.Cell label="Model">
                     {v.model}
@@ -284,6 +300,14 @@ function VehiclesPage() {
                     ) : (
                       <div className="inline-flex gap-1">
                         <EditVehicleDialog vehicle={v} onSaved={() => router.invalidate()} />
+                        <AttachDialog
+                          recordType="vehicle"
+                          recordId={v.id}
+                          recordDate={v.inServiceDate ?? ""}
+                          recordLabel={recordLabel.vehicle(v)}
+                          count={linkCounts[v.id] ?? 0}
+                          onChanged={() => router.invalidate()}
+                        />
                         <ArchiveDialog
                           itemName={nameOf(v)}
                           recordName={recordLabel.vehicle(v)}

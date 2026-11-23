@@ -1,4 +1,4 @@
-import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useLoaderData, useLocation, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FieldCheckbox } from "../components/forms/field-checkbox";
@@ -18,7 +18,7 @@ import {
   todayIso,
   yearOf,
 } from "@fiscode/core";
-import { buildBundle, homeOfficeRepo } from "@fiscode/db";
+import { buildBundle, documentLinkRepo, homeOfficeRepo } from "@fiscode/db";
 import { estimateBundleYear } from "@fiscode/tax";
 import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
 import { useForm } from "@tanstack/react-form";
@@ -47,6 +47,9 @@ import { useToday } from "../lib/use-today";
 import { formatDate } from "../lib/format-date";
 import { SectionTitle } from "../components/section-title";
 import { submitForm } from "../lib/submit-form";
+import { AttachDialog } from "../components/documents/attach-dialog";
+import { rowAnchor } from "../lib/documents-links";
+import { recordLabel } from "../lib/record-label";
 
 // Per-field schemas (onBlur). Form-level adds the cross-field "ack required"
 // refine and runs on submit. sqft inputs are optional non-negative integers —
@@ -63,8 +66,14 @@ export const Route = createFileRoute("/home-office")({
     const bundle = await buildBundle();
     const year = yearOf(todayIso());
     // This year's limits, for the notices: area refused, carried, or lost.
+    const rows = await homeOfficeRepo.list();
     return {
-      rows: await homeOfficeRepo.list(),
+      rows,
+      // Documents per row (a lease, a utility bill), in one query for the screen.
+      linkCounts: await documentLinkRepo.countsFor(
+        "home_office",
+        rows.map((r) => r.id),
+      ),
       year, // No profile yet (setup not done): no estimate, so no notices.
       derived: bundle.profile ? estimateBundleYear(bundle, year).derived : undefined,
     };
@@ -73,7 +82,8 @@ export const Route = createFileRoute("/home-office")({
 });
 
 function HomeOfficePage() {
-  const { rows, year, derived } = useLoaderData({ from: "/home-office" });
+  const { rows, year, derived, linkCounts } = useLoaderData({ from: "/home-office" });
+  const hash = useLocation({ select: (l) => l.hash });
   const router = useRouter();
   // Set when a save is refused for a second simplified home in a year.
   const [methodError, setMethodError] = useState<string | undefined>();
@@ -219,7 +229,7 @@ function HomeOfficePage() {
           </DataTable.Head>
           <DataTable.Body>
             {rows.map((r) => (
-              <DataTable.Row key={r.id}>
+              <DataTable.Row key={r.id} id={rowAnchor(r.id)} highlighted={hash === rowAnchor(r.id)}>
                 <DataTable.Cell label="Start">
                   <span className="whitespace-nowrap">{formatDate(r.startDate)}</span>
                 </DataTable.Cell>
@@ -241,7 +251,17 @@ function HomeOfficePage() {
                   {monthlyCosts(r)}
                 </DataTable.Cell>
                 <DataTable.Cell align="right">
-                  <EditHomeOfficeDialog row={r} rows={rows} onSaved={() => router.invalidate()} />
+                  <div className="inline-flex gap-1">
+                    <EditHomeOfficeDialog row={r} rows={rows} onSaved={() => router.invalidate()} />
+                    <AttachDialog
+                      recordType="home_office"
+                      recordId={r.id}
+                      recordDate={r.startDate}
+                      recordLabel={recordLabel.homeOffice(r)}
+                      count={linkCounts[r.id] ?? 0}
+                      onChanged={() => router.invalidate()}
+                    />
+                  </div>
                 </DataTable.Cell>
               </DataTable.Row>
             ))}

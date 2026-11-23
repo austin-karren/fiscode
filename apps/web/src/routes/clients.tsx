@@ -1,15 +1,18 @@
 import { useState } from "react";
-import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useLoaderData, useLocation, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@fiscode/ui/components/form";
-import { clientRepo, expenseRepo, incomeRepo, timeRepo } from "@fiscode/db";
+import { documentLinkRepo, clientRepo, expenseRepo, incomeRepo, timeRepo } from "@fiscode/db";
 import { cents, formatUSD } from "@fiscode/core";
 import { useForm } from "@tanstack/react-form";
 import { Briefcase } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+
+import { AttachDialog } from "../components/documents/attach-dialog";
+import { rowAnchor } from "../lib/documents-links";
 
 import { Page } from "../components/page";
 import { DataTable } from "../components/data-table";
@@ -33,25 +36,35 @@ const clientSchema = z.object({
 const fs = clientSchema.shape;
 
 export const Route = createFileRoute("/clients")({
-  loader: async () => ({
-    // Archived clients too, for the "Show archived" view.
-    clients: await clientRepo.listIncludingDeleted(),
-    // Rows that can point at a client, to count them in the archive dialog.
-    income: await incomeRepo.list(),
-    timeEntries: await timeRepo.list(),
-    expenses: await expenseRepo.list(),
-  }),
+  loader: async () => {
+    const all = await clientRepo.listIncludingDeleted();
+    return {
+      // Archived clients too, for the "Show archived" view.
+      clients: all,
+      // Live rows' documents, in one query for the screen.
+      linkCounts: await documentLinkRepo.countsFor(
+        "client",
+        all.filter((r) => !r.deletedAt).map((r) => r.id),
+      ),
+      // Rows that can point at a client, to count them in the archive dialog.
+      income: await incomeRepo.list(),
+      timeEntries: await timeRepo.list(),
+      expenses: await expenseRepo.list(),
+    };
+  },
   component: ClientsPage,
 });
 
 function ClientsPage() {
   const {
     clients: allClients,
+    linkCounts,
     income,
     timeEntries,
     expenses,
   } = useLoaderData({ from: "/clients" });
   const router = useRouter();
+  const hash = useLocation({ select: (l) => l.hash });
   const [showArchived, setShowArchived] = useState(false);
   const archivedCount = allClients.filter((c) => c.deletedAt).length;
   const clients = allClients.filter((c) => showArchived || !c.deletedAt);
@@ -233,7 +246,11 @@ function ClientsPage() {
             </DataTable.Head>
             <DataTable.Body>
               {clients.map((c) => (
-                <DataTable.Row key={c.id}>
+                <DataTable.Row
+                  key={c.id}
+                  id={rowAnchor(c.id)}
+                  highlighted={hash === rowAnchor(c.id)}
+                >
                   <DataTable.Cell label="Name">
                     <ParentName parent={c} />
                   </DataTable.Cell>
@@ -249,6 +266,14 @@ function ClientsPage() {
                     ) : (
                       <div className="inline-flex gap-1">
                         <EditClientDialog client={c} onSaved={() => router.invalidate()} />
+                        <AttachDialog
+                          recordType="client"
+                          recordId={c.id}
+                          recordDate={""}
+                          recordLabel={recordLabel.client(c)}
+                          count={linkCounts[c.id] ?? 0}
+                          onChanged={() => router.invalidate()}
+                        />
                         <ArchiveDialog
                           itemName={c.name}
                           recordName={recordLabel.client(c)}
