@@ -13,6 +13,13 @@ const { upsert, create, list, navigate, buildBundle, importBundle } = vi.hoisted
 }));
 
 vi.mock("@fiscode/db", () => ({
+  // The vault migration is done: every write is on (vault PR 9).
+  getVaultMigrationState: (
+    (done) => () =>
+      done
+  )({ phase: "done" }),
+  onVaultMigrationState: () => () => {},
+
   profileRepo: { exists: async () => false, upsert },
   entityRepo: { create, list },
   buildBundle,

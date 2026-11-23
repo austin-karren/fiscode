@@ -14,6 +14,13 @@ import { expectNoRawValues } from "../test/raw-values";
 // The database is SQLite over OPFS and the router needs a browser history;
 // neither exists in jsdom. Both are replaced at the package boundary.
 vi.mock("@fiscode/db", () => ({
+  // The vault migration is done: every write is on (vault PR 9).
+  getVaultMigrationState: (
+    (done) => () =>
+      done
+  )({ phase: "done" }),
+  onVaultMigrationState: () => () => {},
+
   buildBundle: async () => ({}),
   importBundle: vi.fn(),
   profileRepo: { get: async () => null },

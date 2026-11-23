@@ -5,6 +5,8 @@ import { Button } from "@fiscode/ui/components/button";
 import { documentLinkRepo } from "@fiscode/db";
 import type { DocumentLinkRow } from "@fiscode/csv";
 import { softDeleteWithUndo } from "../../lib/soft-delete";
+import { ReadOnlyNote } from "../read-only-note";
+import { useVaultReadOnly } from "../../lib/vault-migration";
 import type { LinkableRecordType } from "../../lib/documents-links";
 
 type Linked = Awaited<ReturnType<typeof documentLinkRepo.forRecord>>[number];
@@ -20,6 +22,8 @@ export function LinkedDocuments({
   recordId: string;
   onChanged: () => void;
 }) {
+  // Unlinking is a document write: off until the vault migration is done (§ 10).
+  const readOnly = useVaultReadOnly();
   const [links, setLinks] = useState<Linked[]>();
   const id = useId();
   const list = useRef<HTMLElement>(null);
@@ -61,6 +65,7 @@ export function LinkedDocuments({
       <h3 id={`${id}-docs`} tabIndex={-1} className="text-sm font-medium outline-none">
         Documents
       </h3>
+      {links.length > 0 ? <ReadOnlyNote reason={readOnly} /> : null}
       {links.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           None attached. Use Attach on the row to add one.
@@ -82,6 +87,7 @@ export function LinkedDocuments({
                 size="sm"
                 className="shrink-0"
                 data-unlink
+                disabled={!!readOnly}
                 onClick={() => void unlink(l, index)}
               >
                 Unlink <span className="sr-only">{l.document.name}</span>

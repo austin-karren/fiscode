@@ -11,7 +11,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@tanstack/react-router-devtools", () => ({ TanStackRouterDevtools: () => null }));
 // The root loader reads the profile from SQLite over OPFS, which jsdom lacks;
 // these tests give the stand-in root their own loader instead.
-vi.mock("@fiscode/db", () => ({ profileRepo: { get: async () => undefined } }));
+vi.mock("@fiscode/db", () => ({
+  // The vault migration is done: every write is on (vault PR 9).
+  getVaultMigrationState: (
+    (done) => () =>
+      done
+  )({ phase: "done" }),
+  onVaultMigrationState: () => () => {},
+  profileRepo: { get: async () => undefined },
+}));
 
 import { ThemeProvider } from "@fiscode/ui/components/theme";
 

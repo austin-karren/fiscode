@@ -18,6 +18,8 @@ import type { DocumentRow } from "@fiscode/csv";
 import { errorLine, fileKind, formatBytes } from "../../lib/documents-view";
 import { BACKUP_CARD_ID } from "../backup-card";
 import { isLinkable, linkedRowLabel, ROUTE_FOR, rowAnchor } from "../../lib/documents-links";
+import { ReadOnlyNote } from "../read-only-note";
+import { useVaultReadOnly } from "../../lib/vault-migration";
 import { formatDate, formatDateTime } from "../../lib/format-date";
 
 type Versions = Awaited<ReturnType<typeof documentRepo.versions>>;
@@ -72,6 +74,8 @@ function SheetBody({
   const [heicFailed, setHeicFailed] = useState(false);
   const replaceInput = useRef<HTMLInputElement>(null);
   const id = useId();
+  // Read-only until the vault migration is done (§ 10): preview and Download still work.
+  const readOnly = useVaultReadOnly();
 
   // Loads this version's bytes as an object URL, and revokes it when the sheet moves on
   // (another document, a replaced file, or closed): a subscription to outside state.
@@ -164,13 +168,18 @@ function SheetBody({
           )}
         </section>
 
+        <ReadOnlyNote reason={readOnly} />
         <div className="flex flex-wrap gap-2">
           {url ? (
             <Button render={<a href={url} download={doc.name} />} variant="outline">
               Download
             </Button>
           ) : null}
-          <Button variant="outline" onClick={() => replaceInput.current?.click()}>
+          <Button
+            variant="outline"
+            disabled={!!readOnly}
+            onClick={() => replaceInput.current?.click()}
+          >
             Replace file
           </Button>
           <input
@@ -189,12 +198,17 @@ function SheetBody({
           <Textarea
             id={`${id}-notes`}
             value={notes}
+            readOnly={!!readOnly}
             onChange={(e) => setNotes(e.target.value)}
             onBlur={async () => {
               if (notes === (doc.notes ?? "")) return;
-              await documentRepo.update(doc.id, { notes: notes.trim() || null });
-              toast.success("Notes saved.");
-              onChanged();
+              try {
+                await documentRepo.update(doc.id, { notes: notes.trim() || null });
+                toast.success("Notes saved.");
+                onChanged();
+              } catch (err) {
+                toast.error(errorLine(err));
+              }
             }}
           />
         </div>

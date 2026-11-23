@@ -10,7 +10,16 @@ const { buildBundle, importBundle, invalidate } = vi.hoisted(() => ({
   invalidate: vi.fn(async () => {}),
 }));
 
-vi.mock("@fiscode/db", () => ({ buildBundle, importBundle }));
+vi.mock("@fiscode/db", () => ({
+  // The vault migration is done: every write is on (vault PR 9).
+  getVaultMigrationState: (
+    (done) => () =>
+      done
+  )({ phase: "done" }),
+  onVaultMigrationState: () => () => {},
+  buildBundle,
+  importBundle,
+}));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),

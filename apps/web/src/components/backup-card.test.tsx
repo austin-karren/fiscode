@@ -6,7 +6,15 @@ vi.mock("@tanstack/react-router", () => ({ useRouter: () => ({ invalidate }) }))
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
 }));
-vi.mock("@fiscode/db", () => ({ buildBundle: vi.fn(async () => ({})) }));
+vi.mock("@fiscode/db", () => ({
+  // The vault migration is done: every write is on (vault PR 9).
+  getVaultMigrationState: (
+    (done) => () =>
+      done
+  )({ phase: "done" }),
+  onVaultMigrationState: () => () => {},
+  buildBundle: vi.fn(async () => ({})),
+}));
 vi.mock("@fiscode/backup", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@fiscode/backup")>()),
   createBackup: vi.fn(),
