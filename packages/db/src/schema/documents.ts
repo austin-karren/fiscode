@@ -3,7 +3,8 @@ import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqli
 
 // Document folders, documents and their links to records (contract: d-data
 // drafts/contract-documents.md). Bytes never live here: a document's bytes are a
-// content-addressed blob in OPFS at documents/blobs/<sha[0:2]>/<sha256> (vault/store.ts).
+// file in the vault tree at `vault_path` (vault/store.ts); before the migration, a
+// content-addressed blob at documents/blobs/<sha[0:2]>/<sha256>.
 
 /** A folder. `parentId` null = a root folder. Names are unique among live siblings (repo). */
 export const documentFolder = sqliteTable(
@@ -47,11 +48,22 @@ export const document = sqliteTable(
     // When it was first uploaded.
     addedAt: text("added_at").notNull(),
     notes: text("notes"),
+    // Where its bytes are in the vault tree ("documents/2026/Expenses/2026-03-04 Amazon NAS.pdf",
+    // ADR 0001 § 2). Null until the migration (or the boot backstop) has put the file there.
+    vaultPath: text("vault_path"),
     deletedAt: text("deleted_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (t) => [index("document_folder_idx").on(t.folderId), index("document_sha_idx").on(t.sha256)],
+  (t) => [
+    index("document_folder_idx").on(t.folderId),
+    index("document_sha_idx").on(t.sha256),
+    // One live document per path, ignoring ASCII case (§ 4). The repo also folds Unicode case
+    // (sameName); this is the backstop.
+    uniqueIndex("document_vault_path_idx")
+      .on(sql`lower(${t.vaultPath})`)
+      .where(sql`${t.deletedAt} IS NULL AND ${t.vaultPath} IS NOT NULL`),
+  ],
 );
 
 /** A link from a document to a record (polymorphic by CSV record-type name). Unlink = soft delete. */

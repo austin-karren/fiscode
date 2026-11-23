@@ -2,3 +2,8 @@ export * from "./dir.ts";
 export * from "./store.ts";
 export * from "./journal.ts";
 export * from "./lock.ts";
+export * from "./paths.ts";
+export * from "./state.ts";
+export * from "./tree.ts";
+export * from "./manifest.ts";
+export * from "./migrate.ts";

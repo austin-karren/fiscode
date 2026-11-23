@@ -269,7 +269,7 @@ export const buildBundle = async (
     w2Jobs: w2Rows,
     estimatedPayments: paymentRows,
     documentFolders: folderRows,
-    documents: documentRows,
+    documents: documentRows.map(({ vaultPath: _devicePath, ...d }) => d),
     documentLinks: linkRows,
     history,
   };
@@ -278,3 +278,6 @@ export const buildBundle = async (
 import { documentLinkRepo, documentRepo, folderRepo } from "./documents.ts";
 export { folderRepo, documentRepo, documentLinkRepo };
 export type { FolderNode, LinkedRecord } from "./documents.ts";
+export { linkedDates } from "./documents.ts";
+export { prepareVault, runVaultStartup } from "./vault-boot.ts";
+export type { ShortenedFolder } from "./document-tree.ts";

@@ -28,6 +28,8 @@ import {
 } from "@fiscode/core";
 import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getVaultStore, sha256Hex } from "../vault/store.ts";
+import { assertVaultWritable } from "../vault/state.ts";
+import { changeTree, type DocumentChange, type ShortenedFolder } from "./document-tree.ts";
 import { getDb, runAtomic, type AtomicQuery } from "../client.ts";
 import {
   client,
@@ -48,6 +50,7 @@ import {
   type DocumentLinkRow,
   type DocumentRow,
 } from "../schema/index.ts";
+import { changesNothing } from "./base.ts";
 import { makeCrudRepo } from "./crud.ts";
 
 // Document folders, documents and links (contract: d-data drafts/contract-documents.md). Every
@@ -132,21 +135,29 @@ export const folderRepo = {
     const all = new Map(folders.map((f) => [f.id, f]));
     if (depthOf(parentId, all) + 1 > MAX_FOLDER_DEPTH) throw new FolderTooDeepError();
     assertNameFree(name, parentId, folders);
-    return folderCrud.create({
+    const at = nowIso();
+    const row: DocumentFolderRow = {
+      id: newId(),
       name,
       parentId,
       taxYear: input.taxYear ?? null,
       sortOrder: 0,
       defaultKey: null,
       deletedAt: null,
-    });
+      createdAt: at,
+      updatedAt: at,
+    };
+    // No file moves, but the path budget (§ 3.8) is checked against the tree as it will be.
+    await changeTree({ folders: [{ next: row, insert: true, op: "insert" }] }, strict);
+    return row;
   },
 
+  /** Throws FolderNameTakenError, VaultPathTooLongError (a file below would be over budget). */
   async rename(id: string, rawName: string): Promise<DocumentFolderRow> {
     const name = validFolderName(rawName);
     const folder = await requireFolder(id);
     assertNameFree(name, folder.parentId ?? null, await liveFolders(), id);
-    return (await folderCrud.update(id, { name }))!;
+    return folderUpdate(folder, { name });
   },
 
   /** Move under `newParentId` (null = root). Throws FolderCycleError, FolderNameTakenError, FolderTooDeepError. */
@@ -163,7 +174,24 @@ export const folderRepo = {
       1 + Math.max(0, ...folders.filter((f) => f.parentId === fid).map((f) => height(f.id)));
     if (depthOf(newParentId, all) + height(id) > MAX_FOLDER_DEPTH) throw new FolderTooDeepError();
     assertNameFree(folder.name, newParentId, folders, id);
-    return (await folderCrud.update(id, { parentId: newParentId }))!;
+    return folderUpdate(folder, { parentId: newParentId });
+  },
+
+  /** Field changes through the tree, so a name or parent change moves the files below (§ 6). */
+  async update(
+    id: string,
+    patch: Partial<DocumentFolderInsert>,
+  ): Promise<DocumentFolderRow | undefined> {
+    const folder = await folderCrud.get(id);
+    if (!folder) return undefined;
+    return folderUpdate(folder, patch as Partial<DocumentFolderRow>);
+  },
+
+  /** A folder never goes alone: its subtree and documents go with it (`softDeleteTree`). */
+  async softDelete(id: string): Promise<boolean> {
+    if (!(await folderCrud.get(id))) return false;
+    await folderRepo.softDeleteTree(id);
+    return true;
   },
 
   /** Live folders and documents in a folder's subtree, itself included: for the delete confirm. */
@@ -186,24 +214,27 @@ export const folderRepo = {
       (d) => d.folderId !== null && folderIds.includes(d.folderId),
     );
     const at = nowIso();
-    await runAtomic([
-      ...rowsWrite(
-        documentFolder,
-        "document_folder",
-        folders.filter((f) => folderIds.includes(f.id)),
-        {
-          deletedAt: at,
-          updatedAt: at,
-        },
-        "delete",
-      ),
-      ...rowsWrite(document, "document", docs, { deletedAt: at, updatedAt: at }, "delete"),
-    ]);
+    // Each document's bytes go to _fiscode/trash/ (copy rule), then its file leaves the tree.
+    await changeTree(
+      {
+        folders: folders
+          .filter((f) => folderIds.includes(f.id))
+          .map((f) => ({ next: { ...f, deletedAt: at, updatedAt: at }, op: "delete" as const })),
+        documents: docs.map((d) => ({
+          next: { ...d, deletedAt: at, updatedAt: at },
+          op: "delete" as const,
+        })),
+      },
+      lenient,
+    );
     return { folderIds, documentIds: docs.map((d) => d.id) };
   },
 
   /** Undo `softDeleteTree`: bring back exactly what it deleted, in one transaction. */
-  async restoreTree(result: { folderIds: string[]; documentIds: string[] }): Promise<void> {
+  async restoreTree(result: {
+    folderIds: string[];
+    documentIds: string[];
+  }): Promise<{ shortened: ShortenedFolder[] }> {
     const db = getDb();
     const folders = result.folderIds.length
       ? ((await db
@@ -222,22 +253,26 @@ export const folderRepo = {
     // now taken comes back as "Name (2)". The rest come back under their parent, as they were.
     const coming = new Set(folders.map((f) => f.id));
     const live = await liveFolders();
-    await runAtomic([
-      ...folders.flatMap((f) =>
-        rowsWrite(
-          documentFolder,
-          "document_folder",
-          [f],
-          {
+    // Never refuses: a folder path over budget is shortened (§ 3.8) and reported.
+    const { shortened } = await changeTree(
+      {
+        folders: folders.map((f) => ({
+          next: {
+            ...f,
             deletedAt: null,
             updatedAt: at,
             ...(f.parentId !== null && coming.has(f.parentId) ? {} : placeFor(f, live)),
           },
-          "revert",
-        ),
-      ),
-      ...rowsWrite(document, "document", docs, { deletedAt: null, updatedAt: at }, "revert"),
-    ]);
+          op: "revert" as const,
+        })),
+        documents: docs.map((d) => ({
+          next: { ...d, deletedAt: null, updatedAt: at },
+          op: "revert" as const,
+        })),
+      },
+      lenient,
+    );
+    return { shortened };
   },
 
   /** Live folders as a tree: sorted by sort_order then name, with live document counts. */
@@ -286,9 +321,20 @@ export const folderRepo = {
    * parent is gone comes back under its tax year's root, or at the top level.
    */
   async revertTo(id: string, snapshot: DocumentFolderRow): Promise<DocumentFolderRow | undefined> {
-    if (snapshot.deletedAt !== null) return folderCrud.revertTo(id, snapshot);
+    const exists = (await folderCrud.listIncludingDeleted()).some((f) => f.id === id);
     const live = (await liveFolders()).filter((f) => f.id !== id);
-    return folderCrud.revertTo(id, { ...snapshot, ...placeFor(snapshot, live) });
+    const next: DocumentFolderRow = {
+      ...snapshot,
+      id,
+      ...(snapshot.deletedAt !== null ? {} : placeFor(snapshot, live)),
+      updatedAt: nowIso(),
+    };
+    // Its live documents move with it; a path over budget is shortened, never refused (§ 3.8).
+    const { folders } = await changeTree(
+      { folders: [{ next, insert: !exists, op: "revert" }] },
+      lenient,
+    );
+    return folders.get(id);
   },
 };
 
@@ -420,39 +466,16 @@ const ensureYearDefaultsOnce = async (taxYear: number): Promise<DocumentFolderRo
   return out;
 };
 
-/** Update rows to `set` and write one history row each, as queries for `runAtomic`. */
-const rowsWrite = <T extends { id: string }>(
-  table: typeof documentFolder | typeof document,
-  entity: string,
-  rows: readonly T[],
-  set: Record<string, unknown>,
-  op: "delete" | "revert",
-): AtomicQuery[] => {
-  const db = getDb();
-  const at = nowIso();
-  return rows.flatMap((row) => [
-    db
-      .update(table)
-      .set(set as never)
-      .where(eq(table.id, row.id)),
-    db.insert(historyTable).values({
-      id: newId(),
-      entity,
-      entityId: row.id,
-      op,
-      beforeJson: JSON.stringify(row),
-      afterJson: JSON.stringify({ ...row, ...set }),
-      at,
-    }),
-  ]);
-};
-
 // ─── Documents ──────────────────────────────────────────────────────────────
 
 type NamedBlob = Blob & { name: string };
 
-/** Size, type and hash checks, then the blob is stored (once per sha). */
+/**
+ * Size, type and hash checks. The bytes also go to the by-sha store, which the backup (format 1)
+ * reads until PR 5 moves it onto the tree; the vault copy is made by the tree change.
+ */
 const storeBytes = async (bytes: NamedBlob) => {
+  assertVaultWritable();
   if (bytes.size > MAX_DOCUMENT_BYTES) throw new DocumentTooLargeError(bytes.name);
   const mime = documentMimeFor(bytes.name, bytes.type);
   if (!mime) throw new DocumentTypeNotAllowedError(bytes.name);
@@ -461,27 +484,104 @@ const storeBytes = async (bytes: NamedBlob) => {
   return { mime, sha256, sizeBytes: bytes.size };
 };
 
+/** The live records' dates per document (D2: one linked record gives the date prefix). */
+export const linkedDates = async (
+  documentIds: readonly string[],
+): Promise<Map<string, string[]>> => {
+  const out = new Map<string, string[]>();
+  if (documentIds.length === 0) return out;
+  const links = (await getDb()
+    .select()
+    .from(documentLink)
+    .where(
+      and(isNull(documentLink.deletedAt), inArray(documentLink.documentId, [...documentIds])),
+    )) as DocumentLinkRow[];
+  for (const l of links) {
+    const r = await recordFor(l.recordType, l.recordId);
+    if (!r || r.deletedAt !== null) continue;
+    out.set(l.documentId, [...(out.get(l.documentId) ?? []), r.date]);
+  }
+  return out;
+};
+
+const strict = { strict: true, datesFor: linkedDates };
+const lenient = { strict: false, datesFor: linkedDates };
+
+/** A folder rename or move: every file below it moves, through the journal (§ 6). */
+const folderUpdate = async (
+  folder: DocumentFolderRow,
+  patch: Partial<DocumentFolderRow>,
+): Promise<DocumentFolderRow> => {
+  const next = { ...folder, ...patch, updatedAt: nowIso() };
+  if (changesNothing(folder, patch)) return folder;
+  await changeTree({ folders: [{ next, op: "update" }] }, strict);
+  return next;
+};
+
+/** One document write through the tree (§ 6). */
+const documentChange = async (change: DocumentChange, options = strict): Promise<DocumentRow> => {
+  const { documents } = await changeTree({ documents: [change] }, options);
+  return documents.get(change.next.id)!;
+};
+
+const anyDocument = async (id: string): Promise<DocumentRow | undefined> =>
+  ((await getDb().select().from(document).where(eq(document.id, id)).limit(1)) as DocumentRow[])[0];
+
 const requireDocument = async (id: string): Promise<DocumentRow> => {
   const d = await documentCrud.get(id);
   if (!d) throw new DocumentNotFoundError();
   return d;
 };
 
+/** A document's field changes through the tree. A no-op save writes nothing (no History row). */
+const documentUpdate = async (doc: DocumentRow, patch: Partial<DocumentRow>) => {
+  if (changesNothing(doc, patch)) return doc;
+  return documentChange({ next: { ...doc, ...patch, updatedAt: nowIso() }, op: "update" });
+};
+
+/**
+ * Bytes by sha (ADR § 11.8): the live file at `path` when it holds them, else old bytes in
+ * _fiscode/ (resolveOldBytes), else the pre-migration blob store (kept one release, D9).
+ */
+const readSha = async (sha256: string, path?: string | null): Promise<Blob | undefined> => {
+  const store = getVaultStore();
+  if (path) {
+    const live = await store.read(path);
+    if (live && (await sha256Hex(live)) === sha256) return live;
+  }
+  return (await store.resolveOldBytes(sha256))?.bytes ?? (await store.get(sha256));
+};
+
 export const documentRepo = {
   ...documentCrud,
+
+  /** A row without its file would break the tree: add documents with `upload`. */
+  async create(): Promise<never> {
+    throw new Error("documentRepo.create: use upload, which writes the file through the vault");
+  },
 
   /** Store a file and add a document row. Throws DocumentTooLargeError, DocumentTypeNotAllowedError, StorageQuotaError. */
   async upload(bytes: NamedBlob, options: { folderId?: string | null } = {}): Promise<DocumentRow> {
     const folderId = options.folderId ?? null;
     if (folderId !== null) await requireFolder(folderId);
     const stored = await storeBytes(bytes);
-    return documentCrud.create({
-      folderId,
-      name: bytes.name,
-      ...stored,
-      addedAt: nowIso(),
-      notes: null,
-      deletedAt: null,
+    const at = nowIso();
+    return documentChange({
+      next: {
+        id: newId(),
+        folderId,
+        name: bytes.name,
+        ...stored,
+        addedAt: at,
+        notes: null,
+        vaultPath: null,
+        deletedAt: null,
+        createdAt: at,
+        updatedAt: at,
+      },
+      insert: true,
+      bytes,
+      op: "insert",
     });
   },
 
@@ -504,21 +604,73 @@ export const documentRepo = {
 
   /** Throws DocumentNameInvalidError for an empty, over-long or "/" name (as folders). */
   async rename(id: string, name: string): Promise<DocumentRow> {
-    await requireDocument(id);
-    return (await documentCrud.update(id, { name: validDocumentName(name) }))!;
+    return documentUpdate(await requireDocument(id), { name: validDocumentName(name) });
   },
 
   async move(id: string, folderId: string | null): Promise<DocumentRow> {
-    await requireDocument(id);
+    const doc = await requireDocument(id);
     if (folderId !== null) await requireFolder(folderId);
-    return (await documentCrud.update(id, { folderId }))!;
+    return documentUpdate(doc, { folderId });
   },
 
-  /** New bytes for a document: a new version. History keeps the old sha, and its blob stays. */
+  /** New bytes for a document: a new version. The old bytes are kept in _fiscode/versions/. */
   async replaceBytes(id: string, bytes: NamedBlob): Promise<DocumentRow> {
-    await requireDocument(id);
+    const doc = await requireDocument(id);
     const stored = await storeBytes(bytes);
-    return (await documentCrud.update(id, stored))!;
+    if (stored.sha256 === doc.sha256) return doc;
+    return documentChange({
+      next: { ...doc, ...stored, updatedAt: nowIso() },
+      bytes,
+      op: "update",
+    });
+  },
+
+  /** Notes and other fields that don't move a file still go through here, so nothing is row-only. */
+  async update(id: string, patch: Partial<DocumentInsert>): Promise<DocumentRow | undefined> {
+    const doc = await requireDocument(id).catch(() => undefined);
+    if (!doc) return undefined;
+    const { vaultPath: _ignored, ...rest } = patch;
+    return documentUpdate(doc, rest as Partial<DocumentRow>);
+  },
+
+  /** Moves its file to _fiscode/trash/ (the copy rule), then marks the row deleted. */
+  async softDelete(id: string): Promise<boolean> {
+    const doc = await anyDocument(id);
+    if (!doc) return false;
+    const at = nowIso();
+    await documentChange({ next: { ...doc, deletedAt: at, updatedAt: at }, op: "delete" }, lenient);
+    return true;
+  },
+
+  /**
+   * History revert and Trash restore. Never refuses (§ 3.8). Its file follows: back from
+   * _fiscode/ (resolveOldBytes) when it comes back or gets older bytes, moved when the name or
+   * folder changes, to trash/ when the snapshot is deleted. The snapshot's vault_path is ignored:
+   * the place is worked out from the tree as it is now.
+   */
+  async revertTo(
+    id: string,
+    snapshot: Omit<DocumentRow, "vaultPath"> & { vaultPath?: string | null },
+  ): Promise<DocumentRow | undefined> {
+    assertVaultWritable();
+    const prev = await anyDocument(id);
+    const folderLive =
+      snapshot.folderId === null || (await folderCrud.get(snapshot.folderId)) !== undefined;
+    return documentChange(
+      {
+        next: {
+          ...snapshot,
+          id,
+          // A snapshot from before the column existed has no vaultPath.
+          vaultPath: prev?.vaultPath ?? null,
+          folderId: folderLive ? snapshot.folderId : null,
+          updatedAt: nowIso(),
+        },
+        insert: !prev,
+        op: "revert",
+      },
+      lenient,
+    );
   },
 
   async listInFolder(folderId: string | null): Promise<DocumentRow[]> {
@@ -547,7 +699,7 @@ export const documentRepo = {
   /** The current bytes, typed with the row's mime. Throws DocumentBytesMissingError. */
   async readBytes(id: string): Promise<Blob> {
     const d = await requireDocument(id);
-    const blob = await getVaultStore().get(d.sha256);
+    const blob = await readSha(d.sha256, d.vaultPath);
     if (!blob) throw new DocumentBytesMissingError();
     return new Blob([blob], { type: d.mime });
   },
@@ -585,7 +737,7 @@ export const documentRepo = {
         sha256: after.sha256,
         sizeBytes: after.sizeBytes,
         name: after.name,
-        available: await getVaultStore().has(after.sha256),
+        available: (await readSha(after.sha256)) !== undefined,
       });
     }
     return out;
