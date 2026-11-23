@@ -347,11 +347,20 @@ function DocumentsPage() {
       <NameDialog
         open={dialog?.kind === "new-folder"}
         onOpenChange={(o) => !o && setDialog(null)}
-        title={current ? `New folder in ${current.name}` : "New folder"}
+        title="New folder"
         label="Folder name"
         submitLabel="Create"
-        onSubmit={async (name) => {
-          const made = await folderRepo.create({ name, parentId: folderId });
+        // The top level holds a folder per year; a past year's folder is made there directly.
+        places={
+          current
+            ? [
+                { id: current.id, label: `In ${folderPath(folders, current.id)}` },
+                { id: null, label: "At the top level, beside the year folders" },
+              ]
+            : undefined
+        }
+        onSubmit={async (name, where) => {
+          const made = await folderRepo.create({ name, parentId: where });
           await navigate({ search: (s) => ({ ...s, folder: made.id, q: undefined }) });
           await refresh();
         }}

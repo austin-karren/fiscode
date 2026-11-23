@@ -238,3 +238,32 @@ describe("document sheet", () => {
     ]);
   });
 });
+
+describe("a new folder can go at the top level (d-ux docs polish 1)", () => {
+  it("defaults to the open folder, and makes a past year's folder at the top level", async () => {
+    const year = await folderRepo.create({ name: "Demo 2026" });
+    render(
+      <NameDialog
+        open
+        onOpenChange={() => {}}
+        title="New folder"
+        label="Folder name"
+        submitLabel="Create"
+        places={[
+          { id: year.id, label: "In Demo 2026" },
+          { id: null, label: "At the top level, beside the year folders" },
+        ]}
+        onSubmit={async (name, where) => {
+          await folderRepo.create({ name, parentId: where });
+        }}
+      />,
+    );
+    expect(screen.getByRole("radio", { name: "In Demo 2026" })).toBeChecked();
+    fireEvent.change(screen.getByLabelText("Folder name"), { target: { value: "Demo 2024" } });
+    fireEvent.click(screen.getByRole("radio", { name: /At the top level/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(async () =>
+      expect((await folderRepo.list()).find((f) => f.name === "Demo 2024")?.parentId).toBeNull(),
+    );
+  });
+});
