@@ -13,7 +13,7 @@
 # "Dockerfile" to apps/web/Dockerfile.
 
 # ----- deps ----------------------------------------------------------------
-FROM oven/bun:1.3.14-alpine AS deps
+FROM oven/bun:1.4.3-alpine AS deps
 WORKDIR /repo
 
 # Copy lockfile + every package.json so bun can install the workspace graph
@@ -34,7 +34,7 @@ COPY packages/config/package.json packages/config/
 RUN bun install --frozen-lockfile --ignore-scripts
 
 # ----- build ---------------------------------------------------------------
-FROM oven/bun:1.3.14-alpine AS build
+FROM oven/bun:1.4.3-alpine AS build
 WORKDIR /repo
 
 # Reuse the entire installed tree from the deps stage (root + every
@@ -62,7 +62,7 @@ RUN cd apps/web && bun build server.ts --target=bun --outfile=server.js
 # ----- serve ---------------------------------------------------------------
 # oven/bun:alpine is small (~95 MB) and gives us a single runtime for the
 # server + the same Bun used at build time. Hono is the only runtime dep.
-FROM oven/bun:1.3.14-alpine AS serve
+FROM oven/bun:1.4.3-alpine AS serve
 WORKDIR /app
 
 ENV NODE_ENV=production

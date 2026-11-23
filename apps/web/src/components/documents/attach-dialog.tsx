@@ -305,11 +305,12 @@ function AttachBody({
             ))}
           </ul>
         )}
-        {docs.length > SHOWN ? (
-          <p className="text-xs text-muted-foreground">
-            Showing {SHOWN} of {docs.length}. Search to find the rest.
-          </p>
-        ) : null}
+        {/* Always mounted, so a screen reader hears the count when a search changes it. */}
+        <p role="status" className="text-xs text-muted-foreground empty:hidden">
+          {docs.length > SHOWN
+            ? `Showing ${SHOWN} of ${docs.length}. Search to find the rest.`
+            : ""}
+        </p>
       </TabsContent>
     </Tabs>
   );
