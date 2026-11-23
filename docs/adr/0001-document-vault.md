@@ -317,7 +317,9 @@ device with a fresh database is restored by importing that CSV and adopting the 
 - **Backup** stays as it is: one deterministic zip, age-encrypted, `fiscode-backup-<date>.zip.age`.
   Only the paths inside change: `manifest.json` becomes `fiscode.json` (format bumps to
   `formatVersion: 2`), live files use the § 3 names, `.versions` is replaced by `_fiscode/`,
-  written exactly as the store holds it (`versions/` and `trash/`, § 2). Readers keep accepting format 1.
+  written exactly as the store holds it (`versions/` and `trash/`, § 2). The bytes of a
+  soft-deleted document or an old version are read with `resolveOldBytes(sha)`, in export and
+  backup alike. Readers keep accepting format 1.
 - **Restore** is 1:1: every file in the zip or folder is checked against `fiscode.json` (size and
   sha256) before anything is written, as `readBackup` does now; then rows are imported and each
   file is written to its manifest path. A test restores a vault into an empty store and asserts the
@@ -397,7 +399,8 @@ Cancelling stops between documents and leaves both stores readable (the old stor
    or restore; carries `path`), `VaultPathTooLongError`, `VaultBusyError` (item 9).
 8. **Preview.** `documentRepo.readBytes(id)` and `documentRepo.objectUrl(id)` keep their
    signatures and resolve through the `VaultStore`, so the sheet does not care whether bytes come
-   from OPFS, the picked folder or the cache.
+   from OPFS, the picked folder or the cache. A live document is read from its `vault_path`; a
+   soft-deleted document or an old version is read with `resolveOldBytes(sha)` (§ 2).
 
 9. **More than one tab.** Every tree change, scan, migration, export and restore runs under one
    Web Lock, `navigator.locks.request("fiscode-vault", …)` (all four engines). A rename in one
