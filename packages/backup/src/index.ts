@@ -8,6 +8,7 @@ import {
   BackupUnexpectedFileError,
   isoFromDate,
   safeSegment,
+  StorageQuotaError,
 } from "@fiscode/core";
 import { Decrypter, Encrypter } from "age-encryption";
 import {
@@ -22,20 +23,45 @@ import {
 } from "@fiscode/csv";
 // Subpaths, not "@fiscode/db": its index loads boot.ts, which needs Vite (import.meta.glob), and
 // the headless script runs under plain Bun.
-import { assertVaultWritable, getVaultStore, sha256Hex, type ShaStore } from "@fiscode/db/vault";
-import { buildBundle, importBundle } from "@fiscode/db/repo";
+import {
+  assertVaultWritable,
+  documentVaultPaths,
+  getVaultStore,
+  MANIFEST_FILE,
+  oldBytesPath,
+  placeUnplacedDocuments,
+  runTreeChange,
+  sha256Hex,
+  withVaultLock,
+  type OldBytesFolder,
+  type PlanBuilder,
+  type VaultDirHandle,
+  type VaultStore,
+} from "@fiscode/db/vault";
+import { buildBundle, importBundleQueries, linkedDates } from "@fiscode/db/repo";
+import { getDb } from "@fiscode/db/client";
+import { document } from "@fiscode/db/schema";
+import { eq } from "drizzle-orm";
 import { strToU8, strFromU8, unzipSync, zipSync, type Zippable } from "fflate";
 
-// The full backup bundle (contract: d-data drafts/contract-backup.md, with d-data's rulings).
-// One zip: manifest.json, the canonical CSV (full scope: deleted rows and history) and every
-// document's bytes, each sha256 once. Live documents sit at their folder path for people; every
-// other blob a row or a history snapshot references sits at documents/.versions/<sha256>. The
-// zip is deterministic: the same state and `createdAt` give the same bytes. Restore checks every
-// file before writing anything. No encryption in v1 (d-data ruling).
+// The full backup (contract: d-data drafts/contract-backup.md, with d-data's rulings), and Export
+// vault (ADR 0001 § 9). Format 2 is the vault's own layout (§ 2), so unzipping a backup is a vault:
+//   fiscode.json                        the vault manifest, formatVersion 2 (+ csv, app, counts)
+//   exports/fiscode-full-backup-<date>.csv   the canonical CSV (full scope: deleted rows, history)
+//   documents/…                         each live document at its vault_path, one copy per
+//                                       document even when two share bytes (D12)
+//   _fiscode/versions|trash/<ab>/<sha>  every other referenced sha, where the store keeps it
+// The zip is deterministic: the same state and `createdAt` give the same bytes. Restore checks
+// every file before writing anything. Format 1 (manifest.json, .versions) still restores.
 
+/** Format 1's manifest name and format string. */
 export const BACKUP_FORMAT = "fiscode-backup";
-export const BACKUP_FORMAT_VERSION = 1;
+export const BACKUP_MANIFEST_V1 = "manifest.json";
+/** Format 2's `fiscode.json` is a vault manifest (ADR § 2). */
+export const VAULT_FORMAT = "fiscode-vault";
+export const BACKUP_FORMAT_VERSION = 2;
 
+/** One file in the zip, as both formats are read (format 2 is grouped by path). */
 export type BackupManifestFile = {
   path: string;
   sha256: string;
@@ -44,8 +70,9 @@ export type BackupManifestFile = {
   documentIds: string[];
 };
 
+/** A backup's manifest as read, whichever format it was written in. */
 export type BackupManifest = {
-  format: typeof BACKUP_FORMAT;
+  format: typeof BACKUP_FORMAT | typeof VAULT_FORMAT;
   formatVersion: number;
   createdAt: string;
   app: { csvSchema: string; build: string };
@@ -56,13 +83,32 @@ export type BackupManifest = {
    * (e.g. after a CSV-only restore). Listed so a restore knows they are expected to be absent.
    */
   missing: { sha256: string; documentIds: string[] }[];
-  counts: {
-    rows: number;
-    deletedRows: number;
-    historyEntries: number;
-    documents: number;
-    blobs: number;
-  };
+  counts: BackupCounts;
+};
+
+export type BackupCounts = {
+  rows: number;
+  deletedRows: number;
+  historyEntries: number;
+  documents: number;
+  /** Files in the zip besides the manifest and the CSV. */
+  blobs: number;
+};
+
+/** Format 2's `fiscode.json`, as written. Keys are sorted so it diffs cleanly. */
+export type VaultBackupManifest = {
+  format: typeof VAULT_FORMAT;
+  formatVersion: 2;
+  writtenAt: string;
+  app: { csvSchema: string; build: string };
+  csv: { path: string; sha256: string; sizeBytes: number };
+  /** Every live document with its bytes here: id → its vault path. */
+  documents: Record<string, { path: string; sha256: string; sizeBytes: number }>;
+  /** Every other referenced sha: `_fiscode/versions|trash/<ab>/<sha>`. */
+  blobs: Record<string, { path: string; sizeBytes: number }>;
+  /** Referenced shas this device didn't have. */
+  missing: string[];
+  counts: BackupCounts;
 };
 
 export type BackupProgress = {
@@ -226,6 +272,9 @@ const numbered = (name: string, n: number): string => {
 };
 
 /**
+ * Format 1's zip paths, kept to read and summarize format-1 backups (format 2 writes each
+ * document at its vault_path instead).
+ *
  * Every live document's human path (document id → `documents/<folder path>/<name>`), including
  * a document whose bytes the zip stores under another document's path. Unique ignoring case, and
  * never the path of a folder or of a `.versions` file, so the zip extracts with no file where a
@@ -272,13 +321,184 @@ export const humanPaths = (bundle: Bundle): Map<string, string> => {
   return out;
 };
 
+const byKey = <V>(entries: [string, V][]): Record<string, V> =>
+  Object.fromEntries(entries.toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+
+const readVerified = async (
+  read: () => Promise<Blob | undefined>,
+  sha: string,
+): Promise<Uint8Array | undefined> => {
+  const blob = await read();
+  if (!blob) return undefined;
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return (await sha256Hex(new Blob([part(bytes)]))) === sha ? bytes : undefined;
+};
+
+/** What a backup zip and an exported vault hold: the files by path, and the manifest. */
+export type VaultContents = {
+  vault: VaultBackupManifest;
+  manifest: BackupManifest;
+  /** Every file in write order: fiscode.json, the CSV, then the rest by path. */
+  entries: [path: string, bytes: Uint8Array][];
+  date: string;
+};
+
 /**
- * The backup zip for `bundle` (the whole state: deleted rows and history) with bytes from
- * `store`. Pure apart from reading the store: the app and the headless script both use it.
+ * The vault layout of `bundle` (the whole state: deleted rows and history), with bytes from
+ * `store`. `paths` is each document's vault_path (sqlite's, not in the bundle: ADR § 8).
+ * - a live document whose file holds its bytes is written at its path;
+ * - every referenced sha the store keeps under `_fiscode/` is written where it is
+ *   (resolveOldBytes), so a restore gives the same `(path, sha256)` pairs;
+ * - a referenced sha that is only in the legacy by-sha store (D9), or a live document whose
+ *   file isn't at its path, goes to `_fiscode/` (trash for a deleted document's bytes, else
+ *   versions), so a restore has it and the boot backstop places it;
+ * - the rest is listed as missing.
+ */
+export const buildVaultContents = async (
+  bundle: Bundle,
+  store: Pick<VaultStore, "get" | "read" | "resolveOldBytes">,
+  options: {
+    createdAt: string;
+    build?: string;
+    /** The date in the file names (YYYY-MM-DD). Default: `createdAt`'s LOCAL date. */
+    date?: string;
+    paths: ReadonlyMap<string, string>;
+    onProgress?: ProgressFn;
+    signal?: AbortSignal;
+  },
+): Promise<VaultContents> => {
+  const date = options.date ?? isoFromDate(new Date(options.createdAt));
+  const csvBytes = strToU8(exportBundle(bundle, { scope: "full" }));
+  const csvPath = `exports/${exportFileName({ scope: "full" }, date)}`;
+  const refs = referencedBlobs(bundle);
+  const live = bundle.documents
+    .filter((d) => d.deletedAt === null)
+    .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const deletedShas = new Set(
+    bundle.documents.filter((d) => d.deletedAt !== null).map((d) => d.sha256),
+  );
+  const shas = [...refs.keys()].toSorted();
+  const total = live.length + shas.length;
+  let done = 0;
+  const step = () => options.onProgress?.({ phase: "zipping", done: done++, total });
+
+  const files = new Map<string, Uint8Array>();
+  const documents: [string, VaultBackupManifest["documents"][string]][] = [];
+  const placed = new Map<string, Uint8Array>();
+  for (const d of live) {
+    options.signal?.throwIfAborted();
+    step();
+    const path = options.paths.get(d.id);
+    const bytes = path ? await readVerified(() => store.read(path), d.sha256) : undefined;
+    if (!path || !bytes) continue;
+    files.set(path, bytes);
+    placed.set(d.sha256, bytes);
+    documents.push([d.id, { path, sha256: d.sha256, sizeBytes: bytes.length }]);
+  }
+  const placedIds = new Set(documents.map(([id]) => id));
+  const blobs: [string, VaultBackupManifest["blobs"][string]][] = [];
+  const missing: string[] = [];
+  for (const sha of shas) {
+    options.signal?.throwIfAborted();
+    step();
+    const old = await store.resolveOldBytes(sha);
+    const oldBytes = old ? await readVerified(async () => old.bytes, sha) : undefined;
+    if (old && oldBytes) {
+      files.set(old.path, oldBytes);
+      blobs.push([sha, { path: old.path, sizeBytes: oldBytes.length }]);
+      continue;
+    }
+    // Live documents whose files hold this sha cover it, unless one of them isn't placed.
+    const unplaced = [...refs.get(sha)!].some(
+      (id) => !placedIds.has(id) && live.some((d) => d.id === id),
+    );
+    if (placed.has(sha) && !unplaced) continue;
+    const bytes = placed.get(sha) ?? (await readVerified(() => store.get(sha), sha));
+    if (!bytes) {
+      if (!placed.has(sha)) missing.push(sha);
+      continue;
+    }
+    const folder: OldBytesFolder =
+      deletedShas.has(sha) && !live.some((d) => d.sha256 === sha) ? "trash" : "versions";
+    const path = oldBytesPath(folder, sha);
+    files.set(path, bytes);
+    blobs.push([sha, { path, sizeBytes: bytes.length }]);
+  }
+  options.onProgress?.({ phase: "zipping", done: total, total });
+
+  const vault: VaultBackupManifest = {
+    format: VAULT_FORMAT,
+    formatVersion: 2,
+    writtenAt: options.createdAt,
+    app: { csvSchema: CSV_SCHEMA_VERSION, build: options.build ?? "dev" },
+    csv: {
+      path: csvPath,
+      sha256: await sha256Hex(new Blob([part(csvBytes)])),
+      sizeBytes: csvBytes.length,
+    },
+    documents: byKey(documents),
+    blobs: byKey(blobs),
+    missing,
+    counts: {
+      ...countBundle(bundle),
+      documents: bundle.documents.length,
+      blobs: files.size,
+    },
+  };
+  const entries: VaultContents["entries"] = [
+    [MANIFEST_FILE, strToU8(`${JSON.stringify(vault, null, 2)}\n`)],
+    [csvPath, csvBytes],
+    ...[...files].toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  ];
+  return { vault, manifest: asManifest(vault, refs), entries, date };
+};
+
+/** Format 2's `fiscode.json` in the shape both formats are read in. */
+const asManifest = (
+  vault: VaultBackupManifest,
+  refs: ReadonlyMap<string, ReadonlySet<string>>,
+): BackupManifest => {
+  const files: BackupManifestFile[] = [
+    ...Object.entries(vault.documents).map(([id, d]) => ({ ...d, documentIds: [id] })),
+    ...Object.entries(vault.blobs).map(([sha, b]) => ({
+      path: b.path,
+      sha256: sha,
+      sizeBytes: b.sizeBytes,
+      documentIds: [...(refs.get(sha) ?? [])].toSorted(),
+    })),
+  ].toSorted((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return {
+    format: VAULT_FORMAT,
+    formatVersion: vault.formatVersion,
+    createdAt: vault.writtenAt,
+    app: vault.app,
+    csv: vault.csv,
+    documents: files,
+    missing: vault.missing.map((sha) => ({
+      sha256: sha,
+      documentIds: [...(refs.get(sha) ?? [])].toSorted(),
+    })),
+    counts: vault.counts,
+  };
+};
+
+const zipEntries = (entries: VaultContents["entries"]): Uint8Array => {
+  // Entry order is the object's key order. Text is compressed; documents are stored as they are.
+  const zip: Zippable = {};
+  for (const [path, bytes] of entries) {
+    const text = path === MANIFEST_FILE || path.endsWith(".csv");
+    zip[path] = [bytes, { level: text ? 6 : 0, mtime: ZIP_MTIME }];
+  }
+  return zipSync(zip);
+};
+
+/**
+ * The backup zip (format 2) for `bundle` with bytes from `store`. Pure apart from reading the
+ * store: the app and the headless script both use it.
  */
 export const buildBackupZip = async (
   bundle: Bundle,
-  store: ShaStore,
+  store: Pick<VaultStore, "get" | "read" | "resolveOldBytes">,
   options: {
     createdAt: string;
     build?: string;
@@ -288,73 +508,23 @@ export const buildBackupZip = async (
      * a rebuild in another timezone gives the same zip.
      */
     date?: string;
+    /** Each document's vault_path (`documentVaultPaths()`). */
+    paths: ReadonlyMap<string, string>;
     onProgress?: ProgressFn;
   },
-): Promise<{ bytes: Uint8Array; manifest: BackupManifest; fileName: string }> => {
-  const date = options.date ?? isoFromDate(new Date(options.createdAt));
-  const csvText = exportBundle(bundle, { scope: "full" });
-  const csvBytes = strToU8(csvText);
-  const csvPath = exportFileName({ scope: "full" }, date);
-  const refs = referencedBlobs(bundle);
-  const paths = humanPaths(bundle);
-
-  // Each sha once: at the first (by path, so ids never decide) live document's path that has
-  // it, else under .versions.
-  const shaPath = new Map<string, string>();
-  for (const [docId, path] of [...paths].toSorted(([, a], [, b]) => (a < b ? -1 : 1))) {
-    const sha = bundle.documents.find((d) => d.id === docId)!.sha256;
-    if (!shaPath.has(sha)) shaPath.set(sha, path);
-  }
-  const files: Zippable = {};
-  const documents: BackupManifestFile[] = [];
-  const missing: BackupManifest["missing"] = [];
-  const shas = [...refs.keys()].toSorted();
-  let done = 0;
-  for (const sha of shas) {
-    options.onProgress?.({ phase: "zipping", done: done++, total: shas.length });
-    const blob = await store.get(sha);
-    const documentIds = [...refs.get(sha)!].toSorted();
-    if (!blob) {
-      missing.push({ sha256: sha, documentIds });
-      continue;
-    }
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    const path = shaPath.get(sha) ?? `documents/.versions/${sha}`;
-    documents.push({ path, sha256: sha, sizeBytes: bytes.length, documentIds });
-    files[path] = [bytes, { level: 0, mtime: ZIP_MTIME }];
-  }
-  documents.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-  options.onProgress?.({ phase: "zipping", done: shas.length, total: shas.length });
-
-  const counts = countBundle(bundle);
-  const manifest: BackupManifest = {
-    format: BACKUP_FORMAT,
-    formatVersion: BACKUP_FORMAT_VERSION,
-    createdAt: options.createdAt,
-    app: { csvSchema: CSV_SCHEMA_VERSION, build: options.build ?? "dev" },
-    csv: {
-      path: csvPath,
-      sha256: await sha256Hex(new Blob([part(csvBytes)])),
-      sizeBytes: csvBytes.length,
-    },
-    documents,
-    missing,
-    counts: {
-      ...counts,
-      documents: bundle.documents.length,
-      blobs: documents.length,
-    },
+): Promise<{
+  bytes: Uint8Array;
+  manifest: BackupManifest;
+  fileName: string;
+  csv: { path: string; bytes: Uint8Array };
+}> => {
+  const contents = await buildVaultContents(bundle, store, options);
+  return {
+    bytes: zipEntries(contents.entries),
+    manifest: contents.manifest,
+    fileName: backupFileName(contents.date),
+    csv: { path: contents.vault.csv.path, bytes: contents.entries[1]![1] },
   };
-  // Entry order is the object's key order: manifest, CSV, then documents by path.
-  const zip: Zippable = {
-    "manifest.json": [
-      strToU8(`${JSON.stringify(manifest, null, 2)}\n`),
-      { level: 6, mtime: ZIP_MTIME },
-    ],
-    [csvPath]: [csvBytes, { level: 6, mtime: ZIP_MTIME }],
-  };
-  for (const d of documents) zip[d.path] = files[d.path]!;
-  return { bytes: zipSync(zip), manifest, fileName: backupFileName(date) };
 };
 
 /** "Back up everything": the whole state of this app as one zip. */
@@ -371,13 +541,23 @@ export const createBackup = async (options: {
   assertVaultWritable();
   if (options.passphrase.length < MIN_PASSPHRASE_LENGTH)
     throw new BackupPassphraseError("too-short");
-  options.onProgress?.({ phase: "reading", done: 0, total: 1 });
-  const bundle = await buildBundle({ includeDeleted: true, includeHistory: true });
-  options.onProgress?.({ phase: "reading", done: 1, total: 1 });
-  const { bytes, manifest, fileName } = await buildBackupZip(bundle, getVaultStore(), {
-    createdAt: options.createdAt ?? new Date().toISOString(),
-    build: options.build,
-    onProgress: options.onProgress,
+  // Under the vault lock, so no tree change lands between reading the rows and the files.
+  const { bytes, manifest, fileName } = await withVaultLock(async () => {
+    options.onProgress?.({ phase: "reading", done: 0, total: 1 });
+    const bundle = await buildBundle({ includeDeleted: true, includeHistory: true });
+    const paths = await documentVaultPaths();
+    options.onProgress?.({ phase: "reading", done: 1, total: 1 });
+    const store = getVaultStore();
+    const built = await buildBackupZip(bundle, store, {
+      createdAt: options.createdAt ?? new Date().toISOString(),
+      build: options.build,
+      paths,
+      onProgress: options.onProgress,
+    });
+    // D8: the latest CSV in the vault's exports/ on every backup, so the vault restores without
+    // the app.
+    await store.write(built.csv.path, new Blob([part(built.csv.bytes)], { type: "text/csv" }));
+    return built;
   });
   options.onProgress?.({ phase: "encrypting", done: 0, total: 1 });
   const encrypted = await encryptBackup(bytes, options.passphrase, options.scryptWorkFactor);
@@ -398,6 +578,14 @@ export type BackupFile =
       file: Extract<ImportFile, { ok: true }>;
       /** The bytes to write, by sha256. */
       blobs: Map<string, Uint8Array>;
+      /**
+       * Format 2: where each file goes (document id → vault path; sha → `_fiscode/` path).
+       * Undefined for format 1, whose live files are placed by the boot backstop's rules.
+       */
+      vault?: {
+        documents: Map<string, { path: string; sha256: string }>;
+        blobs: Map<string, string>;
+      };
       documents: { files: number; bytes: number };
       /**
        * Files the backup lists as missing (the device that made it didn't have them), with the
@@ -415,20 +603,21 @@ const isFileEntry = (v: unknown): boolean =>
   typeof v.sha256 === "string" &&
   typeof v.sizeBytes === "number" &&
   Array.isArray(v.documentIds);
+const isSha = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
+const isSize = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0;
 
-/** The manifest's shape, or a BackupManifestError saying what is wrong with it. */
-const validManifest = (raw: unknown): BackupManifest => {
-  const bad = (reason: string): never => {
-    throw new BackupManifestError(reason);
-  };
-  if (!isRecord(raw)) return bad("manifest.json isn't an object");
-  if (raw.format !== BACKUP_FORMAT) bad("manifest.json isn't a fiscode backup's");
+const bad = (reason: string): never => {
+  throw new BackupManifestError(reason);
+};
+
+/** The fields both formats share: version, time, app, CSV. */
+const checkCommon = (raw: Record<string, unknown>, time: "createdAt" | "writtenAt") => {
   const v = raw.formatVersion;
   if (typeof v !== "number" || !Number.isInteger(v) || v < 1) {
     bad("its format version isn't a whole number of 1 or more");
   }
   if ((v as number) > BACKUP_FORMAT_VERSION) throw new BackupTooNewError(v as number);
-  if (typeof raw.createdAt !== "string") bad("it has no creation time");
+  if (typeof raw[time] !== "string") bad("it has no creation time");
   const csv = raw.csv;
   if (
     !isRecord(csv) ||
@@ -438,6 +627,14 @@ const validManifest = (raw: unknown): BackupManifest => {
   ) {
     bad("it doesn't say which file is the CSV");
   }
+  if (!isRecord(raw.app)) bad("it doesn't say which app made it");
+};
+
+/** Format 1's manifest.json, or a BackupManifestError saying what is wrong with it. */
+const validManifestV1 = (raw: unknown): BackupManifest => {
+  if (!isRecord(raw)) return bad("manifest.json isn't an object");
+  if (raw.format !== BACKUP_FORMAT) bad("manifest.json isn't a fiscode backup's");
+  checkCommon(raw, "createdAt");
   if (!Array.isArray(raw.documents) || !raw.documents.every(isFileEntry)) {
     bad("its list of files is damaged");
   }
@@ -468,14 +665,74 @@ const validManifest = (raw: unknown): BackupManifest => {
   if (!isRecord(counts) || counts.blobs !== (raw.documents as unknown[]).length) {
     bad("its file count doesn't match its list of files");
   }
-  if (!isRecord(raw.app)) bad("it doesn't say which app made it");
   return { ...(raw as BackupManifest), missing: missing as BackupManifest["missing"] };
 };
 
+/** A relative path with no empty, "." or ".." part: nothing a restore writes can leave the vault. */
+const isSafePath = (path: string): boolean =>
+  !path.includes("\\") && !path.split("/").some((s) => s === "" || s === "." || s === "..");
+
+/** Format 2's fiscode.json, or a BackupManifestError saying what is wrong with it. */
+const validManifestV2 = (raw: unknown): VaultBackupManifest => {
+  if (!isRecord(raw)) return bad("fiscode.json isn't an object");
+  if (raw.format !== VAULT_FORMAT) bad("fiscode.json isn't a fiscode vault's");
+  checkCommon(raw, "writtenAt");
+  if ((raw.formatVersion as number) < 2) bad("fiscode.json has no backup in it (format 1)");
+  const csv = raw.csv as { path: string };
+  if (!isSafePath(csv.path) || !/^exports\/[^/]+\.csv$/.test(csv.path)) {
+    bad(`its CSV isn't in exports/ ("${csv.path}")`);
+  }
+  if (!isRecord(raw.documents) || !isRecord(raw.blobs)) bad("its list of files is damaged");
+  const paths = new Set<string>([MANIFEST_FILE.toLowerCase(), csv.path.toLowerCase()]);
+  const claim = (path: string) => {
+    if (paths.has(path.toLowerCase())) bad(`it lists "${path}" twice`);
+    paths.add(path.toLowerCase());
+  };
+  for (const d of Object.values(raw.documents as Record<string, unknown>)) {
+    if (!isRecord(d) || typeof d.path !== "string" || !isSha(d.sha256) || !isSize(d.sizeBytes)) {
+      bad("its list of files is damaged");
+    }
+    const path = (d as { path: string }).path;
+    if (!isSafePath(path) || !path.startsWith("documents/")) {
+      bad(`it puts a document outside documents/ ("${path}")`);
+    }
+    claim(path);
+  }
+  const blobShas = new Set<string>();
+  for (const [sha, b] of Object.entries(raw.blobs as Record<string, unknown>)) {
+    if (!isSha(sha) || !isRecord(b) || typeof b.path !== "string" || !isSize(b.sizeBytes)) {
+      bad("its list of files is damaged");
+    }
+    const path = (b as { path: string }).path;
+    if (path !== oldBytesPath("versions", sha) && path !== oldBytesPath("trash", sha)) {
+      bad(`it keeps an older file at the wrong place ("${path}")`);
+    }
+    claim(path);
+    blobShas.add(sha);
+  }
+  if (!Array.isArray(raw.missing) || !raw.missing.every(isSha)) {
+    bad("its list of missing files is damaged");
+  }
+  const docShas = new Set(
+    Object.values(raw.documents as Record<string, { sha256: string }>).map((d) => d.sha256),
+  );
+  for (const sha of raw.missing as string[]) {
+    if (blobShas.has(sha) || docShas.has(sha)) {
+      bad(`it lists a file as both missing and in the backup (${sha.slice(0, 12)})`);
+    }
+  }
+  const counts = raw.counts;
+  if (!isRecord(counts) || counts.blobs !== paths.size - 2) {
+    bad("its file count doesn't match its list of files");
+  }
+  return raw as VaultBackupManifest;
+};
+
 /**
- * Read and check a backup. Throws a BackupError when it isn't a backup, is from a newer app, has
- * a damaged manifest or file, a file the manifest doesn't list, or lacks bytes it doesn't declare
- * missing. A CSV the importer refuses comes back as `ok: false`, as for an import. Writes nothing.
+ * Read and check a backup (format 2, or format 1), or an exported vault's zip. Throws a
+ * BackupError when it isn't a backup, is from a newer app, has a damaged manifest or file, a file
+ * the manifest doesn't list, or lacks bytes it doesn't declare missing. A CSV the importer refuses
+ * comes back as `ok: false`, as for an import. Writes nothing.
  */
 export const readBackup = async (
   file: Blob,
@@ -491,22 +748,30 @@ export const readBackup = async (
   } catch {
     throw new BackupNotAZipError();
   }
-  const manifestBytes = entries["manifest.json"];
-  if (!manifestBytes) throw new BackupManifestError("it has no manifest.json");
+  const name = entries[MANIFEST_FILE] ? MANIFEST_FILE : BACKUP_MANIFEST_V1;
+  const manifestBytes = entries[name];
+  if (!manifestBytes) throw new BackupManifestError("it has no fiscode.json");
   let parsed: unknown;
   try {
     parsed = JSON.parse(strFromU8(manifestBytes));
   } catch {
-    throw new BackupManifestError("manifest.json isn't valid JSON");
+    throw new BackupManifestError(`${name} isn't valid JSON`);
   }
-  const manifest = validManifest(parsed);
+  // Format 2's checks need the CSV's references, so they finish below.
+  const v2 = name === MANIFEST_FILE ? validManifestV2(parsed) : undefined;
+  const v1 = v2 ? undefined : validManifestV1(parsed);
+
+  // What each format stores, as (path, sha256, size).
+  const stored: { path: string; sha256: string; sizeBytes: number }[] = v2
+    ? [
+        ...Object.values(v2.documents),
+        ...Object.entries(v2.blobs).map(([sha256, b]) => ({ ...b, sha256 })),
+      ]
+    : v1!.documents;
+  const csv = (v2 ?? v1)!.csv;
 
   // Every file in the zip is one the manifest lists (directory entries aside).
-  const listed = new Set([
-    "manifest.json",
-    manifest.csv.path,
-    ...manifest.documents.map((d) => d.path),
-  ]);
+  const listed = new Set([name, csv.path, ...stored.map((d) => d.path)]);
   for (const path of Object.keys(entries)) {
     if (!path.endsWith("/") && !listed.has(path)) throw new BackupUnexpectedFileError(path);
   }
@@ -518,12 +783,12 @@ export const readBackup = async (
     }
     return bytes;
   };
-  const total = 1 + manifest.documents.length;
+  const total = 1 + stored.length;
   options.onProgress?.({ phase: "checking", done: 0, total });
-  const csvBytes = await check(manifest.csv.path, manifest.csv.sha256, manifest.csv.sizeBytes);
+  const csvBytes = await check(csv.path, csv.sha256, csv.sizeBytes);
   const blobs = new Map<string, Uint8Array>();
   let done = 1;
-  for (const d of manifest.documents) {
+  for (const d of stored.toSorted((a, b) => (a.path < b.path ? -1 : 1))) {
     options.onProgress?.({ phase: "checking", done: done++, total });
     blobs.set(d.sha256, await check(d.path, d.sha256, d.sizeBytes));
   }
@@ -531,14 +796,26 @@ export const readBackup = async (
 
   const read = readImportFile(strFromU8(csvBytes));
   if (!read.ok) return read;
+  const refs = referencedBlobs(read.bundle);
+  if (v2) {
+    // Each placed document is a live document of the data, with the data's bytes.
+    const rows = new Map(read.bundle.documents.map((d) => [d.id, d]));
+    for (const [id, d] of Object.entries(v2.documents)) {
+      const row = rows.get(id);
+      if (!row || row.deletedAt !== null || row.sha256 !== d.sha256) {
+        bad(`it places a file for a document the data doesn't have ("${d.path}")`);
+      }
+    }
+  }
+  const manifest = v2 ? asManifest(v2, refs) : v1!;
   // Every blob the data references (rows, document history, import snapshots) is in the zip or
   // declared missing (review #85 r1).
   const declared = new Set(manifest.missing.map((m) => m.sha256));
   const names = new Map(read.bundle.documents.map((d) => [d.id, d.name]));
-  for (const [sha, ids] of referencedBlobs(read.bundle)) {
+  for (const [sha, ids] of refs) {
     if (blobs.has(sha) || declared.has(sha)) continue;
-    const name = [...ids].map((id) => names.get(id)).find(Boolean);
-    throw new BackupBytesMissingError(name ?? `an older version (${sha.slice(0, 12)})`);
+    const docName = [...ids].map((id) => names.get(id)).find(Boolean);
+    throw new BackupBytesMissingError(docName ?? `an older version (${sha.slice(0, 12)})`);
   }
   return {
     ok: true,
@@ -546,7 +823,16 @@ export const readBackup = async (
     bundle: read.bundle,
     file: read,
     blobs,
-    documents: { files: blobs.size, bytes: [...blobs.values()].reduce((s, b) => s + b.length, 0) },
+    vault: v2 && {
+      documents: new Map(
+        Object.entries(v2.documents).map(([id, d]) => [id, { path: d.path, sha256: d.sha256 }]),
+      ),
+      blobs: new Map(Object.entries(v2.blobs).map(([sha, b]) => [sha, b.path])),
+    },
+    documents: {
+      files: stored.length,
+      bytes: stored.reduce((s, d) => s + d.sizeBytes, 0),
+    },
     missing: manifest.missing.map((m) => ({
       ...m,
       names: [...new Set(m.documentIds.map((id) => names.get(id)).filter((n): n is string => !!n))],
@@ -563,29 +849,194 @@ export const planBackupRestore = (
   documents: file.documents,
 });
 
-/** Write the bytes, then the rows in one transaction (replacing everything, as Restore does). */
-export const restoreBackupInto = async (
+/**
+ * The file half of a restore, as one plan (ADR § 6): `_fiscode/` files first (the copy rule),
+ * then each document at its manifest path (bytes already at a path are kept in trash first), then
+ * this device's live files the backup doesn't have are kept in trash and removed. A crash rolls
+ * the whole plan back, or forward once the rows committed.
+ */
+const planRestoreFiles = async (
+  plan: PlanBuilder,
+  store: VaultStore,
   file: Extract<BackupFile, { ok: true }>,
-  store: ShaStore,
+  step: () => void,
+) => {
+  const bytesOf = (sha: string) => new Blob([part(file.blobs.get(sha)!)]);
+  for (const [sha, path] of file.vault?.blobs ?? []) {
+    step();
+    if (await store.resolveOldBytes(sha)) continue;
+    const folder: OldBytesFolder = path.startsWith("_fiscode/trash/") ? "trash" : "versions";
+    await plan.keep(folder, await plan.stage(bytesOf(sha)), sha);
+  }
+  const targets = new Set<string>();
+  for (const { path, sha256 } of [...(file.vault?.documents.values() ?? [])].toSorted((a, b) =>
+    a.path < b.path ? -1 : 1,
+  )) {
+    step();
+    targets.add(path);
+    if (await store.holds(path, sha256)) continue;
+    const there = await store.read(path);
+    const from = await plan.stage(bytesOf(sha256));
+    if (!there) {
+      plan.ops.push({ op: "copy", from, to: path, sha256 });
+      continue;
+    }
+    const replaces = await sha256Hex(there);
+    await plan.keep("trash", path, replaces);
+    plan.ops.push({ op: "copy", from, to: path, sha256, replaces });
+  }
+  const current = await getDb()
+    .select({
+      sha256: document.sha256,
+      vaultPath: document.vaultPath,
+      deletedAt: document.deletedAt,
+    })
+    .from(document);
+  for (const c of current) {
+    if (c.deletedAt !== null || !c.vaultPath || targets.has(c.vaultPath)) continue;
+    if (!(await store.holds(c.vaultPath, c.sha256))) continue; // the scan's (PR 6)
+    targets.add(c.vaultPath);
+    await plan.keep("trash", c.vaultPath, c.sha256);
+    plan.ops.push({ op: "remove", from: c.vaultPath, sha256: c.sha256 });
+  }
+};
+
+/**
+ * "Restore from backup" into the vault in use (OPFS in the app; the profile directory headless).
+ * The caller confirms first when there is data here. Replaces every row (one backup-restore
+ * snapshot in History) and makes the tree the backup's, in one journaled tree change:
+ * - format 2: every file to its manifest path, and each row's vault_path from the manifest, so
+ *   the restored vault has the backup's `(path, sha256)` pairs;
+ * - format 1: the bytes into the by-sha store, then the boot backstop's placement (§ 10 step 5).
+ * Throws VaultMigratingError while the migration runs and VaultBusyError when another tab holds
+ * the vault.
+ */
+export const restoreBackup = async (
+  file: Extract<BackupFile, { ok: true }>,
   options: { onProgress?: ProgressFn } = {},
 ): Promise<void> => {
   assertVaultWritable();
-  const blobs = [...file.blobs];
+  const store = getVaultStore();
+  const total = (file.vault ? file.documents.files : file.blobs.size) + 1;
   let done = 0;
-  for (const [sha, bytes] of blobs) {
-    options.onProgress?.({ phase: "writing", done: done++, total: blobs.length + 1 });
-    await store.put(sha, new Blob([part(bytes)]));
+  const step = () => options.onProgress?.({ phase: "writing", done: done++, total });
+  if (!file.vault) {
+    for (const [sha, bytes] of file.blobs) {
+      step();
+      await store.put(sha, new Blob([part(bytes)]));
+    }
   }
-  options.onProgress?.({ phase: "writing", done: blobs.length, total: blobs.length + 1 });
-  // Its own reason in History (not a CSV import's "import-restore"), with the backup's time.
-  await importBundle(file.bundle as never, "backup-restore", {
-    backup: { createdAt: file.manifest.createdAt },
+  await runTreeChange(async (plan) => {
+    // Its own reason in History (not a CSV import's "import-restore"), with the backup's time.
+    const queries = await importBundleQueries(file.bundle as never, "backup-restore", {
+      backup: { createdAt: file.manifest.createdAt },
+    });
+    await planRestoreFiles(plan, store, file, step);
+    for (const [id, { path }] of file.vault?.documents ?? []) {
+      queries.push(getDb().update(document).set({ vaultPath: path }).where(eq(document.id, id)));
+    }
+    return { queries, result: undefined };
   });
-  options.onProgress?.({ phase: "writing", done: blobs.length + 1, total: blobs.length + 1 });
+  if (!file.vault) {
+    await withVaultLock(() => placeUnplacedDocuments(store, linkedDates), { wait: true });
+  }
+  options.onProgress?.({ phase: "writing", done: total, total });
 };
 
-/** "Restore from backup", in the app (OPFS). The caller confirms first when there is data here. */
-export const restoreBackup = (
-  file: Extract<BackupFile, { ok: true }>,
-  options: { onProgress?: ProgressFn } = {},
-): Promise<void> => restoreBackupInto(file, getVaultStore(), options);
+// ─── Export vault (ADR § 9, for d-ux's PR 12) ────────────────────────────────────────────────
+
+/** Export vault's progress: reading the rows, reading the files, then zipping or writing them. */
+export type ExportVaultProgress = {
+  phase: "reading" | "collecting" | "zipping" | "writing";
+  done: number;
+  total: number;
+};
+
+/** Where Export vault goes: a zip to download, or a folder the user picked. */
+export type ExportVaultTarget = { kind: "zip" } | { kind: "folder"; dir: VaultDirHandle };
+
+export type ExportVaultResult =
+  | { kind: "zip"; blob: Blob; fileName: string; manifest: BackupManifest }
+  | { kind: "folder"; files: number; manifest: BackupManifest };
+
+/** `fiscode-vault-<YYYY-MM-DD>.zip`. */
+export const exportVaultFileName = (date: string): string => `fiscode-vault-${date}.zip`;
+
+const writeInto = async (root: VaultDirHandle, path: string, bytes: Uint8Array) => {
+  const parts = path.split("/");
+  const name = parts.pop()!;
+  let dir = root;
+  for (const p of parts) dir = await dir.getDirectoryHandle(p, { create: true });
+  try {
+    // A writable commits on close(), so a file is never half written under its name.
+    const writable = await (await dir.getFileHandle(name, { create: true })).createWritable();
+    await writable.write(new Blob([part(bytes)]));
+    await writable.close();
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "QuotaExceededError") {
+      throw new StorageQuotaError();
+    }
+    throw err;
+  }
+};
+
+/**
+ * Export vault: the § 2 tree (fiscode.json, documents/, _fiscode/versions and trash, and the
+ * latest CSV in exports/; never backups/) as a plain zip, or written into a picked folder. The
+ * same contents as a backup, unencrypted, so `readBackup` restores an exported zip too.
+ * - progress: `reading` (1 step), `collecting` (one per document and referenced sha), then
+ *   `zipping` (1 step) or `writing` (one per file; fiscode.json is written last, so a folder
+ *   without it is an export that didn't finish);
+ * - cancel: `signal`; throws its reason (an AbortError DOMException) between files. A cancelled
+ *   folder export leaves the files it wrote and no fiscode.json.
+ * Throws VaultBusyError (another tab holds the vault), VaultMigratingError and
+ * VaultMigrationIncompleteError (the migration isn't done), StorageQuotaError (the folder is
+ * full); a picked folder's own errors (e.g. NotAllowedError when permission lapsed) pass through.
+ */
+export const exportVault = async (
+  options: {
+    target?: ExportVaultTarget;
+    createdAt?: string;
+    build?: string;
+    onProgress?: (p: ExportVaultProgress) => void;
+    signal?: AbortSignal;
+  } = {},
+): Promise<ExportVaultResult> => {
+  assertVaultWritable();
+  const target = options.target ?? { kind: "zip" };
+  const progress = options.onProgress ?? (() => {});
+  return withVaultLock(async () => {
+    options.signal?.throwIfAborted();
+    progress({ phase: "reading", done: 0, total: 1 });
+    const bundle = await buildBundle({ includeDeleted: true, includeHistory: true });
+    const paths = await documentVaultPaths();
+    progress({ phase: "reading", done: 1, total: 1 });
+    const contents = await buildVaultContents(bundle, getVaultStore(), {
+      createdAt: options.createdAt ?? new Date().toISOString(),
+      build: options.build,
+      paths,
+      signal: options.signal,
+      onProgress: (p) => progress({ ...p, phase: "collecting" }),
+    });
+    if (target.kind === "zip") {
+      progress({ phase: "zipping", done: 0, total: 1 });
+      const bytes = zipEntries(contents.entries);
+      progress({ phase: "zipping", done: 1, total: 1 });
+      return {
+        kind: "zip",
+        blob: new Blob([part(bytes)], { type: "application/zip" }),
+        fileName: exportVaultFileName(contents.date),
+        manifest: contents.manifest,
+      };
+    }
+    const [manifestEntry, ...rest] = contents.entries;
+    const order = [...rest, manifestEntry!];
+    for (const [i, [path, bytes]] of order.entries()) {
+      options.signal?.throwIfAborted();
+      progress({ phase: "writing", done: i, total: order.length });
+      await writeInto(target.dir, path, bytes);
+    }
+    progress({ phase: "writing", done: order.length, total: order.length });
+    return { kind: "folder", files: order.length, manifest: contents.manifest };
+  });
+};

@@ -45,7 +45,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { EntityPeriodError, periodProblem } from "@fiscode/core";
 
 export { profileRepo };
-export { importBundle, type ImportReason } from "./import.ts";
+export { importBundle, importBundleQueries, type ImportReason } from "./import.ts";
 export { taxYearCacheRepo } from "./tax-year-cache.ts";
 
 export const clientRepo = makeCrudRepo<ClientInsert, ClientRow>(client, "client", {

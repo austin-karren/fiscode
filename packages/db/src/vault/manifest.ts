@@ -88,3 +88,11 @@ export const writeManifest = async (store: VaultStore): Promise<VaultManifest> =
   );
   return manifest;
 };
+
+/** Each document's place in the tree (document id → vault_path), for rows that have one. */
+export const documentVaultPaths = async (): Promise<Map<string, string>> => {
+  const rows = await getDb()
+    .select({ id: document.id, vaultPath: document.vaultPath })
+    .from(document);
+  return new Map(rows.flatMap((r) => (r.vaultPath ? [[r.id, r.vaultPath] as const] : [])));
+};
