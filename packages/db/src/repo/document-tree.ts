@@ -1,4 +1,4 @@
-import { folderPathFits, VaultPathTooLongError } from "@fiscode/core";
+import { folderPathFits, titleHasDate, VaultPathTooLongError } from "@fiscode/core";
 import { eq } from "drizzle-orm";
 import { getDb, type AtomicQuery } from "../client.ts";
 import {
@@ -184,7 +184,8 @@ const targetFor = (
   dates: readonly string[],
   taken: readonly string[],
 ) => {
-  const kept = keptDate(prev?.vaultPath ?? null);
+  // A file named after a dated title has no prefix of its own to keep.
+  const kept = prev && !titleHasDate(prev.name) ? keptDate(prev.vaultPath) : undefined;
   const useDates = change?.dates ?? (kept ? [kept] : dates);
   // Place it as if at its old path, so an unchanged name keeps its suffix.
   return placeDocument({ ...next, vaultPath: prev?.vaultPath ?? null }, ctx, useDates, taken);

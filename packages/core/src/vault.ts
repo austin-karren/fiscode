@@ -89,6 +89,10 @@ export const vaultFolderName = (name: string): string =>
   vaultSegment(cutBytes(vaultSegment(name), MAX_VAULT_SEGMENT_BYTES - 1));
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const DATED_TITLE = /^\d{4}-\d{2}-\d{2}(?: |$)/;
+/** Whether a title already starts with a date, so its file name gets no date prefix. */
+export const titleHasDate = (title: string): boolean =>
+  DATED_TITLE.test(title.normalize("NFC").trim());
 
 export interface VaultFileNameInput {
   /** `YYYY-MM-DD`: the linked record's date, else the date added (D2). Null: no prefix. */
@@ -105,9 +109,10 @@ const nameParts = ({ date, title, ext }: VaultFileNameInput) => {
   const e = vaultSegment(ext.toLowerCase().replace(/^\.+/, "")).replace(/\./g, "_").slice(0, 16);
   let t = title.normalize("NFC").trim();
   if (e !== "_" && t.toLowerCase().endsWith(`.${e}`)) t = t.slice(0, -(e.length + 1));
+  // A title that already starts with a date names the file as it is, even when that date isn't
+  // the D2 date: prefixing it would give "2026-11-23 2026-08-12 ...".
+  if (DATED_TITLE.test(t)) return { prefix: "", title: t, ext: e };
   const prefix = date !== null && ISO_DATE.test(date) ? `${date} ` : "";
-  if (prefix !== "" && t.startsWith(prefix)) t = t.slice(prefix.length);
-  else if (prefix !== "" && t === date) t = "";
   return { prefix, title: t, ext: e };
 };
 
@@ -141,7 +146,8 @@ const buildName = (
 
 /**
  * `<YYYY-MM-DD> <title>.<ext>`, sanitised, at most 120 UTF-8 bytes (the title is shortened at a
- * grapheme boundary). A title that already begins with the date is not prefixed twice.
+ * grapheme boundary). A title that already begins with a date ("YYYY-MM-DD", then a space or the
+ * end) gets no prefix, whatever its date.
  */
 export const vaultFileName = (input: VaultFileNameInput): string =>
   buildName(nameParts(input), "", MAX_VAULT_SEGMENT_BYTES) ??

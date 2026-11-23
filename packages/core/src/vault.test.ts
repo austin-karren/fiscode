@@ -54,6 +54,26 @@ describe("safeSegment (backup format 1, frozen)", () => {
 });
 
 describe("vaultFileName", () => {
+  describe("a title that already starts with a date (no double prefix)", () => {
+    const name = (title: string) => vaultFileName({ date: "2026-11-23", title, ext: "pdf" });
+    it("no date in the title: prefixed", () => {
+      expect(name("Demo receipt")).toBe("2026-11-23 Demo receipt.pdf");
+    });
+    it("a leading date: the title as it is", () => {
+      expect(name("2026-11-23 Demo receipt")).toBe("2026-11-23 Demo receipt.pdf");
+    });
+    it("a leading date that differs from the record's: still the title as it is", () => {
+      expect(name("2026-08-12 Demo receipt")).toBe("2026-08-12 Demo receipt.pdf");
+      expect(name("2026-08-12")).toBe("2026-08-12.pdf");
+    });
+    it("a date not at the start: prefixed", () => {
+      expect(name("Receipt 2026-08-12")).toBe("2026-11-23 Receipt 2026-08-12.pdf");
+    });
+    it("a leading number that isn't a date: prefixed", () => {
+      expect(name("2026 budget")).toBe("2026-11-23 2026 budget.pdf");
+      expect(name("2026-08-12x")).toBe("2026-11-23 2026-08-12x.pdf");
+    });
+  });
   it("prefixes the date and lower-cases the extension", () => {
     expect(vaultFileName({ date: "2026-03-04", title: "Demo NAS", ext: "PDF" })).toBe(
       "2026-03-04 Demo NAS.pdf",

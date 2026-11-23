@@ -130,6 +130,23 @@ describe("documentRepo.previewPath", () => {
   });
 });
 
+describe("a title that starts with a date", () => {
+  it("gets no second date, in the preview and the save", async () => {
+    const p = await documentRepo.previewPath({ folderId: null, name: "2026-08-12 Demo bill.pdf" });
+    const d = await documentRepo.upload(file("2026-08-12 Demo bill.pdf", "b"));
+    expect(p.path).toBe("documents/Unfiled/2026-08-12 Demo bill.pdf");
+    expect(d.vaultPath).toBe(p.path);
+  });
+
+  it("renamed to an undated title, it takes the D2 date, not the old title's", async () => {
+    const d = await documentRepo.upload(file("2026-08-12 Demo bill.pdf", "b"));
+    const p = await documentRepo.previewPath({ id: d.id, folderId: null, name: "Demo bill.pdf" });
+    const r = await documentRepo.rename(d.id, "Demo bill.pdf");
+    expect(r.vaultPath).toBe(`documents/Unfiled/${today()} Demo bill.pdf`);
+    expect(p.path).toBe(r.vaultPath);
+  });
+});
+
 describe("folderRepo.previewPath", () => {
   it("a rename: the folder's directory as the save makes it", async () => {
     await folderRepo.create({ name: "a_b" });
