@@ -167,6 +167,19 @@ describe("restore is 1:1 (ADR § 9)", () => {
     ]);
   });
 
+  it("this device's file edited outside the app (bytes not its row's) is kept in trash and removed", async () => {
+    await seed();
+    const first = await backup();
+    emptyProfile();
+    await importBundle(exampleBundle() as never, "import-restore");
+    const mine = await documentRepo.upload(file("Mine.pdf", "mine"));
+    await getVaultStore().write(mine.vaultPath!, new Blob(["edited outside"]));
+    const editedSha = await sha(new Blob(["edited outside"]));
+    await restoreBackup(await open(first.blob));
+    expect(await getVaultStore().read(mine.vaultPath!)).toBeUndefined();
+    expect((await getVaultStore().resolveOldBytes(editedSha))?.path).toMatch(/^_fiscode\/trash\//);
+  });
+
   it("a file already at a backup path with other bytes is kept in trash, then replaced", async () => {
     await seed();
     const first = await backup();
@@ -317,6 +330,8 @@ describe("Export vault", () => {
     const progress: ExportVaultProgress[] = [];
     const out = await exportVault({ createdAt: CREATED, onProgress: (p) => progress.push(p) });
     if (out.kind !== "zip") throw new Error("expected a zip");
+    // D8: the export writes the latest CSV into this vault's exports/ too.
+    expect(await getVaultStore().read("exports/fiscode-full-backup-2026-11-21.csv")).toBeDefined();
     expect(out.fileName).toBe("fiscode-vault-2026-11-21.zip");
     expect(unzipSync(new Uint8Array(await out.blob.arrayBuffer()))).toEqual(
       await zipOf((await backup()).blob),

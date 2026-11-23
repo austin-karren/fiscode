@@ -321,8 +321,16 @@ export const humanPaths = (bundle: Bundle): Map<string, string> => {
   return out;
 };
 
+/** Code-unit order, so sorting never depends on the locale. */
+const byString = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const byPath = (a: { path: string }, b: { path: string }) => byString(a.path, b.path);
+
 const byKey = <V>(entries: [string, V][]): Record<string, V> =>
-  Object.fromEntries(entries.toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  Object.fromEntries(entries.toSorted(([a], [b]) => byString(a, b)));
+
+/** Which `_fiscode/` folder an old-bytes path is in (readBackup checked it is one of them). */
+const oldBytesFolder = (path: string): OldBytesFolder =>
+  path.startsWith("_fiscode/trash/") ? "trash" : "versions";
 
 const readVerified = async (
   read: () => Promise<Blob | undefined>,
@@ -373,7 +381,7 @@ export const buildVaultContents = async (
   const refs = referencedBlobs(bundle);
   const live = bundle.documents
     .filter((d) => d.deletedAt === null)
-    .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    .toSorted((a, b) => byString(a.id, b.id));
   const deletedShas = new Set(
     bundle.documents.filter((d) => d.deletedAt !== null).map((d) => d.sha256),
   );
@@ -448,7 +456,7 @@ export const buildVaultContents = async (
   const entries: VaultContents["entries"] = [
     [MANIFEST_FILE, strToU8(`${JSON.stringify(vault, null, 2)}\n`)],
     [csvPath, csvBytes],
-    ...[...files].toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+    ...[...files].toSorted(([a], [b]) => byString(a, b)),
   ];
   return { vault, manifest: asManifest(vault, refs), entries, date };
 };
@@ -466,7 +474,7 @@ const asManifest = (
       sizeBytes: b.sizeBytes,
       documentIds: [...(refs.get(sha) ?? [])].toSorted(),
     })),
-  ].toSorted((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  ].toSorted(byPath);
   return {
     format: VAULT_FORMAT,
     formatVersion: vault.formatVersion,
@@ -788,7 +796,7 @@ export const readBackup = async (
   const csvBytes = await check(csv.path, csv.sha256, csv.sizeBytes);
   const blobs = new Map<string, Uint8Array>();
   let done = 1;
-  for (const d of stored.toSorted((a, b) => (a.path < b.path ? -1 : 1))) {
+  for (const d of stored.toSorted(byPath)) {
     options.onProgress?.({ phase: "checking", done: done++, total });
     blobs.set(d.sha256, await check(d.path, d.sha256, d.sizeBytes));
   }
@@ -853,7 +861,7 @@ export const planBackupRestore = (
  * The file half of a restore, as one plan (ADR § 6): `_fiscode/` files first (the copy rule),
  * then each document at its manifest path (bytes already at a path are kept in trash first), then
  * this device's live files the backup doesn't have are kept in trash and removed. A crash rolls
- * the whole plan back, or forward once the rows committed.
+ * the plan back, or forward once the rows committed.
  */
 const planRestoreFiles = async (
   plan: PlanBuilder,
@@ -865,13 +873,10 @@ const planRestoreFiles = async (
   for (const [sha, path] of file.vault?.blobs ?? []) {
     step();
     if (await store.resolveOldBytes(sha)) continue;
-    const folder: OldBytesFolder = path.startsWith("_fiscode/trash/") ? "trash" : "versions";
-    await plan.keep(folder, await plan.stage(bytesOf(sha)), sha);
+    await plan.keep(oldBytesFolder(path), await plan.stage(bytesOf(sha)), sha);
   }
   const targets = new Set<string>();
-  for (const { path, sha256 } of [...(file.vault?.documents.values() ?? [])].toSorted((a, b) =>
-    a.path < b.path ? -1 : 1,
-  )) {
+  for (const { path, sha256 } of [...(file.vault?.documents.values() ?? [])].toSorted(byPath)) {
     step();
     targets.add(path);
     if (await store.holds(path, sha256)) continue;
@@ -894,10 +899,13 @@ const planRestoreFiles = async (
     .from(document);
   for (const c of current) {
     if (c.deletedAt !== null || !c.vaultPath || targets.has(c.vaultPath)) continue;
-    if (!(await store.holds(c.vaultPath, c.sha256))) continue; // the scan's (PR 6)
+    // Kept by the bytes that are there: an outside edit's, when they don't match the row.
+    const there = await store.read(c.vaultPath).catch(() => undefined);
+    if (!there) continue;
+    const held = await sha256Hex(there);
     targets.add(c.vaultPath);
-    await plan.keep("trash", c.vaultPath, c.sha256);
-    plan.ops.push({ op: "remove", from: c.vaultPath, sha256: c.sha256 });
+    await plan.keep("trash", c.vaultPath, held);
+    plan.ops.push({ op: "remove", from: c.vaultPath, sha256: held });
   }
 };
 
@@ -907,7 +915,8 @@ const planRestoreFiles = async (
  * snapshot in History) and makes the tree the backup's, in one journaled tree change:
  * - format 2: every file to its manifest path, and each row's vault_path from the manifest, so
  *   the restored vault has the backup's `(path, sha256)` pairs;
- * - format 1: the bytes into the by-sha store, then the boot backstop's placement (§ 10 step 5).
+ * - format 1: the bytes into the by-sha store first (outside the plan: a crash leaves only extra
+ *   by-sha bytes), then the boot backstop's placement (§ 10 step 5).
  * Throws VaultMigratingError while the migration runs and VaultBusyError when another tab holds
  * the vault.
  */
@@ -937,9 +946,9 @@ export const restoreBackup = async (
     }
     return { queries, result: undefined };
   });
-  if (!file.vault) {
-    await withVaultLock(() => placeUnplacedDocuments(store, linkedDates), { wait: true });
-  }
+  // Format 1's rows, and any format-2 document backed up without a vault path, are placed now
+  // by the boot backstop's rules (§ 10 step 5), not on the next reload.
+  await withVaultLock(() => placeUnplacedDocuments(store, linkedDates), { wait: true });
   options.onProgress?.({ phase: "writing", done: total, total });
 };
 
@@ -983,7 +992,8 @@ const writeInto = async (root: VaultDirHandle, path: string, bytes: Uint8Array) 
 /**
  * Export vault: the § 2 tree (fiscode.json, documents/, _fiscode/versions and trash, and the
  * latest CSV in exports/; never backups/) as a plain zip, or written into a picked folder. The
- * same contents as a backup, unencrypted, so `readBackup` restores an exported zip too.
+ * same contents as a backup, unencrypted, so `readBackup` restores an exported zip too. Like a
+ * backup, it also writes the latest CSV into this vault's exports/ (D8).
  * - progress: `reading` (1 step), `collecting` (one per document and referenced sha), then
  *   `zipping` (1 step) or `writing` (one per file; fiscode.json is written last, so a folder
  *   without it is an export that didn't finish);
@@ -1018,6 +1028,9 @@ export const exportVault = async (
       signal: options.signal,
       onProgress: (p) => progress({ ...p, phase: "collecting" }),
     });
+    // D8: the latest CSV in the vault's exports/ on every export and backup (§ 8).
+    const [, [csvPath, csvBytes]] = contents.entries as [unknown, [string, Uint8Array]];
+    await getVaultStore().write(csvPath, new Blob([part(csvBytes)], { type: "text/csv" }));
     if (target.kind === "zip") {
       progress({ phase: "zipping", done: 0, total: 1 });
       const bytes = zipEntries(contents.entries);
