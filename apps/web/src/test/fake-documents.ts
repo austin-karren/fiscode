@@ -13,6 +13,7 @@ import {
   FolderNameTakenError,
   FolderNotFoundError,
   FolderTooDeepError,
+  LINKABLE_RECORD_TYPES,
   MAX_DOCUMENT_BYTES,
   RecordNotFoundError,
   YEAR_DEFAULT_FOLDER_KEYS,
@@ -377,6 +378,9 @@ export const documentLinkRepo = {
   async link(documentId: string, recordType: string, recordId: string): Promise<DocumentLinkRow> {
     if (!documents.get(documentId) || documents.get(documentId)?.deletedAt)
       throw new DocumentNotFoundError();
+    // The real repo finds no record of a type it can't resolve.
+    if (!(LINKABLE_RECORD_TYPES as readonly string[]).includes(recordType))
+      throw new RecordNotFoundError();
     if (goneRecords.has(recordId)) throw new RecordNotFoundError();
     const same = live(links.values()).find(
       (l) => l.documentId === documentId && l.recordType === recordType && l.recordId === recordId,
