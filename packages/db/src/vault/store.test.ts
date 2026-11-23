@@ -67,6 +67,52 @@ describe("vaultStore by path", () => {
     expect(await names(root, ["documents", "blobs", sha.slice(0, 2)])).toEqual([sha]);
   });
 
+  it("never removes the live file when the temp file vanished before the rename", async () => {
+    const root = memoryDir();
+    const vanishing = (dir: VaultDirHandle): VaultDirHandle => ({
+      ...dir,
+      getDirectoryHandle: async (n, o) => vanishing(await dir.getDirectoryHandle(n, o)),
+      getFileHandle: async (n, o) => {
+        const file = await dir.getFileHandle(n, o);
+        if (!n.endsWith(".fiscode-tmp")) return file;
+        return {
+          ...file,
+          async move() {
+            await dir.removeEntry(n); // e.g. a sync client took it
+            throw new DOMException(n, "NotFoundError");
+          },
+        };
+      },
+    });
+    const plain = vaultStore(root);
+    await plain.write("x/a.pdf", bytes("live"));
+    await expect(vaultStore(vanishing(root)).write("x/a.pdf", bytes("new"))).rejects.toThrow();
+    expect(await (await plain.read("x/a.pdf"))!.text()).toBe("live");
+  });
+
+  it("never removes the live file when a refused rename finds the temp file gone", async () => {
+    const root = memoryDir();
+    const refusing = (dir: VaultDirHandle): VaultDirHandle => ({
+      ...dir,
+      getDirectoryHandle: async (n, o) => refusing(await dir.getDirectoryHandle(n, o)),
+      getFileHandle: async (n, o) => {
+        const file = await dir.getFileHandle(n, o);
+        if (!n.endsWith(".fiscode-tmp")) return file;
+        return {
+          ...file,
+          async move() {
+            await dir.removeEntry(n);
+            throw new DOMException(n, "InvalidModificationError");
+          },
+        };
+      },
+    });
+    const plain = vaultStore(root);
+    await plain.write("x/a.pdf", bytes("live"));
+    await expect(vaultStore(refusing(root)).write("x/a.pdf", bytes("new"))).rejects.toThrow();
+    expect(await (await plain.read("x/a.pdf"))!.text()).toBe("live");
+  });
+
   it("gives a typed error, not 'not found', where a folder sits at a file's path", async () => {
     const { store } = setup();
     await store.write("documents/2026/a.pdf", bytes("a"));

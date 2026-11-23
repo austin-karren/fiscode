@@ -141,11 +141,23 @@ export const vaultStore = (root: VaultDirHandle): VaultStore => {
    * first: that leaves a moment with no file at `name`, which the journal's ops repair on recovery.
    */
   const writeAtomic = async (dir: VaultDirHandle, name: string, bytes: Blob, label: string) => {
-    const tmp = await writeFile(dir, `.${name}${TMP_SUFFIX}`, bytes, label);
+    const tmpName = `.${name}${TMP_SUFFIX}`;
+    const tmp = await writeFile(dir, tmpName, bytes, label);
     try {
       await tmp.move(name);
     } catch (err) {
-      if (!(err instanceof DOMException) || isLockedErrorOrQuota(err)) throw err;
+      // Only a refused move onto a taken name earns the fallback. If the temp file is gone
+      // (NotFoundError, or a sync client took it), removing `name` would lose the live file.
+      if (!(err instanceof DOMException) || isNotFound(err) || isLockedErrorOrQuota(err)) throw err;
+      const tmpStillThere = await dir.getFileHandle(tmpName).then(
+        () => true,
+        () => false,
+      );
+      const targetThere = await dir.getFileHandle(name).then(
+        () => true,
+        () => false,
+      );
+      if (!tmpStillThere || !targetThere) throw err;
       await removeIn(dir, name);
       await tmp.move(name);
     }

@@ -185,4 +185,18 @@ describe("vaultJournal.recover: a crash after each step", () => {
     expect(await s.before()).toBe(true);
     expect(await readJournal(s.root)).toBeUndefined();
   });
+
+  it("refuses a replace that doesn't keep the bytes it overwrites", async () => {
+    const s = await setup();
+    const a = await sha256Hex(bytes("a"));
+    const n = await sha256Hex(bytes("new"));
+    await s.store.write("tmp-upload", bytes("new"));
+    const plan: Plan = {
+      planId: "p5",
+      ops: [{ op: "copy", from: "tmp-upload", to: "documents/a.pdf", sha256: n, replaces: a }],
+    };
+    await expect(s.journal.run(plan, async () => {})).rejects.toThrow("before keeping its bytes");
+    expect(await s.store.holds("documents/a.pdf", a)).toBe(true);
+    expect(await readJournal(s.root)).toBeUndefined();
+  });
 });

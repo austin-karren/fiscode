@@ -93,19 +93,28 @@ const isOldBytes = (path: string) => path.startsWith("_fiscode/");
  * `to` without losing a file that was there before. PR 3 turns this into the name check.
  */
 const checkPlan = async (store: VaultStore, plan: Plan) => {
+  // Undoing a remove, or a copy that replaces, restores from _fiscode/, so those bytes must be
+  // kept there first: by an earlier copy in this plan (the copy rule) or already (ADR § 6).
+  const requireKept = async (i: number, sha256: string, path: string) => {
+    const keptHere = plan.ops
+      .slice(0, i)
+      .some((o) => o.op === "copy" && isOldBytes(o.to) && o.sha256 === sha256);
+    if (!keptHere && !(await store.resolveOldBytes(sha256))) {
+      throw new Error(
+        `Plan ${plan.planId} overwrites or removes "${path}" before keeping its bytes`,
+      );
+    }
+  };
   for (const [i, op] of plan.ops.entries()) {
     if (op.op === "remove") {
-      // Undoing a remove restores from _fiscode/, so its bytes must be kept there first: by an
-      // earlier copy in this plan (the copy rule) or already (ADR § 6).
-      const keptHere = plan.ops
-        .slice(0, i)
-        .some((o) => o.op === "copy" && isOldBytes(o.to) && o.sha256 === op.sha256);
-      if (!keptHere && !(await store.resolveOldBytes(op.sha256))) {
-        throw new Error(`Plan ${plan.planId} removes "${op.from}" before keeping its bytes`);
-      }
+      await requireKept(i, op.sha256, op.from);
       continue;
     }
-    if (op.op === "copy" && (op.replaces || isOldBytes(op.to))) continue;
+    if (op.op === "copy" && op.replaces) {
+      await requireKept(i, op.replaces, op.to);
+      continue;
+    }
+    if (op.op === "copy" && isOldBytes(op.to)) continue;
     if (await store.read(op.to)) throw new VaultNameTakenError(op.to);
   }
 };
