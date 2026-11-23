@@ -167,8 +167,11 @@ to folder and file names alike; this extends today's `safeSegment`:
 7. Empty after all this: `_`.
 8. **Length**: a segment ≤ 120 UTF-8 bytes (ext included), cut at a grapheme boundary before the
    extension; the whole path from the vault root ≤ 240 characters, so a vault under a typical
-   `C:\Users\<name>\Nextcloud\` stays inside Windows' 260 MAX_PATH. If the path is too long, the
-   title is shortened first, then the deepest user folder names. Decision D4.
+   `C:\Users\<name>\Nextcloud\` stays inside Windows' 260 MAX_PATH. If the path is too long,
+   `vaultPath` shortens **only the document title** (never the date prefix or the extension) and
+   never renames a folder. The folder path's budget is enforced when a folder is created or
+   renamed: a folder whose path, plus room for the date prefix, a short title and ` (n)`, would not
+   fit is refused with `VaultPathTooLongError`. That check belongs to PR 3 (repo tree ops). Decision D4.
 
 Google Drive allows almost anything (including `/` in names via its API); these rules are a strict
 subset of what it accepts, so a Drive mirror needs no further rewriting.
@@ -381,8 +384,8 @@ Cancelling stops between documents and leaves both stores readable (the old stor
    documents.
 5. **Names.** `vaultFileName` and `vaultPath` in `packages/core` (§ 3, § 4) are pure, so dialogs
    show the final path before save. `vaultPath` never throws for length: it returns
-   `{ path, fits, overBy }` after the § 3 shortening, and `fits: false` (only when a name cannot be
-   shortened further, e.g. a deep tree of long folder names) lets the dialog show "Name too long"
+   `{ path, fits, overBy }` after the § 3 shortening, and `fits: false` (only when the title cannot be
+   shortened enough, e.g. a folder path from before the folder check existed) lets the dialog show "Name too long"
    and disable Save. `VaultPathTooLongError` is thrown only by a write that ignored it. The user edits the title; date and extension are derived.
 6. **Categories.** Defaults per year, renamable, not movable; year folders fixed; user folders
    free, depth ≤ 8 (§ 5).
