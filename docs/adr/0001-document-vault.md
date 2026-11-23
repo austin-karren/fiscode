@@ -225,11 +225,12 @@ deleted state, or a folder's name or parent; a History revert of notes only is n
 5. Rewrite `fiscode.json`, delete the journal, then delete the `vault_applied` row.
 
 Bytes that must survive for undo are recorded as their own ops. Soft delete is `copy live →
-trash/<sha>` (skipped if there) then `remove live`. **Replace bytes** and a **History revert to
-older bytes** are `copy live → versions/<current sha>` (if not there), then `copy
+trash/<sha>` (skipped when `trash/` **or `versions/`** already holds the sha) then `remove live`. **Replace bytes** and a **History revert to
+older bytes** are `copy live → versions/<current sha>` (skipped when `versions/` **or `trash/`** already holds the sha), then `copy
 versions/<old sha> → <tmp>` and rename over the live path. Restore from Trash is `copy
 <sha> → <path>`, where the sha is looked up in `versions/` first, then `trash/` (a sha lives in
-only one of them, and `versions/` wins, § 2). Rollback reverses the ops, and every `remove` it undoes has its bytes in
+only one of them, and `versions/` wins, § 2). Both skips keep the § 2 invariant that a sha lives in only one of `versions/` or `trash/`, and the
+versions-first lookup finds it either way. Rollback reverses the ops, and every `remove` it undoes has its bytes in
 `_fiscode/` from an earlier op of the same plan.
 
 Crash safety: on boot (and before any new tree change) a journal that is present is **rolled
