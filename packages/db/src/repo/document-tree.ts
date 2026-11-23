@@ -1,4 +1,4 @@
-import { folderPathFits, sameName, VaultPathTooLongError } from "@fiscode/core";
+import { folderPathFits, VaultPathTooLongError } from "@fiscode/core";
 import { eq } from "drizzle-orm";
 import { getDb, type AtomicQuery } from "../client.ts";
 import {
@@ -19,7 +19,7 @@ import {
   pathTaken,
   type PathContext,
 } from "../vault/paths.ts";
-import { placeUnplacedDocuments } from "../vault/migrate.ts";
+import { isVaultMigrated, placeUnplacedDocuments } from "../vault/migrate.ts";
 import { historyQuery, runTreeChange, type PlanBuilder } from "../vault/tree.ts";
 
 export type { ShortenedFolder };
@@ -38,6 +38,14 @@ export type DocumentChange = {
   insert?: boolean;
   /** New bytes (upload, replace), already validated. */
   bytes?: Blob;
+  /**
+   * The document's linked-record dates after this change, when its links change (link, unlink,
+   * a link's revert). Only then is the D2 date prefix worked out again; every other change keeps
+   * the date the file has, so an unrelated write never re-dates it.
+   */
+  dates?: readonly string[];
+  /** Only the place changes (a link changed): no document row edit and no History row for it. */
+  placeOnly?: boolean;
   op: HistoryOp;
 };
 
@@ -79,6 +87,10 @@ const subtrees = (ids: Iterable<string>, live: readonly DocumentFolderRow[]) => 
   return out;
 };
 
+/** The "YYYY-MM-DD" a placed file's name starts with, or undefined. */
+const keptDate = (path: string | null): string | undefined =>
+  path?.slice(path.lastIndexOf("/") + 1).match(/^(\d{4}-\d{2}-\d{2}) /)?.[1];
+
 /** A document's place, keeping its " (n)" when its name is otherwise unchanged (§ 4: no renumbering). */
 const placeDocument = (
   doc: DocumentRow,
@@ -88,10 +100,12 @@ const placeDocument = (
 ) => {
   const want = documentVaultPath(doc, ctx, dates, taken);
   const cur = doc.vaultPath;
+  // Kept only when the paths differ by nothing but the " (n)": a case- or accent-only rename is
+  // a real change and moves the file (sameName is for collisions, not for "unchanged").
   if (
     cur &&
     cur !== want.path &&
-    sameName(withoutSuffix(cur), withoutSuffix(want.path)) &&
+    withoutSuffix(cur).normalize("NFC") === withoutSuffix(want.path).normalize("NFC") &&
     !pathTaken(cur, taken)
   ) {
     return { ...want, path: cur };
@@ -104,14 +118,22 @@ const placeDocument = (
  * transaction with the plan, every affected file moved, copied or removed by the journal.
  */
 export const changeTree = (
-  changes: { folders?: FolderChange[]; documents?: DocumentChange[] },
+  changes: {
+    folders?: FolderChange[];
+    documents?: DocumentChange[];
+    /** Other rows that commit with the plan (a link row and its History). */
+    queries?: AtomicQuery[];
+  },
   options: TreeChangeOptions,
 ): Promise<TreeChangeResult> =>
   runTreeChange(async (plan) => {
     const db = getDb();
     // The backstop (§ 10 step 5): rows without a place (e.g. after an import) get one first, so
-    // this change sees the tree as it should be.
-    await placeUnplacedDocuments(plan.store, options.datesFor, { oldBytes: false });
+    // this change sees the tree as it should be. Only once the migration is done: before that,
+    // only the migration job places documents (it reports and verifies what it does).
+    if (await isVaultMigrated()) {
+      await placeUnplacedDocuments(plan.store, options.datesFor, { oldBytes: false });
+    }
     const folderRows = (await db.select().from(documentFolder)) as DocumentFolderRow[];
     const before = new Map(folderRows.map((f) => [f.id, f]));
     const folders = new Map(before);
@@ -158,7 +180,7 @@ export const changeTree = (
       if (d.deletedAt === null && d.vaultPath && !affected.has(d.id)) taken.push(d.vaultPath);
     }
 
-    const queries: AtomicQuery[] = [];
+    const queries: AtomicQuery[] = [...(changes.queries ?? [])];
     const docsOut = new Map<string, DocumentRow>();
     const order = [...affected.keys()]
       .map((id) => docChanges.get(id)?.next ?? docsBefore.get(id)!)
@@ -178,12 +200,12 @@ export const changeTree = (
       );
       if (placed.taken) taken.push(placed.taken);
       docsOut.set(next.id, placed.row);
-      if (change?.insert) {
+      if (change?.insert && !change.placeOnly) {
         queries.push(db.insert(document).values(placed.row));
         queries.push(
           historyQuery("document", next.id, change.op, undefined, forHistory(placed.row)),
         );
-      } else if (change) {
+      } else if (change && !change.placeOnly) {
         queries.push(db.update(document).set(placed.row).where(eq(document.id, next.id)));
         queries.push(
           historyQuery("document", next.id, change.op, forHistory(prev), forHistory(placed.row)),
@@ -236,8 +258,16 @@ const placeOne = async (
     const kept = await plan.document(cur, { live: false, path: "", sha256: next.sha256 });
     return { row: { ...next, vaultPath: kept ?? prev?.vaultPath ?? null } };
   }
+  // The date prefix changes only with the links (D2): otherwise keep the one the file has.
+  const kept = keptDate(prev?.vaultPath ?? null);
+  const useDates = change?.dates ?? (kept ? [kept] : dates);
   // Place it as if at its old path, so an unchanged name keeps its suffix.
-  const placed = placeDocument({ ...next, vaultPath: prev?.vaultPath ?? null }, ctx, dates, taken);
+  const placed = placeDocument(
+    { ...next, vaultPath: prev?.vaultPath ?? null },
+    ctx,
+    useDates,
+    taken,
+  );
   if (!placed.fits) {
     // A user action refuses (§ 3.8), including a file its folder change would push over budget.
     if (options.strict) throw new VaultPathTooLongError(placed.path);

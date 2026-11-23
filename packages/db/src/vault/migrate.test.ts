@@ -169,7 +169,11 @@ describe("migrateToVault", () => {
         },
       }),
     ).rejects.toThrow();
-    expect(getVaultMigrationState()).toEqual({ phase: "idle" });
+    // Still read-only after a cancel (r1 B4), with a reason the banner can show.
+    expect(getVaultMigrationState()).toMatchObject({
+      phase: "migration-incomplete",
+      reason: "cancelled",
+    });
     expect(await isVaultMigrated()).toBe(false);
     // Half done, every document still reads (tree or old store).
     expect(await pathOf(docs[3]!.id)).toBeNull();
@@ -275,6 +279,41 @@ describe("app start never blocks the app", () => {
   it("prepareVault reports failed instead of throwing", async () => {
     sqlite.exec("DROP TABLE meta");
     await expect(prepareVault()).resolves.toBeUndefined();
-    expect(getVaultMigrationState().phase).toBe("failed");
+    expect(getVaultMigrationState()).toMatchObject({
+      phase: "migration-incomplete",
+      reason: "failed",
+    });
+  });
+});
+
+describe("r1 B4: only the migration job places documents before it is done", () => {
+  it("a tree change before the migration leaves unplaced rows alone", async () => {
+    const old = await seed("Old.pdf", "old");
+    await documentRepo.upload(
+      Object.assign(new Blob(["n"], { type: "application/pdf" }), { name: "New.pdf" }),
+    );
+    expect(await pathOf(old.id)).toBeNull();
+    // After the job is done, the backstop in a tree change does place them.
+    await migrateToVault({ datesFor });
+    expect(await pathOf(old.id)).toBe("documents/Unfiled/2026-01-05 Old.pdf");
+  });
+
+  it("a failed job leaves Documents read-only, and Resume finishes it", async () => {
+    const { resumeVaultMigration } = await import("../repo/index.ts");
+    const d = await seed("A.pdf", "a");
+    await prepareVault();
+    // Make the job fail: the row update hits a trigger.
+    sqlite.exec(`CREATE TRIGGER stop BEFORE UPDATE OF vault_path ON document
+      BEGIN SELECT RAISE(ABORT, 'disk gone'); END`);
+    await runVaultStartup();
+    expect(getVaultMigrationState()).toMatchObject({
+      phase: "migration-incomplete",
+      reason: "failed",
+    });
+    await expect(documentRepo.rename(d.id, "B.pdf")).rejects.toThrow(/didn't finish/);
+    sqlite.exec("DROP TRIGGER stop");
+    await resumeVaultMigration();
+    expect(getVaultMigrationState()).toEqual({ phase: "done" });
+    expect(await pathOf(d.id)).toBe("documents/Unfiled/2026-01-05 A.pdf");
   });
 });

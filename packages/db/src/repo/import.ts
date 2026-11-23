@@ -1,3 +1,4 @@
+import { assertVaultWritable } from "../vault/state.ts";
 import { newId } from "@fiscode/core";
 
 import type { Bundle } from "../bundle.ts";
@@ -58,6 +59,8 @@ export const importBundle = async (
   reason: ImportReason,
   options: { backup?: { createdAt: string } } = {},
 ): Promise<void> => {
+  // An import swaps the document rows the vault migration is placing (ADR § 10): held until done.
+  assertVaultWritable();
   const db = getDb();
   // The snapshot holds everything a restore removes, deleted rows too.
   //

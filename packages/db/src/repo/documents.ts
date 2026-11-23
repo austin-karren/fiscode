@@ -30,6 +30,7 @@ import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getVaultStore, sha256Hex } from "../vault/store.ts";
 import { assertVaultWritable } from "../vault/state.ts";
 import { changeTree, type DocumentChange, type ShortenedFolder } from "./document-tree.ts";
+import { historyQuery } from "../vault/tree.ts";
 import { getDb, runAtomic, type AtomicQuery } from "../client.ts";
 import {
   client,
@@ -484,24 +485,68 @@ const storeBytes = async (bytes: NamedBlob) => {
   return { mime, sha256, sizeBytes: bytes.size };
 };
 
+/** The dates of the live records these live links point at, per document. */
+const datesOfLinks = async (links: readonly DocumentLinkRow[]) => {
+  const out = new Map<string, string[]>();
+  for (const l of links) {
+    if (l.deletedAt !== null) continue;
+    const r = await recordFor(l.recordType, l.recordId);
+    if (!r || r.deletedAt !== null) continue;
+    out.set(l.documentId, [...(out.get(l.documentId) ?? []), r.date]);
+  }
+  return out;
+};
+
 /** The live records' dates per document (D2: one linked record gives the date prefix). */
 export const linkedDates = async (
   documentIds: readonly string[],
 ): Promise<Map<string, string[]>> => {
-  const out = new Map<string, string[]>();
-  if (documentIds.length === 0) return out;
+  if (documentIds.length === 0) return new Map();
   const links = (await getDb()
     .select()
     .from(documentLink)
     .where(
       and(isNull(documentLink.deletedAt), inArray(documentLink.documentId, [...documentIds])),
     )) as DocumentLinkRow[];
-  for (const l of links) {
-    const r = await recordFor(l.recordType, l.recordId);
-    if (!r || r.deletedAt !== null) continue;
-    out.set(l.documentId, [...(out.get(l.documentId) ?? []), r.date]);
+  return datesOfLinks(links);
+};
+
+/**
+ * A link row change, through the tree: the link and its History commit with the plan that moves
+ * the document's file to its new date prefix (D2: "the date follows the link"). A deleted
+ * document has no file in the tree, so only the rows change.
+ */
+const linkChange = async (
+  next: DocumentLinkRow,
+  op: "insert" | "delete" | "revert",
+  prev: DocumentLinkRow | undefined,
+): Promise<DocumentLinkRow> => {
+  assertVaultWritable();
+  const db = getDb();
+  const queries: AtomicQuery[] = [
+    prev
+      ? db.update(documentLink).set(next).where(eq(documentLink.id, next.id))
+      : db.insert(documentLink).values(next),
+    historyQuery("document_link", next.id, op, prev, next),
+  ];
+  const doc = await anyDocument(next.documentId);
+  if (!doc || doc.deletedAt !== null) {
+    await runAtomic(queries);
+    return next;
   }
-  return out;
+  const others = (await db
+    .select()
+    .from(documentLink)
+    .where(
+      and(isNull(documentLink.deletedAt), eq(documentLink.documentId, next.documentId)),
+    )) as DocumentLinkRow[];
+  const after = [...others.filter((l) => l.id !== next.id), next];
+  const dates = (await datesOfLinks(after)).get(doc.id) ?? [];
+  await changeTree(
+    { documents: [{ next: doc, placeOnly: true, dates, op: "update" }], queries },
+    lenient,
+  );
+  return next;
 };
 
 const strict = { strict: true, datesFor: linkedDates };
@@ -652,7 +697,6 @@ export const documentRepo = {
     id: string,
     snapshot: Omit<DocumentRow, "vaultPath"> & { vaultPath?: string | null },
   ): Promise<DocumentRow | undefined> {
-    assertVaultWritable();
     const prev = await anyDocument(id);
     const folderLive =
       snapshot.folderId === null || (await folderCrud.get(snapshot.folderId)) !== undefined;
@@ -868,12 +912,40 @@ export const documentLinkRepo = {
       )
       .limit(1)) as DocumentLinkRow[];
     if (existing) return existing;
-    return linkCrud.create({ documentId, recordType, recordId, deletedAt: null });
+    const at = nowIso();
+    const row: DocumentLinkRow = {
+      id: newId(),
+      documentId,
+      recordType,
+      recordId,
+      deletedAt: null,
+      createdAt: at,
+      updatedAt: at,
+    };
+    return linkChange(row, "insert", undefined);
   },
 
-  /** Unlink: a soft delete (undo with revertTo). */
+  /** Unlink: a soft delete (undo with revertTo). The file's date prefix follows (D2). */
   async unlink(linkId: string): Promise<boolean> {
-    return linkCrud.softDelete(linkId);
+    const link = await linkCrud.get(linkId);
+    if (!link) return false;
+    const at = nowIso();
+    await linkChange({ ...link, deletedAt: at, updatedAt: at }, "delete", link);
+    return true;
+  },
+
+  async softDelete(linkId: string): Promise<boolean> {
+    return documentLinkRepo.unlink(linkId);
+  },
+
+  /** History revert or undo of a link. The file's date prefix follows (D2). */
+  async revertTo(id: string, snapshot: DocumentLinkRow): Promise<DocumentLinkRow | undefined> {
+    const [prev] = (await getDb()
+      .select()
+      .from(documentLink)
+      .where(eq(documentLink.id, id))
+      .limit(1)) as DocumentLinkRow[];
+    return linkChange({ ...snapshot, id, updatedAt: nowIso() }, "revert", prev);
   },
 
   /** Live links to live documents for one record. */

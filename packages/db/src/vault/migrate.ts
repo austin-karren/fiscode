@@ -309,7 +309,7 @@ const migrate = async (store: VaultStore, options: MigrationOptions) => {
  * The migration job (§ 10). Waits for the vault lock (another tab may be running it), and returns
  * the persisted report when it is already done. While it runs, document writes throw
  * VaultMigratingError. Cancel (the signal) stops between files and leaves both stores readable;
- * the state goes back to idle and the next boot resumes.
+ * the state is `migration-incomplete` (still read-only) until it is resumed.
  */
 export const migrateToVault = async (options: MigrationOptions): Promise<VaultMigrationReport> => {
   const store = options.store ?? getVaultStore();
@@ -324,11 +324,11 @@ export const migrateToVault = async (options: MigrationOptions): Promise<VaultMi
         setVaultMigrationState({ phase: "done" });
         return report;
       } catch (err) {
-        setVaultMigrationState(
-          options.signal?.aborted
-            ? { phase: "idle" }
-            : { phase: "failed", message: errorMessage(err) },
-        );
+        setVaultMigrationState({
+          phase: "migration-incomplete",
+          reason: options.signal?.aborted ? "cancelled" : "failed",
+          message: errorMessage(err),
+        });
         throw err;
       }
     },

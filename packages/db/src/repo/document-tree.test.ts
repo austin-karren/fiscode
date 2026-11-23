@@ -307,3 +307,105 @@ describe("review fixes", () => {
     expect(manifest.documents[d.id].path).toBe(`documents/Unfiled/${today()} B.pdf`);
   });
 });
+
+describe("r1: a path changes exactly when its inputs change", () => {
+  const linkExpense = async (docId: string, date: string) => {
+    const e = await expenseRepo.create({
+      date,
+      category: "equipment",
+      description: "Demo",
+      amountCents: 1_00,
+    } as never);
+    const { documentLinkRepo } = await import("./documents.ts");
+    return { e, link: await documentLinkRepo.link(docId, "expense", e.id) };
+  };
+
+  it("B1: a case-only document rename moves the file", async () => {
+    const d = await documentRepo.upload(file("invoice.pdf", "i"));
+    const r = await documentRepo.rename(d.id, "Invoice.pdf");
+    expect(r.vaultPath).toBe(`documents/Unfiled/${today()} Invoice.pdf`);
+    expect(await tree()).toEqual([r.vaultPath]);
+  });
+
+  it("B1: an accent-only document rename moves the file", async () => {
+    const d = await documentRepo.upload(file("Resume.pdf", "r"));
+    const r = await documentRepo.rename(d.id, "Résumé.pdf");
+    expect(r.vaultPath).toBe(`documents/Unfiled/${today()} Résumé.pdf`);
+    expect(await tree()).toEqual([r.vaultPath]);
+  });
+
+  it("B1: a case-only folder rename moves every file below it", async () => {
+    const f = await folderRepo.create({ name: "trips" });
+    const d = await documentRepo.upload(file("A.pdf", "a"), { folderId: f.id });
+    await folderRepo.rename(f.id, "Trips");
+    const after = (await documentRepo.get(d.id))!.vaultPath;
+    expect(after).toBe(`documents/Trips/${today()} A.pdf`);
+    expect(await tree()).toEqual([after]);
+  });
+
+  it("B2: linking re-dates the file in the same plan; unlinking dates it back", async () => {
+    const d = await documentRepo.upload(file("Monitor.pdf", "m"));
+    const { link } = await linkExpense(d.id, "2026-03-16");
+    expect((await documentRepo.get(d.id))!.vaultPath).toBe(
+      "documents/Unfiled/2026-03-16 Monitor.pdf",
+    );
+    expect(await tree()).toEqual(["documents/Unfiled/2026-03-16 Monitor.pdf"]);
+    const { documentLinkRepo } = await import("./documents.ts");
+    await documentLinkRepo.unlink(link.id);
+    expect(await tree()).toEqual([`documents/Unfiled/${d.addedAt.slice(0, 10)} Monitor.pdf`]);
+    // Undoing the unlink (a revert) re-dates it again.
+    await documentLinkRepo.revertTo(link.id, link);
+    expect(await tree()).toEqual(["documents/Unfiled/2026-03-16 Monitor.pdf"]);
+  });
+
+  it("B2: a notes edit or a folder rename never re-dates a file", async () => {
+    const f = await folderRepo.create({ name: "F" });
+    const d = await documentRepo.upload(file("Monitor.pdf", "m"), { folderId: f.id });
+    // The link row changes behind the tree's back (as a record-date edit does today: the PR 6
+    // scan's to catch). An unrelated write must not pick it up.
+    await linkExpense(d.id, "2026-03-16");
+    const placed = (await documentRepo.get(d.id))!.vaultPath!;
+    await expenseRepo.update((await expenseRepo.list())[0]!.id, { date: "2026-04-01" } as never);
+    const r = await documentRepo.update(d.id, { notes: "a note" });
+    expect(r!.vaultPath).toBe(placed);
+    await folderRepo.rename(f.id, "G");
+    expect((await documentRepo.get(d.id))!.vaultPath).toBe("documents/G/2026-03-16 Monitor.pdf");
+  });
+
+  it("B2: a rename keeps the date the file has", async () => {
+    const d = await documentRepo.upload(file("Monitor.pdf", "m"));
+    await linkExpense(d.id, "2026-03-16");
+    const r = await documentRepo.rename(d.id, "Screen.pdf");
+    expect(r.vaultPath).toBe("documents/Unfiled/2026-03-16 Screen.pdf");
+  });
+});
+
+describe("r1 B3/B4: held until the migration is done", () => {
+  it("B3: an import is refused while migrating and after it stopped part way", async () => {
+    const { importBundle } = await import("./import.ts");
+    const { emptyBundle } = await import("../bundle.ts");
+    const { VaultMigrationIncompleteError } = await import("@fiscode/core");
+    setVaultMigrationState({ phase: "migrating", done: 0, total: 1 });
+    await expect(importBundle(emptyBundle(), "restore" as never)).rejects.toBeInstanceOf(
+      VaultMigratingError,
+    );
+    setVaultMigrationState({ phase: "migration-incomplete", reason: "failed", message: "x" });
+    await expect(importBundle(emptyBundle(), "restore" as never)).rejects.toBeInstanceOf(
+      VaultMigrationIncompleteError,
+    );
+  });
+
+  it("B4: after a failed or cancelled job every write stays refused", async () => {
+    const { VaultMigrationIncompleteError } = await import("@fiscode/core");
+    const d = await documentRepo.upload(file("A.pdf", "a"));
+    for (const reason of ["failed", "cancelled"] as const) {
+      setVaultMigrationState({ phase: "migration-incomplete", reason, message: "x" });
+      await expect(documentRepo.rename(d.id, "B.pdf")).rejects.toBeInstanceOf(
+        VaultMigrationIncompleteError,
+      );
+      await expect(documentRepo.upload(file("C.pdf", "c"))).rejects.toBeInstanceOf(
+        VaultMigrationIncompleteError,
+      );
+    }
+  });
+});

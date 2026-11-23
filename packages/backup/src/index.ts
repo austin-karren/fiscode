@@ -22,7 +22,7 @@ import {
 } from "@fiscode/csv";
 // Subpaths, not "@fiscode/db": its index loads boot.ts, which needs Vite (import.meta.glob), and
 // the headless script runs under plain Bun.
-import { getVaultStore, sha256Hex, type ShaStore } from "@fiscode/db/vault";
+import { assertVaultWritable, getVaultStore, sha256Hex, type ShaStore } from "@fiscode/db/vault";
 import { buildBundle, importBundle } from "@fiscode/db/repo";
 import { strToU8, strFromU8, unzipSync, zipSync, type Zippable } from "fflate";
 
@@ -367,6 +367,8 @@ export const createBackup = async (options: {
   scryptWorkFactor?: number;
   onProgress?: ProgressFn;
 }): Promise<{ blob: Blob; fileName: string; manifest: BackupManifest }> => {
+  // Backup and restore wait until the vault migration is done (ADR § 10).
+  assertVaultWritable();
   if (options.passphrase.length < MIN_PASSPHRASE_LENGTH)
     throw new BackupPassphraseError("too-short");
   options.onProgress?.({ phase: "reading", done: 0, total: 1 });
@@ -567,6 +569,7 @@ export const restoreBackupInto = async (
   store: ShaStore,
   options: { onProgress?: ProgressFn } = {},
 ): Promise<void> => {
+  assertVaultWritable();
   const blobs = [...file.blobs];
   let done = 0;
   for (const [sha, bytes] of blobs) {

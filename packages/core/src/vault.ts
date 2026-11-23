@@ -277,6 +277,17 @@ export class VaultMigratingError extends DocumentError {
   }
 }
 
+/**
+ * A document write, import, restore or backup after the vault migration stopped part way (it
+ * failed, or was cancelled). Documents stays read-only until it is resumed and finishes (§ 10).
+ */
+export class VaultMigrationIncompleteError extends DocumentError {
+  override readonly name = "VaultMigrationIncompleteError";
+  constructor() {
+    super("Moving your files into the vault didn't finish. Resume it to change documents.");
+  }
+}
+
 /** `vaultPath` never cuts a title below this many characters (§ 3.8). */
 export const VAULT_MIN_TITLE = 8;
 

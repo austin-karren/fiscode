@@ -279,5 +279,5 @@ import { documentLinkRepo, documentRepo, folderRepo } from "./documents.ts";
 export { folderRepo, documentRepo, documentLinkRepo };
 export type { FolderNode, LinkedRecord } from "./documents.ts";
 export { linkedDates } from "./documents.ts";
-export { prepareVault, runVaultStartup } from "./vault-boot.ts";
+export { prepareVault, resumeVaultMigration, runVaultStartup } from "./vault-boot.ts";
 export type { ShortenedFolder } from "./document-tree.ts";
