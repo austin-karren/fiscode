@@ -1,5 +1,11 @@
 import { DocumentError, StorageQuotaError, VaultFileLockedError } from "@fiscode/core";
-import { isNotFound, isTypeMismatch, type VaultDirHandle, type VaultFileHandle } from "./dir.ts";
+import {
+  isNotFound,
+  isTypeMismatch,
+  memoryDir,
+  type VaultDirHandle,
+  type VaultFileHandle,
+} from "./dir.ts";
 
 /**
  * A path, or a folder on the way to it, is a folder where a file is expected (or a file where a
@@ -328,11 +334,22 @@ export const lazyDir = (open: () => Promise<VaultDirHandle>): VaultDirHandle => 
 };
 
 let _store: VaultStore | undefined;
+let _root: VaultDirHandle | undefined;
+
+/** The OPFS root: the vault (`vault/`), the old blobs and the journal are all under it. */
+const defaultRoot = () => (_root ??= lazyDir(opfsRoot));
 
 /** The store in use: OPFS unless a test set another. */
-export const getVaultStore = (): VaultStore => (_store ??= vaultStore(lazyDir(opfsRoot)));
+export const getVaultStore = (): VaultStore => (_store ??= vaultStore(defaultRoot()));
 
-/** For tests and the headless backup: use `store` (pass undefined to go back to OPFS). */
-export const __setVaultStoreForTests = (store: VaultStore | undefined) => {
+/** Where the journal lives (ADR § 2: OPFS, beside the vault, never in it). */
+export const getVaultRoot = (): VaultDirHandle => defaultRoot();
+
+/**
+ * For tests and the headless backup: use `store` (pass undefined to go back to OPFS). `root` is
+ * where the journal goes; without it a store set here gets a journal of its own in memory.
+ */
+export const __setVaultStoreForTests = (store: VaultStore | undefined, root?: VaultDirHandle) => {
   _store = store;
+  _root = store ? (root ?? memoryDir()) : undefined;
 };

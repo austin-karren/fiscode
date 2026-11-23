@@ -43,10 +43,13 @@ export type Bundle = {
   w2Jobs: W2JobRow[];
   estimatedPayments: EstimatedPaymentRow[];
   documentFolders: DocumentFolderRow[];
-  documents: DocumentRow[];
+  /** Without `vaultPath`: where a file sits is this device's, like its bytes (ADR § 8). */
+  documents: BundleDocumentRow[];
   documentLinks: DocumentLinkRow[];
   history: HistoryRow[];
 };
+
+export type BundleDocumentRow = Omit<DocumentRow, "vaultPath">;
 
 export const emptyBundle = (): Bundle => ({
   profile: undefined,

@@ -154,7 +154,9 @@ function AttachBody({
     try {
       const all = await documentRepo.list();
       // Live documents by their bytes: a file already stored is linked, not added again.
-      const stored = new Map(all.filter((d) => d.deletedAt === null).map((d) => [d.sha256, d]));
+      const stored = new Map<string, DocumentRow>(
+        all.filter((d) => d.deletedAt === null).map((d) => [d.sha256, d]),
+      );
       const pathOf = (f: string | null) => (f === target.id ? target.path : folderPath(folders, f));
       const out: { ok: boolean; line: string }[] = [];
       // This row's links, kept up to date through the batch (state updates land after it).

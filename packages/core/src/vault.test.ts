@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  shortenFolderNames,
   MAX_VAULT_PATH,
   safeSegment,
   folderPathFits,
@@ -212,5 +213,35 @@ describe("vaultPath title floor", () => {
     expect(title).toBe("t".repeat(VAULT_MIN_TITLE));
     expect(r.fits).toBe(false);
     expect(r.overBy).toBe(r.path.length - 240);
+  });
+});
+
+describe("shortenFolderNames (§ 3.8 fallback)", () => {
+  it("leaves a path that fits alone", () => {
+    expect(shortenFolderNames(["2026", "Expenses"])).toEqual({
+      names: ["2026", "Expenses"],
+      fits: true,
+    });
+  });
+
+  it("cuts from the top down, only as much as needed", () => {
+    const long = "L".repeat(110);
+    const r = shortenFolderNames([long, long]);
+    expect(r.fits).toBe(true);
+    // documents/ (10) + a + / + b + 30 = 240
+    expect(10 + r.names[0]!.length + 1 + r.names[1]!.length + 30).toBe(240);
+    expect(r.names[1]).toBe(long);
+  });
+
+  it("counts the deepest descendant's suffix", () => {
+    const r = shortenFolderNames(["A".repeat(100)], "/" + "B".repeat(100));
+    expect(r.fits).toBe(true);
+    expect(r.names[0]!.length).toBe(100 - (10 + 100 + 101 + 30 - 240));
+  });
+
+  it("never cuts below one grapheme and reports when it still doesn't fit", () => {
+    const r = shortenFolderNames(["👩‍👩‍👧 family"], "/" + "x".repeat(220));
+    expect(r.names[0]).toBe("👩‍👩‍👧");
+    expect(r.fits).toBe(false);
   });
 });

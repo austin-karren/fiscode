@@ -1266,3 +1266,24 @@ describe("a backup restore is its own History entry (backup-restore)", () => {
     expect((await snapshots()).some((s) => s.entityId === "backup-restore")).toBe(true);
   });
 });
+
+describe("backup and restore wait for the vault migration (ADR § 10)", () => {
+  it("both are refused with the typed error while it runs", async () => {
+    const { setVaultMigrationState, __resetVaultMigrationStateForTests } =
+      await import("@fiscode/db/vault");
+    const { VaultMigratingError } = await import("@fiscode/core");
+    await importBundle(exampleBundle() as never, "import-restore");
+    const made = await createBackup({ createdAt: CREATED, passphrase: PASS, scryptWorkFactor: WF });
+    const read = await openBackup(made.blob);
+    if (!read.ok) throw new Error(read.headline);
+    try {
+      setVaultMigrationState({ phase: "migrating", done: 0, total: 1 });
+      await expect(
+        createBackup({ createdAt: CREATED, passphrase: PASS, scryptWorkFactor: WF }),
+      ).rejects.toBeInstanceOf(VaultMigratingError);
+      await expect(restoreBackup(read)).rejects.toBeInstanceOf(VaultMigratingError);
+    } finally {
+      __resetVaultMigrationStateForTests();
+    }
+  });
+});

@@ -266,6 +266,28 @@ export class VaultBusyError extends DocumentError {
   }
 }
 
+/**
+ * A document write while the vault migration runs (ADR § 10): Documents is read-only until it
+ * finishes. Preview still works from the old store.
+ */
+export class VaultMigratingError extends DocumentError {
+  override readonly name = "VaultMigratingError";
+  constructor() {
+    super("Moving your files into the vault… You can change documents when it finishes.");
+  }
+}
+
+/**
+ * A document write, import, restore or backup after the vault migration stopped part way (it
+ * failed, or was cancelled). Documents stays read-only until it is resumed and finishes (§ 10).
+ */
+export class VaultMigrationIncompleteError extends DocumentError {
+  override readonly name = "VaultMigrationIncompleteError";
+  constructor() {
+    super("Moving your files into the vault didn't finish. Resume it to change documents.");
+  }
+}
+
 /** `vaultPath` never cuts a title below this many characters (§ 3.8). */
 export const VAULT_MIN_TITLE = 8;
 
@@ -290,4 +312,32 @@ export const folderPathFits = (
     0,
   );
   return { fits: overBy === 0, overBy };
+};
+
+/**
+ * The never-refuse fallback for a folder path over budget (§ 3.8): restore, History revert, import
+ * and the migration. `names` are a folder path's disk names from the top down, without
+ * "documents/"; `suffix` is what must still fit below the last one (the deepest descendant's
+ * "/Spring/Day 1"). Names are cut from the top down in one pass, each at a grapheme boundary and to
+ * no less than one grapheme, until `folderPathFits`. Returns the new names (unchanged ones as they
+ * were) and whether they fit; the caller applies the ` (n)` rule to a shortened name now taken.
+ */
+export const shortenFolderNames = (
+  names: readonly string[],
+  suffix = "",
+): { names: string[]; fits: boolean } => {
+  const out = [...names];
+  const over = () => folderPathFits([VAULT_DOCUMENTS_DIR, ...out].join("/"), suffix).overBy;
+  for (let i = 0; i < out.length && over() > 0; i++) {
+    const gs = graphemes(out[i]!);
+    let keep = gs.length;
+    let units = out[i]!.length;
+    const need = over();
+    while (keep > 1 && out[i]!.length - units < need) {
+      keep--;
+      units -= gs[keep]!.length;
+    }
+    out[i] = vaultSegment(gs.slice(0, keep).join(""));
+  }
+  return { names: out, fits: over() === 0 };
 };
