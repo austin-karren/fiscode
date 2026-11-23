@@ -872,10 +872,10 @@ export const planBackupRestore = (
 /** A document path a restore shortened to fit the vault (§ 3.8), for the result line in PR 11. */
 export type RestoreShortened = { documentId: string; from: string; to: string };
 
-/** What a restore did that the user should see: the paths it shortened to fit (§ 3.8). */
 /** A folder a restore renamed so its row matches its shortened disk name (§ 3.8, P1). */
 export type RestoreFolderShortened = { folderId: string; from: string; to: string };
 
+/** What a restore did that the user should see: the paths it shortened to fit (§ 3.8). */
 export type RestoreResult = {
   shortened: RestoreShortened[];
   foldersShortened: RestoreFolderShortened[];
