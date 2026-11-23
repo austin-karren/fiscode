@@ -5,6 +5,7 @@ import {
   MAX_DOCUMENT_BYTES,
   newId,
   validDocumentName,
+  VaultBusyError,
   VaultIntegrityError,
   VaultNameTakenError,
   VAULT_DOCUMENTS_DIR,
@@ -12,15 +13,12 @@ import {
 import { and, eq, isNull } from "drizzle-orm";
 import { getDb, type AtomicQuery } from "../client.ts";
 import { document, documentFolder, meta, type DocumentRow } from "../schema/index.ts";
-import {
-  announceVaultChange,
-  isLongVaultOpRunning,
-  withVaultLock,
-  type LockManagerLike,
-} from "../vault/lock.ts";
+import { isNotFound, type VaultDirHandle } from "../vault/dir.ts";
+import { announceVaultChange, withVaultLock, type LockManagerLike } from "../vault/lock.ts";
 import { byAdded, documentDate, folderDir, folderSegments, pathContext } from "../vault/paths.ts";
 import { getVaultMigrationState } from "../vault/state.ts";
 import {
+  getVaultRoot,
   getVaultStore,
   isTmpName,
   oldBytesPath,
@@ -97,6 +95,26 @@ export type ScanRedated = {
   expectedDate: string;
 };
 
+/**
+ * A displaced row's sha at two or more paths: which one is the move can't be told, so none is
+ * offered. The page lists the row and every path; the user imports or deletes by hand.
+ */
+export type ScanAmbiguous = {
+  documentId: string;
+  name: string;
+  path: string;
+  sha256: string;
+  foundAt: string[];
+};
+
+/** An outside edit over the 25 MB cap: not recorded, the row keeps its old bytes' sha. */
+export type ScanTooLarge = {
+  documentId: string;
+  name: string;
+  path: string;
+  sizeBytes: number;
+};
+
 export type ScanTrigger = "boot" | "focus" | "check";
 
 export type ScanReport = {
@@ -106,8 +124,10 @@ export type ScanReport = {
   /** Rows whose path holds their sha256. */
   ok: number;
   moved: ScanMoved[];
+  ambiguous: ScanAmbiguous[];
   missing: ScanMissing[];
   changed: ScanChanged[];
+  tooLarge: ScanTooLarge[];
   unknown: ScanNewFile[];
   conflicts: ScanConflict[];
   redated: ScanRedated[];
@@ -117,7 +137,7 @@ export type ScanReport = {
 
 /**
  * `migrating`: the vault isn't built yet, so there is nothing to compare. `busy`: a focus scan
- * found a long op running in some tab (§ 11.4: skipped, not queued; the next focus scans again).
+ * found the vault held in some tab (§ 11.4: skipped, not queued; the next focus scans again).
  */
 export type ScanResult = ScanReport | { status: "skipped"; reason: "migrating" | "busy" };
 
@@ -125,12 +145,22 @@ export const SCAN_REPORT_KEY = "vault_scan_report";
 
 /** The badge count on Documents ("3 to review"). `changed` is done already, so it isn't counted. */
 export const scanReviewCount = (r: ScanReport) =>
-  r.moved.length + r.missing.length + r.unknown.length + r.conflicts.length + r.redated.length;
+  r.moved.length +
+  r.ambiguous.length +
+  r.tooLarge.length +
+  r.missing.length +
+  r.unknown.length +
+  r.conflicts.length +
+  r.redated.length;
 
 /** The last scan's report, less what the actions since have handled. */
 export const readLastScanReport = async (): Promise<ScanReport | undefined> => {
   const rows = await getDb().select().from(meta).where(eq(meta.key, SCAN_REPORT_KEY)).limit(1);
-  return rows[0] ? (JSON.parse(rows[0].value) as ScanReport) : undefined;
+  if (!rows[0]) return undefined;
+  // A report saved before `ambiguous` and `tooLarge` existed has neither.
+  const saved = JSON.parse(rows[0].value) as Partial<ScanReport> &
+    Omit<ScanReport, "ambiguous" | "tooLarge">;
+  return { ...saved, ambiguous: saved.ambiguous ?? [], tooLarge: saved.tooLarge ?? [] };
 };
 
 const saveReport = (r: ScanReport) => {
@@ -212,8 +242,43 @@ const folderLocator = async () => {
 const nameFromFile = (path: string) =>
   validDocumentName(baseOf(path).replace(/^\d{4}-\d{2}-\d{2} (?=.)/, ""));
 
+// ─── Hash cache (S1) ───────────────────────────────────────────────────────────
+// The last scan's {size, lastModified, sha256} per path, in OPFS beside the journal (never in
+// the vault, never in sqlite). A focus scan trusts it only to confirm a row is ok: a cached sha
+// that differs from the row's is hashed again, so a stale entry can't fake an outside edit.
+
+export const SCAN_CACHE_FILE = "vault-scan-cache.json";
+
+type CacheEntry = { size: number; mtime: number; sha: string };
+type HashCache = Record<string, CacheEntry>;
+
+const readCache = async (root: VaultDirHandle): Promise<HashCache> => {
+  try {
+    const f = await (await root.getFileHandle(SCAN_CACHE_FILE)).getFile();
+    return JSON.parse(await f.text()) as HashCache;
+  } catch (err) {
+    if (isNotFound(err) || err instanceof SyntaxError) return {};
+    throw err;
+  }
+};
+
+const writeCache = async (root: VaultDirHandle, cache: HashCache) => {
+  const w = await (await root.getFileHandle(SCAN_CACHE_FILE, { create: true })).createWritable();
+  await w.write(new Blob([JSON.stringify(cache)], { type: "application/json" }));
+  await w.close();
+};
+
+const mtimeOf = (blob: Blob): number | undefined =>
+  "lastModified" in blob && typeof blob.lastModified === "number" ? blob.lastModified : undefined;
+
 const NEXTCLOUD_CONFLICT = /^(.*) \(conflicted copy[^)]*\)(\.[^./]+)?$/;
 const DRIVE_CONFLICT = /^(.*) \(1\)(\.[^./]+)$/;
+
+/** A sync client's conflict copy is never a move target, even when it holds the row's sha (B1). */
+const looksLikeConflict = (path: string) => {
+  const name = baseOf(path);
+  return NEXTCLOUD_CONFLICT.test(name) || DRIVE_CONFLICT.test(name) || isTmpName(name);
+};
 
 /**
  * Old bytes for an outside edit (§ 6 table): kept under the § 2 copy rule, from `_fiscode/`
@@ -237,6 +302,26 @@ const scan = async (
   { onProgress, signal }: ScanOptions,
 ): Promise<ScanReport> => {
   await recoverVaultHeld();
+  const root = getVaultRoot();
+  const prev = await readCache(root);
+  const cache: HashCache = {};
+  // "Check folder" and boot hash every byte; focus hashes only what changed size or mtime.
+  const trustCache = trigger === "focus";
+  const hash = async (path: string, blob: Blob, rowSha?: string) => {
+    const mtime = mtimeOf(blob);
+    const hit = prev[key(path)];
+    const sha =
+      trustCache &&
+      hit &&
+      mtime !== undefined &&
+      hit.size === blob.size &&
+      hit.mtime === mtime &&
+      (rowSha === undefined || hit.sha === rowSha)
+        ? hit.sha
+        : await sha256Hex(blob);
+    if (mtime !== undefined) cache[key(path)] = { size: blob.size, mtime, sha };
+    return sha;
+  };
   const files = await walk(store, "");
   const tmpRemoved: string[] = [];
   for (const f of files) {
@@ -278,7 +363,7 @@ const scan = async (
       continue;
     }
     const blob = await readFile(store, row.vaultPath);
-    const sha = blob ? await sha256Hex(blob) : undefined;
+    const sha = blob ? await hash(row.vaultPath, blob, row.sha256) : undefined;
     if (sha) shaOf.set(key(row.vaultPath), sha);
     if (sha === row.sha256) {
       claimed.add(key(row.vaultPath));
@@ -300,53 +385,68 @@ const scan = async (
     let sha = shaOf.get(key(path));
     if (!sha && sizes.size > 0) {
       const blob = await readFile(store, path);
-      if (blob && sizes.has(blob.size)) sha = await sha256Hex(blob);
+      if (blob && sizes.has(blob.size)) sha = await hash(path, blob);
     }
     candidates.push({ path, ...(sha ? { sha } : {}) });
   }
 
-  // Moves first, so a swap of two names reads as two moves, not two edits.
+  // B1: the row's own path first. A file there with another sha is an outside edit, never a
+  // move, even when its old bytes turn up elsewhere (a conflict copy usually holds them).
   const locate = await folderLocator();
-  const moved: ScanMoved[] = [];
-  const stillDisplaced: typeof displaced = [];
+  const edits: { row: DocumentRow; bytes: Blob; sha: string }[] = [];
+  const tooLarge: ScanTooLarge[] = [];
+  const gone: typeof displaced = [];
   for (const d of displaced) {
-    const found = candidates.find(
-      (c) =>
-        c.sha === d.row.sha256 && !claimed.has(key(c.path)) && key(c.path) !== key(d.row.vaultPath),
-    );
-    if (!found) {
-      stillDisplaced.push(d);
+    if (!d.atPath) {
+      gone.push(d);
       continue;
     }
-    claimed.add(key(found.path));
+    claimed.add(key(d.row.vaultPath));
+    if (d.atPath.size > MAX_DOCUMENT_BYTES) {
+      tooLarge.push({
+        documentId: d.row.id,
+        name: d.row.name,
+        path: d.row.vaultPath,
+        sizeBytes: d.atPath.size,
+      });
+      continue;
+    }
+    edits.push({ row: d.row, bytes: d.atPath, sha: shaOf.get(key(d.row.vaultPath))! });
+  }
+
+  // Then moves: the row's sha at exactly one other path that isn't a conflict copy.
+  const moved: ScanMoved[] = [];
+  const ambiguous: ScanAmbiguous[] = [];
+  for (const d of gone) {
+    const found = candidates.filter(
+      (c) => c.sha === d.row.sha256 && !claimed.has(key(c.path)) && !looksLikeConflict(c.path),
+    );
+    if (found.length === 0) {
+      missing.push({ documentId: d.row.id, name: d.row.name, path: d.row.vaultPath });
+      continue;
+    }
+    for (const f of found) claimed.add(key(f.path));
+    if (found.length > 1) {
+      ambiguous.push({
+        documentId: d.row.id,
+        name: d.row.name,
+        path: d.row.vaultPath,
+        sha256: d.row.sha256,
+        foundAt: found.map((f) => f.path).sort(),
+      });
+      continue;
+    }
     moved.push({
       documentId: d.row.id,
       name: d.row.name,
       path: d.row.vaultPath,
-      foundAt: found.path,
+      foundAt: found[0]!.path,
       sha256: d.row.sha256,
-      adoptFolderId: locate(found.path),
+      adoptFolderId: locate(found[0]!.path),
     });
   }
-
-  const edits: { row: DocumentRow; bytes: Blob; sha: string }[] = [];
-  for (const d of stillDisplaced) {
-    if (d.atPath && !claimed.has(key(d.row.vaultPath))) {
-      claimed.add(key(d.row.vaultPath));
-      edits.push({
-        row: d.row,
-        bytes: d.atPath,
-        sha: shaOf.get(key(d.row.vaultPath))!,
-      });
-    } else {
-      missing.push({
-        documentId: d.row.id,
-        name: d.row.name,
-        path: d.row.vaultPath,
-      });
-    }
-  }
   const changed = await recordEdits(store, edits);
+  signal?.throwIfAborted();
 
   const onDisk = new Set(docFiles.map(key));
   const conflicts: ScanConflict[] = [];
@@ -410,14 +510,17 @@ const scan = async (
     }
   }
 
+  await writeCache(root, cache);
   return {
     status: "done",
     trigger,
     scannedAt: new Date().toISOString(),
     ok: okRows.length,
     moved: moved.toSorted(byPath),
+    ambiguous: ambiguous.toSorted(byPath),
     missing: missing.toSorted((a, b) => ((a.path ?? "") < (b.path ?? "") ? -1 : 1)),
     changed,
+    tooLarge: tooLarge.toSorted(byPath),
     unknown: unknown.toSorted(byPath),
     conflicts: conflicts.toSorted(byPath),
     redated: redated.toSorted(byPath),
@@ -468,7 +571,8 @@ const recordEdits = async (
  * - `check` (the "Check folder" button, the default) is a user action: VaultBusyError when
  *   another tab holds the vault;
  * - `boot` waits for the lock;
- * - `focus` is skipped while a long op runs in any tab, and otherwise waits. The UI debounces it.
+ * - `focus` takes the lock with ifAvailable and is skipped when any tab holds it (never queued
+ *   behind a long op); it hashes only files whose size or mtime changed. The UI debounces it.
  * Skipped until the migration is done. The report is kept for the badge (readLastScanReport).
  * `onProgress` and `signal` as for other long ops (§ 11.3): a cancel throws before anything is
  * recorded, so only leftover temp files may be gone.
@@ -481,21 +585,26 @@ export const scanVault = async (
   if (phase === "migrating" || phase === "migration-incomplete") {
     return { status: "skipped", reason: "migrating" };
   }
-  if (trigger === "focus" && (await isLongVaultOpRunning(options.locks))) {
-    return { status: "skipped", reason: "busy" };
-  }
   const store = getVaultStore();
-  const report = await withVaultLock(
-    async () => {
-      const r = await scan(store, trigger, options);
-      await saveReport(r);
-      return r;
-    },
-    {
-      wait: trigger !== "check",
-      ...(options.locks ? { locks: options.locks } : {}),
-    },
-  );
+  let report: ScanReport;
+  try {
+    report = await withVaultLock(
+      async () => {
+        const r = await scan(store, trigger, options);
+        await saveReport(r);
+        return r;
+      },
+      {
+        wait: trigger === "boot",
+        ...(options.locks ? { locks: options.locks } : {}),
+      },
+    );
+  } catch (err) {
+    if (trigger === "focus" && err instanceof VaultBusyError) {
+      return { status: "skipped", reason: "busy" };
+    }
+    throw err;
+  }
   if (report.changed.length > 0 || report.tmpRemoved.length > 0) announceVaultChange();
   return report;
 };

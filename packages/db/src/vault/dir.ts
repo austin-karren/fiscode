@@ -50,7 +50,8 @@ export const memoryDir = (): VaultDirHandle => {
           parts.push(data);
         },
         async close() {
-          files.set(name, new Blob(parts));
+          // A File, as OPFS gives: the scan reads size and lastModified (its hash cache).
+          files.set(name, new File(parts, name, { lastModified: Date.now() }));
         },
       };
     },

@@ -1,6 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
-import { VaultBusyError, VaultIntegrityError, VaultNameTakenError } from "@fiscode/core";
+import {
+  MAX_DOCUMENT_BYTES,
+  VaultBusyError,
+  VaultIntegrityError,
+  VaultNameTakenError,
+} from "@fiscode/core";
 import { eq } from "drizzle-orm";
 import { setupTestDb, teardownTestDb } from "../test/setup-db.ts";
 import { getDb } from "../client.ts";
@@ -169,17 +174,17 @@ describe("scanVault: the § 6 table", () => {
     expect(versions.map((v) => v.available)).toEqual([true, true]);
   });
 
-  it("tells a swap of two names apart from two edits", async () => {
+  it("checks a row's own path first: a swap of two names is two outside edits, nothing lost", async () => {
     const a = await upload("A.pdf", "aaa");
     const b = await upload("B.pdf", "bbb");
     await outside(a.vaultPath!, "bbb");
     await outside(b.vaultPath!, "aaa");
     const r = done(await scanVault());
-    expect(r.changed).toEqual([]);
-    expect(r.moved.map((m) => [m.documentId, m.foundAt]).sort()).toEqual(
+    expect(r.moved).toEqual([]);
+    expect(r.changed.map((c) => [c.documentId, c.oldBytesKept]).sort()).toEqual(
       [
-        [a.id, b.vaultPath],
-        [b.id, a.vaultPath],
+        [a.id, true],
+        [b.id, true],
       ].sort(),
     );
   });
@@ -508,15 +513,25 @@ describe("scanVault: more than one tab (§ 11.9)", () => {
     await other.held;
   });
 
-  it("a focus or boot scan waits for a short change in another tab", async () => {
+  it("a boot scan waits for a short change in another tab", async () => {
     const locks = fakeLocks();
-    for (const trigger of ["focus", "boot"] as const) {
-      const other = holdLock(locks, false);
-      const scan = scanVault({ trigger, locks });
-      other.release();
-      await other.held;
-      expect((await scan).status).toBe("done");
-    }
+    const other = holdLock(locks, false);
+    const scan = scanVault({ trigger: "boot", locks });
+    other.release();
+    await other.held;
+    expect((await scan).status).toBe("done");
+  });
+
+  it("a focus scan takes the lock with ifAvailable: skipped, never queued, while any tab holds it", async () => {
+    const locks = fakeLocks();
+    const other = holdLock(locks, false);
+    expect(await scanVault({ trigger: "focus", locks })).toEqual({
+      status: "skipped",
+      reason: "busy",
+    });
+    other.release();
+    await other.held;
+    expect((await scanVault({ trigger: "focus", locks })).status).toBe("done");
   });
 
   it("names the long-op lock apart from the vault lock", () => {
@@ -539,5 +554,125 @@ describe("store.list for the scan", () => {
     expect(await store.list("documents", { withTmp: true })).toEqual([
       { name: ".x.pdf.fiscode-tmp", kind: "file" },
     ]);
+  });
+});
+
+describe("review r1 (d-data ruling)", () => {
+  const siblings = async () => {
+    const folder = await expensesFolder();
+    const d = await upload("X.pdf", "old bytes", folder.id);
+    const dir = d.vaultPath!.slice(0, d.vaultPath!.lastIndexOf("/"));
+    const stem = d.vaultPath!.slice(dir.length + 1, -".pdf".length);
+    return { d, dir, stem };
+  };
+
+  it("B1 Nextcloud: a conflict copy holding the row's sha is a conflict, the live file an outside edit", async () => {
+    const { d, dir, stem } = await siblings();
+    const copy = `${dir}/${stem} (conflicted copy 2026-11-23 101500).pdf`;
+    await outside(copy, "old bytes");
+    await outside(d.vaultPath!, "new bytes");
+    const r = done(await scanVault());
+    expect(r.moved).toEqual([]);
+    expect(r.unknown).toEqual([]);
+    expect(r.changed.map((c) => [c.documentId, c.path, c.oldBytesKept])).toEqual([
+      [d.id, d.vaultPath, true],
+    ]);
+    expect(r.conflicts).toEqual([
+      { path: copy, originalPath: d.vaultPath, documentId: d.id, kind: "nextcloud" },
+    ]);
+    expect((await documentRepo.versions(d.id)).length).toBe(2);
+  });
+
+  it("B1 Drive: a ' (1)' copy holding the row's sha is a conflict, the live file an outside edit", async () => {
+    const { d, dir, stem } = await siblings();
+    const copy = `${dir}/${stem} (1).pdf`;
+    await outside(copy, "old bytes");
+    await outside(d.vaultPath!, "new bytes");
+    const r = done(await scanVault());
+    expect(r.moved).toEqual([]);
+    expect(r.unknown).toEqual([]);
+    expect(r.changed.map((c) => c.documentId)).toEqual([d.id]);
+    expect(r.conflicts).toEqual([
+      { path: copy, originalPath: d.vaultPath, documentId: d.id, kind: "drive" },
+    ]);
+  });
+
+  it("B1: a conflict copy is never a move target, even when the row's own file is gone", async () => {
+    const { d, dir, stem } = await siblings();
+    await outside(`${dir}/${stem} (conflicted copy 2026-11-23 101500).pdf`, "old bytes");
+    await store.remove(d.vaultPath!);
+    const r = done(await scanVault());
+    expect(r.moved).toEqual([]);
+    expect(r.missing.map((m) => m.documentId)).toEqual([d.id]);
+    expect(r.conflicts.map((c) => c.kind)).toEqual(["nextcloud"]);
+  });
+
+  it("N1: the same sha at two paths is ambiguous, not a move, and neither is offered as new", async () => {
+    const d = await upload("Twice.pdf", "twice");
+    await store.remove(d.vaultPath!);
+    await outside("documents/Copy one.pdf", "twice");
+    await outside("documents/Copy two.pdf", "twice");
+    const r = done(await scanVault());
+    expect(r.moved).toEqual([]);
+    expect(r.unknown).toEqual([]);
+    expect(r.ambiguous).toEqual([
+      {
+        documentId: d.id,
+        name: "Twice.pdf",
+        path: d.vaultPath,
+        sha256: d.sha256,
+        foundAt: ["documents/Copy one.pdf", "documents/Copy two.pdf"],
+      },
+    ]);
+    expect(scanReviewCount(r)).toBe(1);
+  });
+
+  it("N3: an outside edit over the size cap is reported, not ingested", async () => {
+    const d = await upload("Big.pdf", "small");
+    await outside(d.vaultPath!, "x".repeat(MAX_DOCUMENT_BYTES + 1));
+    const r = done(await scanVault());
+    expect(r.changed).toEqual([]);
+    expect(r.tooLarge).toEqual([
+      { documentId: d.id, name: "Big.pdf", path: d.vaultPath, sizeBytes: MAX_DOCUMENT_BYTES + 1 },
+    ]);
+    expect(r.unknown).toEqual([]);
+    expect((await rowOf(d.id)).sha256).toBe(d.sha256);
+  });
+
+  describe("S1: focus hashes only what changed size or mtime", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-11-23T10:00:00Z"));
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it("focus trusts an unchanged size and mtime; Check now hashes every byte", async () => {
+      const d = await upload("Same size.pdf", "aaaa");
+      expect(done(await scanVault({ trigger: "focus" })).ok).toBe(1);
+      // Same size, same mtime (the clock is frozen): only a full hash can see this edit.
+      await outside(d.vaultPath!, "bbbb");
+      const focus = done(await scanVault({ trigger: "focus" }));
+      expect(focus.changed).toEqual([]);
+      expect(focus.ok).toBe(1);
+      const check = done(await scanVault({ trigger: "check" }));
+      expect(check.changed.map((c) => c.documentId)).toEqual([d.id]);
+    });
+
+    it("focus hashes a file whose mtime changed", async () => {
+      const d = await upload("Moved on.pdf", "aaaa");
+      done(await scanVault({ trigger: "focus" }));
+      vi.setSystemTime(new Date("2026-11-23T10:05:00Z"));
+      await outside(d.vaultPath!, "bbbb");
+      const focus = done(await scanVault({ trigger: "focus" }));
+      expect(focus.changed.map((c) => c.documentId)).toEqual([d.id]);
+    });
+
+    it("keeps the cache in OPFS beside the journal, outside the vault", async () => {
+      await upload("Cached.pdf", "aaaa");
+      done(await scanVault({ trigger: "focus" }));
+      const f = await (await root.getFileHandle("vault-scan-cache.json")).getFile();
+      expect(Object.keys(JSON.parse(await f.text()) as object)).toHaveLength(1);
+      expect((await store.list("")).map((e) => e.name)).not.toContain("vault-scan-cache.json");
+    });
   });
 });

@@ -397,7 +397,8 @@ Cancelling stops between documents and leaves both stores readable (the old stor
    `onProgress({phase, done, total})` and an `AbortSignal`, like the backup. Rename/move is
    journaled (§ 6): cancel or failure rolls back, so the state is "nothing changed" and the error
    says so. Migration and export are resumable and cancel between files: the state left is "N of
-   M done, old storage still complete". A scan changes nothing on its own; it returns a report.
+   M done, old storage still complete". A scan changes only what the § 6 table lets it: it records an outside edit (old bytes kept, under the size cap)
+   and deletes leftover temp files; everything else waits for the user in its report.
 4. **Outside changes.** `vault.scan(): Promise<ScanReport>` runs on boot, on window focus (debounced)
    and from a "Check folder" button. Report: `moved[]` (adopt or put back), `missing[]` (row shows the
    existing "File not on this device"), `changed[]` (new version recorded), `unknown[]` ("New in
