@@ -30,6 +30,12 @@ export const describeReferences = (references: ArchiveReference[]): string => {
   return `${joinList(parts)} ${total === 1 ? "references" : "reference"} it.`;
 };
 
+// "2 linked documents stay in Documents." Archiving leaves links alone; none, nothing said.
+export const describeDocuments = (count: number): string =>
+  count === 0
+    ? ""
+    : `${count} linked ${count === 1 ? "document stays" : "documents stay"} in Documents. `;
+
 // Archive button for a parent row (client, vehicle). Archiving hides the item
 // from pickers while other rows still point at it, which is hard to eyeball,
 // so it asks first and says how many rows are affected.
@@ -37,12 +43,15 @@ export function ArchiveDialog({
   itemName,
   recordName,
   references,
+  documents = 0,
   onConfirm,
 }: {
   itemName: string;
   /** The record in the button's accessible name, as Edit and Delete name it ("client Acme"). */
   recordName: string;
   references: ArchiveReference[];
+  /** Documents linked to the item, from documentLinkRepo.countsFor. */
+  documents?: number;
   onConfirm: () => Promise<void> | void;
 }) {
   const [open, setOpen] = useState(false);
@@ -64,7 +73,8 @@ export function ArchiveDialog({
             {hasReferences
               ? "Those rows stay as they are and keep showing its name, marked as archived. "
               : ""}
-            It no longer appears in pickers. You can bring it back under “Show archived”.
+            {describeDocuments(documents)}It no longer appears in pickers. You can bring it back
+            under “Show archived”.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

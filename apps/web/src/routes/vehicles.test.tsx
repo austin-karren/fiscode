@@ -48,7 +48,7 @@ vi.mock("@fiscode/db", () => ({
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useLoaderData: () => ({
-    linkCounts: {},
+    linkCounts: { v_live: 1 },
     vehicles: loaded.vehicles ?? [liveVehicle, archivedVehicle],
     mileage: [
       { id: "m_1", vehicleId: "v_live" },
@@ -86,6 +86,7 @@ describe("archiving a vehicle", () => {
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText("Archive Demo Wagon?")).toBeInTheDocument();
     expect(dialog).toHaveTextContent("1 mileage entry references it.");
+    expect(dialog).toHaveTextContent("1 linked document stays in Documents.");
     expect(softDelete).not.toHaveBeenCalled();
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Archive" }));
