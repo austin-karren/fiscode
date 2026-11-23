@@ -7,6 +7,7 @@ import {
   type VaultMigrationReport,
 } from "../vault/migrate.ts";
 import { setVaultMigrationState } from "../vault/state.ts";
+import { errorMessage } from "../vault/paths.ts";
 import { getVaultStore } from "../vault/store.ts";
 import { recoverVault } from "../vault/tree.ts";
 import { linkedDates } from "./documents.ts";
@@ -27,7 +28,7 @@ export const prepareVault = async (): Promise<void> => {
   } catch (err) {
     setVaultMigrationState({
       phase: "failed",
-      message: err instanceof Error ? err.message : String(err),
+      message: errorMessage(err),
     });
     console.error("vault prepare", err);
   }
@@ -55,7 +56,7 @@ export const runVaultStartup = async (
     if (!options.signal?.aborted) {
       setVaultMigrationState({
         phase: "failed",
-        message: err instanceof Error ? err.message : String(err),
+        message: errorMessage(err),
       });
     }
     console.error("vault start", err);

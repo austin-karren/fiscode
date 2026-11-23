@@ -45,7 +45,15 @@ const journal = () => vaultJournal(getVaultRoot(), getVaultStore(), sqliteLedger
  * there, back when not. Background work, so it waits for the lock. Run on boot.
  */
 export const recoverVault = (): Promise<Recovery> =>
-  withVaultLock(() => journal().recover(), { wait: true });
+  withVaultLock(
+    async () => {
+      const outcome = await journal().recover();
+      // The plan's own step 5 may not have run: the manifest follows sqlite again.
+      if (outcome !== "none") await writeManifest(getVaultStore());
+      return outcome;
+    },
+    { wait: true },
+  );
 
 /** Bytes waiting to become a document, hidden like a crashed write (the scan deletes leftovers). */
 const stagingPath = (planId: string) => `_fiscode/.${planId}${TMP_SUFFIX}`;
@@ -198,9 +206,14 @@ export const runTreeChange = async <T>(
         await runAtomic(queries);
       } else {
         const applied = getDb().insert(vaultApplied).values({ planId: plan.planId });
-        await j.run({ planId: plan.planId, ops: plan.ops }, () => runAtomic([...queries, applied]));
+        // Step 5 order: the manifest is rewritten before the journal and ledger row go, so a
+        // crash after the commit still has a journal to roll forward and then rewrite it.
+        await j.run({ planId: plan.planId, ops: plan.ops }, async () => {
+          await runAtomic([...queries, applied]);
+          await writeManifest(store);
+        });
+        return result;
       }
-      // Step 5: the manifest follows sqlite.
       await writeManifest(store);
       return result;
     } finally {

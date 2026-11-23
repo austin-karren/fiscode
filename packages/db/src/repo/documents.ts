@@ -627,7 +627,7 @@ export const documentRepo = {
 
   /** Notes and other fields that don't move a file still go through here, so nothing is row-only. */
   async update(id: string, patch: Partial<DocumentInsert>): Promise<DocumentRow | undefined> {
-    const doc = await requireDocument(id).catch(() => undefined);
+    const doc = await documentCrud.get(id);
     if (!doc) return undefined;
     const { vaultPath: _ignored, ...rest } = patch;
     return documentUpdate(doc, rest as Partial<DocumentRow>);

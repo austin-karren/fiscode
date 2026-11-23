@@ -190,3 +190,12 @@ export const documentFileName = (doc: DocLike, linkedDates: readonly string[]): 
     title: titleOf(doc.name, doc.mime),
     ext: extForMime(doc.mime),
   });
+
+/** Oldest first, then by id: the stable order for " (n)" suffixes (§ 4). */
+export const byAdded = <T extends { addedAt: string; id: string }>(a: T, b: T) =>
+  a.addedAt < b.addedAt ? -1 : a.addedAt > b.addedAt ? 1 : a.id < b.id ? -1 : 1;
+
+/** "… (2).pdf" → "….pdf": a name or path without its collision suffix. */
+export const withoutSuffix = (path: string) => path.replace(/ \(\d+\)(\.[^./]+)?$/, "$1");
+
+export const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));

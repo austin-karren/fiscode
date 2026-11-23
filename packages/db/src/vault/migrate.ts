@@ -11,6 +11,9 @@ import {
 import { withVaultLock } from "./lock.ts";
 import { referencedOldShas, writeManifest } from "./manifest.ts";
 import {
+  byAdded,
+  errorMessage,
+  withoutSuffix,
   documentFileName,
   documentVaultPath,
   fitFolders,
@@ -40,7 +43,7 @@ export const MIGRATION_REPORT_KEY = "vault_migration_report";
 
 /**
  * What the migration changed or couldn't do (§ 10). Persisted in `meta` so the scan page
- * (`/documents/check`, PR 11) can show it whenever it ships.
+ * (`/documents/check`) can show it whenever it ships.
  */
 export type VaultMigrationReport = {
   finishedAt: string;
@@ -99,11 +102,6 @@ export const readVaultMigrationReport = async (): Promise<VaultMigrationReport |
   return raw ? (JSON.parse(raw) as VaultMigrationReport) : undefined;
 };
 
-const byAdded = (a: DocumentRow, b: DocumentRow) =>
-  a.addedAt < b.addedAt ? -1 : a.addedAt > b.addedAt ? 1 : a.id < b.id ? -1 : 1;
-
-const withoutSuffix = (name: string) => name.replace(/ \(\d+\)(\.[^./]+)?$/, "$1");
-
 /** Reads a path; a folder there counts as taken by something else. */
 const readPath = async (store: VaultStore, path: string): Promise<Blob | "folder" | undefined> => {
   try {
@@ -124,7 +122,7 @@ const fitAllFolders = async (report: VaultMigrationReport) => {
     .from(documentFolder)
     .where(isNull(documentFolder.deletedAt))) as DocumentFolderRow[];
   const folders = new Map(rows.map((f) => [f.id, f]));
-  // Leaves first is enough: shortening a leaf's path shortens its ancestors' too.
+  // fitFolders works out each folder's path afresh, so earlier cuts count for later folders.
   const shortened = fitFolders(
     folders,
     rows.map((f) => f.id),
@@ -329,7 +327,7 @@ export const migrateToVault = async (options: MigrationOptions): Promise<VaultMi
         setVaultMigrationState(
           options.signal?.aborted
             ? { phase: "idle" }
-            : { phase: "failed", message: err instanceof Error ? err.message : String(err) },
+            : { phase: "failed", message: errorMessage(err) },
         );
         throw err;
       }
@@ -341,7 +339,7 @@ export const migrateToVault = async (options: MigrationOptions): Promise<VaultMi
 /**
  * The every-boot backstop (§ 10 step 5): step 2 again, but only for live rows whose vault_path
  * is null (e.g. after a CSV import). A row with a path whose file is missing or changed is the
- * reconcile scan's (PR 6), so this never overwrites an outside edit. The caller holds the lock.
+ * reconcile scan's, so this never overwrites an outside edit. The caller holds the lock.
  * Returns how many rows it placed.
  */
 export const placeUnplacedDocuments = async (

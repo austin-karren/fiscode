@@ -8,6 +8,8 @@ import {
   type DocumentRow,
 } from "../schema/index.ts";
 import {
+  byAdded,
+  withoutSuffix,
   documentVaultPath,
   fitFolders,
   type ShortenedFolder,
@@ -25,7 +27,7 @@ export type { ShortenedFolder };
 // The one engine behind every document and folder write that moves files (ADR 0001 § 6): it
 // applies the row changes in memory, works out every affected document's new path, plans the file
 // ops, and commits the rows with the plan. Paths are recomputed for every file a folder change
-// relocates (PR 1 review r3: a folder that fits doesn't mean every long title below it does).
+// relocates: a folder that fits doesn't mean every long title below it does.
 
 type HistoryOp = "insert" | "update" | "delete" | "revert";
 
@@ -60,12 +62,6 @@ const forHistory = (row: DocumentRow | undefined) => {
   const { vaultPath: _devicePath, ...rest } = row;
   return rest;
 };
-
-const byAdded = (a: DocumentRow, b: DocumentRow) =>
-  a.addedAt < b.addedAt ? -1 : a.addedAt > b.addedAt ? 1 : a.id < b.id ? -1 : 1;
-
-/** "… (2).pdf" → "….pdf": a path's name without its collision suffix. */
-const withoutSuffix = (path: string) => path.replace(/ \(\d+\)(\.[^./]+)?$/, "$1");
 
 /** Every live folder at or below the given ones. */
 const subtrees = (ids: Iterable<string>, live: readonly DocumentFolderRow[]) => {
@@ -242,7 +238,14 @@ const placeOne = async (
   }
   // Place it as if at its old path, so an unchanged name keeps its suffix.
   const placed = placeDocument({ ...next, vaultPath: prev?.vaultPath ?? null }, ctx, dates, taken);
-  if (!placed.fits && options.strict && change) throw new VaultPathTooLongError(placed.path);
+  if (!placed.fits) {
+    // A user action refuses (§ 3.8), including a file its folder change would push over budget.
+    if (options.strict) throw new VaultPathTooLongError(placed.path);
+    // Restore and revert never refuse: the item stays where it is when it has a place.
+    if (cur.path && cur.sha256 === next.sha256) {
+      return { row: { ...next, vaultPath: cur.path }, taken: cur.path };
+    }
+  }
   const source = change?.bytes ? await plan.stage(change.bytes) : undefined;
   const vaultPath = await plan.document(cur, {
     live: true,

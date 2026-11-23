@@ -285,3 +285,25 @@ describe("while the migration runs", () => {
     expect(await sha256Hex(await documentRepo.readBytes(d.id))).toBe(d.sha256);
   });
 });
+
+describe("review fixes", () => {
+  it("a roll-forward on boot rewrites the manifest", async () => {
+    const d = await documentRepo.upload(file("A.pdf", "a"));
+    const crash = { left: 1 };
+    const flaky: VaultDirHandle = {
+      kind: "directory",
+      getDirectoryHandle: root.getDirectoryHandle.bind(root),
+      getFileHandle: root.getFileHandle.bind(root),
+      entries: root.entries.bind(root),
+      async removeEntry(name, o) {
+        if (name === JOURNAL_FILE && crash.left-- > 0) throw new Error("tab closed");
+        return root.removeEntry(name, o);
+      },
+    };
+    __setVaultStoreForTests(store, flaky);
+    await expect(documentRepo.rename(d.id, "B.pdf")).rejects.toThrow(/tab closed/);
+    await recoverVault();
+    const manifest = JSON.parse((await text("fiscode.json"))!);
+    expect(manifest.documents[d.id].path).toBe(`documents/Unfiled/${today()} B.pdf`);
+  });
+});
