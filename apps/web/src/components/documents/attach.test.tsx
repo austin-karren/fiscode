@@ -277,3 +277,21 @@ describe("uploading a file that's already stored (dedupe follow-up)", () => {
     expect((await documentRepo.list()).length).toBe(before + 1);
   });
 });
+
+describe("Choose existing says how many there are (d-ux docs polish 2)", () => {
+  it("names the cap and the total in a status line, and clears it when a search narrows", async () => {
+    for (let i = 0; i < 51; i++)
+      await documentRepo.upload(
+        new File([`count ${i}`], `demo-count-${i}.txt`, { type: "text/plain" }),
+      );
+    const dialog = await openAttach("ex_count");
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Choose existing" }));
+    const line = await within(dialog).findByText(/^Showing 50 of \d+\. Search to find the rest\.$/);
+    expect(line).toHaveAttribute("role", "status");
+    expect(within(dialog).getAllByRole("button", { name: /^Attach / })).toHaveLength(50);
+    fireEvent.change(within(dialog).getByLabelText("Search documents"), {
+      target: { value: "demo-count-7" },
+    });
+    await waitFor(() => expect(line).toBeEmptyDOMElement());
+  });
+});
