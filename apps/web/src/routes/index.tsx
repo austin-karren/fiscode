@@ -28,6 +28,7 @@ import { Page } from "../components/page";
 import { ExportCard } from "../components/export-card";
 import { ImportCard } from "../components/import-card";
 import { BackupCard } from "../components/backup-card";
+import { VaultExportCard } from "../components/vault-export-card";
 import { BackupNudge } from "../components/backup-nudge";
 import { InfoTooltip } from "../components/info-tooltip";
 import { UtahPrepaymentLine } from "../components/utah-prepayment-line";
@@ -291,6 +292,7 @@ function Dashboard() {
         <ExportCard />
         <ImportCard />
         <BackupCard />
+        <VaultExportCard />
         <BackupNudge />
       </section>
     </Page>
