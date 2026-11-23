@@ -19,7 +19,7 @@ vi.mock("../lib/backup-view", async (importOriginal) => ({
 import { exportVault, type ExportVaultProgress } from "@fiscode/backup";
 import { StorageQuotaError, VaultBusyError } from "@fiscode/core";
 import { toast } from "sonner";
-import { downloadBlob, exportProgressLine } from "../lib/backup-view";
+import { cancelledExportLine, downloadBlob, exportProgressLine } from "../lib/backup-view";
 import { VaultExportCard } from "./vault-export-card";
 
 type Opts = { onProgress: (p: ExportVaultProgress) => void; signal: AbortSignal; target: object };
@@ -94,29 +94,58 @@ describe("Export vault", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("shows progress by phase, and Cancel says what was left", async () => {
+  it("shows progress by phase; Cancel counts the file in flight and keeps focus", async () => {
     picker(async () => ({ name: "Drive" }));
-    hangs([
-      { phase: "reading", done: 1, total: 1 },
-      { phase: "writing", done: 3, total: 12 },
-    ]);
+    // exportVault's real order: tick writing done=i, write file i, then check the signal.
+    let release = () => {};
+    run.mockImplementation(async (o) => {
+      const { onProgress, signal } = o as Opts;
+      onProgress({ phase: "reading", done: 1, total: 1 });
+      for (let i = 0; i < 2; i++) {
+        signal.throwIfAborted();
+        onProgress({ phase: "writing", done: i, total: 2 });
+        await new Promise<void>((r) => (release = r));
+      }
+      return { kind: "folder", files: 2 } as never;
+    });
     render(<VaultExportCard />);
     fireEvent.click(screen.getByRole("button", { name: "Export to a folder" }));
-    expect(await screen.findByText("Writing files (3 of 12)…")).toBeVisible();
+    expect(await screen.findByText("Writing files (0 of 2)…")).toBeVisible();
+    const cancel = screen.getByRole("button", { name: "Cancel export" });
+    expect(cancel).toHaveFocus();
     expect(screen.getByRole("button", { name: "Export to a folder" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel export" }));
-    const note = await screen.findByText(/Export cancelled: 3 of 12 done\./);
-    expect(note).toHaveTextContent("Export cancelled: 3 of 12 done.");
+    fireEvent.click(cancel);
+    release();
+    const note = await screen.findByText(/Export cancelled: 1 of 2 files written\./);
     expect(note).toHaveTextContent(/no fiscode\.json/);
+    expect(note).toHaveFocus();
     expect(screen.queryByRole("button", { name: "Cancel export" })).toBeNull();
     expect(screen.getByRole("button", { name: "Export to a folder" })).toBeEnabled();
+  });
+
+  it("says nothing was written when cancelled before writing", async () => {
+    hangs([{ phase: "collecting", done: 2, total: 5 }]);
+    render(<VaultExportCard />);
+    fireEvent.click(screen.getByRole("button", { name: "Download vault as zip" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel export" }));
+    expect(await screen.findByText("Export cancelled. Nothing was downloaded.")).toHaveFocus();
+  });
+
+  it("returns focus to the pressed button when the export finishes", async () => {
+    run.mockResolvedValue({ kind: "zip", blob: new Blob([]), fileName: "v.zip" } as never);
+    render(<VaultExportCard />);
+    const button = screen.getByRole("button", { name: "Download vault as zip" });
+    fireEvent.click(button);
+    await vi.waitFor(() => expect(button).toHaveFocus());
   });
 
   it("shows each typed error's own message", async () => {
     run.mockRejectedValueOnce(new VaultBusyError());
     render(<VaultExportCard />);
     fireEvent.click(screen.getByRole("button", { name: "Download vault as zip" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Busy in another tab/);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/Busy in another tab/);
+    expect(alert).toHaveFocus();
     run.mockRejectedValueOnce(new StorageQuotaError());
     fireEvent.click(screen.getByRole("button", { name: "Download vault as zip" }));
     await vi.waitFor(() =>
@@ -133,6 +162,26 @@ describe("Export vault", () => {
     ).toBeVisible();
     const card = screen.getByRole("region", { name: "Export vault" });
     for (const b of within(card).getAllByRole("button")) expect(b).toBeDisabled();
+  });
+});
+
+describe("cancelledExportLine", () => {
+  it("counts the file in flight, and says nothing was written before writing", () => {
+    expect(cancelledExportLine({ phase: "writing", done: 3, total: 12 }, true)).toMatch(
+      /^Export cancelled: 4 of 12 files written\./,
+    );
+    expect(cancelledExportLine({ phase: "reading", done: 1, total: 1 }, true)).toBe(
+      "Export cancelled before any file was written.",
+    );
+    expect(cancelledExportLine({ phase: "collecting", done: 2, total: 5 }, true)).toBe(
+      "Export cancelled before any file was written.",
+    );
+    expect(cancelledExportLine(undefined, true)).toBe(
+      "Export cancelled before any file was written.",
+    );
+    expect(cancelledExportLine({ phase: "zipping", done: 0, total: 1 }, false)).toBe(
+      "Export cancelled. Nothing was downloaded.",
+    );
   });
 });
 

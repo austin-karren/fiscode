@@ -53,3 +53,18 @@ export const exportProgressLine = (p: ExportVaultProgress): string =>
   p.total > 1
     ? `${EXPORT_PHASES[p.phase]} (${Math.min(p.done, p.total)} of ${p.total})`
     : EXPORT_PHASES[p.phase];
+
+/**
+ * What a cancelled Export vault left behind, from the last progress it reported. exportVault
+ * reports `writing` done=i just before it writes file i and checks the signal only before the
+ * next file, so file i always lands: i + 1 files are written. Before `writing`, nothing is.
+ */
+export const cancelledExportLine = (
+  last: ExportVaultProgress | undefined,
+  folder: boolean,
+): string => {
+  if (!folder) return "Export cancelled. Nothing was downloaded.";
+  if (last?.phase !== "writing") return "Export cancelled before any file was written.";
+  const written = Math.min(last.done + 1, last.total);
+  return `Export cancelled: ${written} of ${last.total} ${last.total === 1 ? "file" : "files"} written. They stay in the folder, with no fiscode.json, so it isn't a complete export.`;
+};
