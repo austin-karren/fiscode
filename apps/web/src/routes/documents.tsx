@@ -28,11 +28,12 @@ import { landedLine, restoreDocument } from "../lib/documents-restore";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { formatDate } from "../lib/format-date";
 
-type Search = { folder?: string; doc?: string; trash?: boolean; q?: string };
+type Search = { folder?: string; unfiled?: boolean; doc?: string; trash?: boolean; q?: string };
 
 export const Route = createFileRoute("/documents")({
   validateSearch: (s: Record<string, unknown>): Search => ({
     folder: typeof s.folder === "string" ? s.folder : undefined,
+    unfiled: s.unfiled === true || s.unfiled === "1" || s.unfiled === 1 ? true : undefined,
     doc: typeof s.doc === "string" ? s.doc : undefined,
     trash: s.trash === true || s.trash === "1" || s.trash === 1 ? true : undefined,
     q: typeof s.q === "string" && s.q ? s.q : undefined,
@@ -51,7 +52,8 @@ export const Route = createFileRoute("/documents")({
     ]);
     // By default_key, so a renamed year folder is still the year's.
     const yearFolder = folders.find((f) => f.defaultKey === YEAR_ROOT_KEY && f.taxYear === year);
-    const folderId = deps.folder ?? yearFolder?.id ?? null;
+    // Unfiled: the documents with no folder (null), listed like any folder's.
+    const folderId = deps.unfiled ? null : (deps.folder ?? yearFolder?.id ?? null);
     const docs = deps.q
       ? await documentRepo.search(deps.q)
       : await documentRepo.listInFolder(folderId);
@@ -63,6 +65,7 @@ export const Route = createFileRoute("/documents")({
       docs,
       linkCounts,
       allDocs,
+      unfiledCount: allDocs.filter((d) => d.deletedAt === null && d.folderId === null).length,
       trashFolders: allFolders.filter((f) => f.deletedAt !== null),
       trashDocs: allDocs.filter((d) => d.deletedAt !== null),
     };
@@ -114,7 +117,9 @@ function DocumentsPage() {
     setConfirmDelete(null);
     const deleted = await showingError(() => folderRepo.softDeleteTree(folder.id));
     if (!deleted) return;
-    await navigate({ search: (s) => ({ ...s, folder: folder.parentId ?? undefined }) });
+    await navigate({
+      search: (s) => ({ ...s, folder: folder.parentId ?? undefined, unfiled: undefined }),
+    });
     await refresh();
     toast(`Deleted ${folder.name}.`, {
       duration: 8000,
@@ -152,7 +157,13 @@ function DocumentsPage() {
       description="Receipts, forms and statements, kept on this device and sorted by year."
     >
       <div className="grid gap-4 @3xl:grid-cols-[16rem_1fr]">
-        <FolderTree tree={tree} selected={folderId} trash={search.trash === true} />
+        <FolderTree
+          tree={tree}
+          selected={folderId}
+          unfiled={search.unfiled === true}
+          unfiledCount={data.unfiledCount}
+          trash={search.trash === true}
+        />
 
         <div className="grid min-w-0 content-start gap-4">
           {search.trash ? (
@@ -366,7 +377,9 @@ function DocumentsPage() {
         }
         onSubmit={async (name, where) => {
           const made = await folderRepo.create({ name, parentId: where });
-          await navigate({ search: (s) => ({ ...s, folder: made.id, q: undefined }) });
+          await navigate({
+            search: (s) => ({ ...s, folder: made.id, unfiled: undefined, q: undefined }),
+          });
           await refresh();
         }}
       />

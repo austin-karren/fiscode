@@ -76,7 +76,11 @@ export function LinkedDocuments({
             <li key={l.id} className="flex min-w-0 items-center justify-between gap-2">
               <Link
                 to="/documents"
-                search={{ folder: l.document.folderId ?? undefined, doc: l.document.id }}
+                search={{
+                  folder: l.document.folderId ?? undefined,
+                  unfiled: l.document.folderId === null ? true : undefined,
+                  doc: l.document.id,
+                }}
                 className="min-w-0 truncate underline-offset-4 hover:underline"
               >
                 {l.document.name}
