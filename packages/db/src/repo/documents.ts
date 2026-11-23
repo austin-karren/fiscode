@@ -172,13 +172,14 @@ export const folderRepo = {
     parentId: string | null;
     name: string;
   }): Promise<PathPreview> {
+    const name = validFolderName(input.name);
     const existing = input.id ? await requireFolder(input.id) : undefined;
     const at = nowIso();
     const next: DocumentFolderRow = existing
-      ? { ...existing, parentId: input.parentId, name: input.name, updatedAt: at }
+      ? { ...existing, parentId: input.parentId, name, updatedAt: at }
       : {
           id: newId(),
-          name: input.name,
+          name,
           parentId: input.parentId,
           taxYear: null,
           sortOrder: 0,
@@ -198,7 +199,7 @@ export const folderRepo = {
     const name = validFolderName(rawName);
     const folder = await requireFolder(id);
     if (!vaultFolderRules(folder.defaultKey).rename) {
-      throw new FolderFixedError("Year folders can't be renamed or moved.");
+      throw new FolderFixedError(folder.defaultKey);
     }
     assertNameFree(name, folder.parentId ?? null, await liveFolders(), id);
     return folderUpdate(folder, { name }, hooks);
@@ -215,11 +216,7 @@ export const folderRepo = {
   ): Promise<DocumentFolderRow> {
     const folder = await requireFolder(id);
     if (!vaultFolderRules(folder.defaultKey).move) {
-      throw new FolderFixedError(
-        folder.defaultKey === YEAR_ROOT_KEY
-          ? "Year folders can't be renamed or moved."
-          : "Default folders can't be moved.",
-      );
+      throw new FolderFixedError(folder.defaultKey);
     }
     const folders = await liveFolders();
     if (newParentId !== null) {
@@ -714,11 +711,13 @@ export const documentRepo = {
     folderId: string | null;
     name: string;
   }): Promise<PathPreview> {
+    // As the save: a rename validates the name; an upload keeps the file's own name.
+    const name = input.id ? validDocumentName(input.name) : input.name;
     const at = nowIso();
     if (input.id) {
       const doc = await requireDocument(input.id);
       return previewDocumentPath(
-        { ...doc, folderId: input.folderId, name: input.name, updatedAt: at },
+        { ...doc, folderId: input.folderId, name, updatedAt: at },
         false,
         linkedDates,
       );
@@ -726,7 +725,7 @@ export const documentRepo = {
     const next: DocumentRow = {
       id: newId(),
       folderId: input.folderId,
-      name: input.name,
+      name,
       mime: documentMimeFor(input.name, "") ?? "application/octet-stream",
       sizeBytes: 0,
       sha256: "",
@@ -736,7 +735,7 @@ export const documentRepo = {
       deletedAt: null,
       createdAt: at,
       updatedAt: at,
-    } as DocumentRow;
+    };
     return previewDocumentPath(next, true, linkedDates);
   },
 

@@ -221,6 +221,13 @@ export const vaultFolderRules = (defaultKey: string | null): { rename: boolean; 
 /** A user rename or move that `vaultFolderRules` forbids (D5, § 5). */
 export class FolderFixedError extends DocumentError {
   override readonly name = "FolderFixedError";
+  constructor(readonly defaultKey: string | null) {
+    super(
+      defaultKey === YEAR_ROOT_KEY
+        ? "Year folders can't be renamed or moved."
+        : "Default folders can't be moved.",
+    );
+  }
 }
 /** A folder rename or move cancelled before its commit: nothing changed (§ 11.3). */
 export class OperationCancelledError extends DocumentError {

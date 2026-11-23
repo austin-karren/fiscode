@@ -141,6 +141,16 @@ describe("folderRepo.previewPath", () => {
     expect(await tree()).toEqual([`documents/a_b (2)/${today()} A.pdf`]);
   });
 
+  it("trims and validates the name as the save does", async () => {
+    const p = await folderRepo.previewPath({ parentId: null, name: "  Tax  " });
+    expect(p.path).toBe("documents/Tax");
+    await expect(folderRepo.previewPath({ parentId: null, name: "a/b" })).rejects.toThrow();
+    const d = await documentRepo.upload(file("A.pdf", "a"));
+    await expect(
+      documentRepo.previewPath({ id: d.id, folderId: null, name: " " }),
+    ).rejects.toThrow();
+  });
+
   it("a new folder", async () => {
     const top = await folderRepo.create({ name: "T" });
     const p = await folderRepo.previewPath({ parentId: top.id, name: "S" });
@@ -167,7 +177,7 @@ describe("fixed folders (D5, ADR § 5)", () => {
     const other = await folderRepo.create({ name: "Other things" });
     const before = await snapshot();
     await expect(folderRepo.rename(year!.id, "Y")).rejects.toThrow(
-      new FolderFixedError("Year folders can't be renamed or moved."),
+      "Year folders can't be renamed or moved.",
     );
     await expect(folderRepo.move(year!.id, other.id)).rejects.toBeInstanceOf(FolderFixedError);
     await expect(folderRepo.move(expenses!.id, other.id)).rejects.toThrow(
