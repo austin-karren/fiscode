@@ -70,8 +70,9 @@ exists outside a zip.
   backups/
     fiscode-backup-2026-11-23.zip.age
   _fiscode/
-    versions/<sha[0:2]>/<sha256>     older bytes History still references (no extension)
-    trash/<sha[0:2]>/<sha256>        bytes of soft-deleted documents
+    versions/<sha[0:2]>/<sha256>     old bytes, first saved by replace, revert or an outside edit
+    trash/<sha[0:2]>/<sha256>        old bytes, first saved by a soft delete
+                                     (a sha is in only one; read through resolveOldBytes, § 2)
 ```
 
 OPFS only, never in the vault folder (device-local):
@@ -87,12 +88,19 @@ vault-journal.json                   pending tree operations (§ 6)
 - The **journal never lives in the vault**: it is in OPFS. Another device has its own sqlite, so
   recovering against a journal synced from a foreign device would be wrong.
 - A soft-deleted document leaves the readable tree (it is in Trash in the app), so a person browsing
-  Drive never sees deleted files mixed with live ones. Its bytes are copied to `_fiscode/trash/` (then the
-  live file is removed) so undo still works. Purging Trash is out of scope here; today blobs are never deleted and that stays.
+  Drive never sees deleted files mixed with live ones. Its bytes are kept under `_fiscode/` by the
+  copy rule below (normally into `trash/`), then the live file is removed, so undo still works. Purging Trash is out of scope here; today blobs are never deleted and that stays.
 - One file per live document, even when two documents share bytes (today's dedupe). The tree must
   read correctly without the app, so duplicates are real copies; `_fiscode/versions` and `trash`
-  stay deduplicated by sha. A sha is stored in at most one of them: if History references it,
-  it is in `versions/` (which wins), else in `trash/`.
+  stay deduplicated by sha.
+- **Old bytes: one lookup and one copy rule.** Every path that reads or writes old bytes uses these
+  two and nothing else:
+  - `resolveOldBytes(sha)`: look in `_fiscode/versions/`, then `_fiscode/trash/`. Every read from
+    `_fiscode/` uses it.
+  - **Copy rule:** copy a sha into `versions/` or `trash/` only if neither of them holds it already.
+  So a sha lives in exactly one of them: wherever it was first written. The migration puts
+  History-referenced shas in `versions/` and the rest in `trash/`. After that, the folder a sha is in
+  says only which op saved it first, and no reader depends on it.
 - **Bytes leave `_fiscode/` only by copy, never by move** (temp name, then rename into place).
   Two documents can share one sha there (D12), so moving it out for one would strip the other.
   A `_fiscode/` file is removed only when no row and no History entry references its sha, which
@@ -224,14 +232,17 @@ deleted state, or a folder's name or parent; a History revert of notes only is n
    `runAtomic` transaction.
 5. Rewrite `fiscode.json`, delete the journal, then delete the `vault_applied` row.
 
-Bytes that must survive for undo are recorded as their own ops. Soft delete is `copy live →
-trash/<sha>` (skipped when `trash/` **or `versions/`** already holds the sha) then `remove live`. **Replace bytes** and a **History revert to
-older bytes** are `copy live → versions/<current sha>` (skipped when `versions/` **or `trash/`** already holds the sha), then `copy
-versions/<old sha> → <tmp>` and rename over the live path. Restore from Trash is `copy
-<sha> → <path>`, where the sha is looked up in `versions/` first, then `trash/` (a sha lives in
-only one of them, and `versions/` wins, § 2). Both skips keep the § 2 invariant that a sha lives in only one of `versions/` or `trash/`, and the
-versions-first lookup finds it either way. Rollback reverses the ops, and every `remove` it undoes has its bytes in
-`_fiscode/` from an earlier op of the same plan.
+Bytes that must survive for undo are recorded as their own ops. Each one cites the two § 2 rules:
+the copy rule for writes and `resolveOldBytes` for reads.
+- **Soft delete:** `copy live → trash/<sha>` under the copy rule, then `remove live`.
+- **Replace bytes** and **a History revert to older bytes:** `copy live → versions/<current sha>`
+  under the copy rule, then `copy resolveOldBytes(<old sha>) → <tmp>` (replace has no old sha:
+  it writes the new upload to `<tmp>`), then rename over the live path.
+- **Restore from Trash** and **a History revert of a soft delete:** `copy resolveOldBytes(<sha>) →
+  <tmp>`, then rename into the path.
+
+Rollback reverses the ops, and every `remove` it undoes has its bytes in `_fiscode/` from an
+earlier op of the same plan, found with `resolveOldBytes`.
 
 Crash safety: on boot (and before any new tree change) a journal that is present is **rolled
 forward** if a `vault_applied` row with its `planId` exists, and **rolled back** (ops reversed in
@@ -253,7 +264,7 @@ sqlite wins for metadata and the tree wins for bytes, through a **reconcile scan
 | Row's path holds the right sha                             | ok                                             |
 | Row's path missing, same sha found elsewhere in `documents/` | treat as an outside move: offer to adopt the new folder/name (D6) or move it back |
 | Row's path missing, sha nowhere                            | row shows "File not on this device" (existing state) |
-| Row's path holds a different sha                           | an outside edit: keep the new bytes as a new version (old bytes to `_fiscode/versions`), History records it |
+| Row's path holds a different sha                           | an outside edit: keep the new bytes as a new version (old bytes to `versions/` under the § 2 copy rule, so skipped when either folder holds them), History records it |
 | File with no row                                           | listed as "New in folder": one click to import it as a document in that folder |
 | `.*.fiscode-tmp`                                           | deleted (leftover of a crashed write)          |
 | A sync conflict copy: Nextcloud `* (conflicted copy *)`; Drive `<stem> (1).<ext>` **only when** `<stem>.<ext>` exists beside it and has a row | listed as a conflict, never imported silently. A lone `Invoice (1).pdf` is an ordinary "New in folder" file |
@@ -302,8 +313,8 @@ device with a fresh database is restored by importing that CSV and adopting the 
   zip where there is no picker.
 - **Backup** stays as it is: one deterministic zip, age-encrypted, `fiscode-backup-<date>.zip.age`.
   Only the paths inside change: `manifest.json` becomes `fiscode.json` (format bumps to
-  `formatVersion: 2`), live files use the § 3 names, `.versions` moves to `_fiscode/versions`,
-  soft-deleted bytes go to `_fiscode/trash`. Readers keep accepting format 1.
+  `formatVersion: 2`), live files use the § 3 names, `.versions` is replaced by `_fiscode/`,
+  written exactly as the store holds it (`versions/` and `trash/`, § 2). Readers keep accepting format 1.
 - **Restore** is 1:1: every file in the zip or folder is checked against `fiscode.json` (size and
   sha256) before anything is written, as `readBackup` does now; then rows are imported and each
   file is written to its manifest path. A test restores a vault into an empty store and asserts the
@@ -324,7 +335,8 @@ Backup and restore wait until it is done. Steps:
    Also the `vault_applied(plan_id text primary key)` table (§ 6).
 2. For each live document (sorted by `added_at, id` so collision suffixes are stable): compute its
    path, copy `documents/blobs/<sha>` to `vault/<path>` via temp name, set `vault_path`. Then copy
-   every other referenced blob to `_fiscode/versions` or `_fiscode/trash`.
+   every other referenced blob into `_fiscode/` under the § 2 copy rule: History-referenced shas
+   to `versions/`, the rest to `trash/`.
 3. Write `fiscode.json`, verify every sha256, then mark the migration done in a `meta` row.
 4. Keep `documents/blobs/` for one release as a fallback (D9), and delete it in the next release,
    only after this verification has passed.
