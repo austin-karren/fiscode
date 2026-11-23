@@ -1,4 +1,4 @@
-import type { BackupProgress } from "@fiscode/backup";
+import type { BackupProgress, ExportVaultProgress } from "@fiscode/backup";
 
 // Words for the backup and restore dialogs: progress by phase, and passphrase strength.
 
@@ -40,3 +40,16 @@ export const downloadBlob = (blob: Blob, fileName: string) => {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
+
+const EXPORT_PHASES: Record<ExportVaultProgress["phase"], string> = {
+  reading: "Reading your data",
+  collecting: "Gathering files",
+  zipping: "Packing the zip",
+  writing: "Writing files",
+};
+
+/** Export vault's progress: "Writing files (3 of 12)", or just the phase when it has one step. */
+export const exportProgressLine = (p: ExportVaultProgress): string =>
+  p.total > 1
+    ? `${EXPORT_PHASES[p.phase]} (${Math.min(p.done, p.total)} of ${p.total})`
+    : EXPORT_PHASES[p.phase];
