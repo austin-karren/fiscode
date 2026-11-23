@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { createFileRoute, useLoaderData, useRouter } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+import { createFileRoute, useLoaderData, useLocation, useRouter } from "@tanstack/react-router";
 import { Button } from "@fiscode/ui/components/button";
 import { Input } from "@fiscode/ui/components/input";
 import { FieldCheckbox } from "../components/forms/field-checkbox";
@@ -720,26 +720,7 @@ function ProfileFormPanel({
       </EnterToSubmitForm>
 
       {/* Outside the profile form, so nothing in the dialog can submit it. */}
-      <Card id={rowAnchor("profile")}>
-        <CardHeader>
-          <CardTitle>
-            <SectionTitle>Documents</SectionTitle>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            Last year's return, an extension or a letter from the IRS or your state.
-          </p>
-          <AttachDialog
-            recordType="profile"
-            recordId="profile"
-            recordDate=""
-            recordLabel="your tax profile"
-            count={linkCount}
-            onChanged={() => router.invalidate()}
-          />
-        </CardContent>
-      </Card>
+      <ProfileDocumentsCard count={linkCount} onChanged={() => router.invalidate()} />
 
       <EnterToSubmitForm
         onSubmit={(e) => {
@@ -1069,5 +1050,43 @@ function ProfileFormPanel({
         </Card>
       </EnterToSubmitForm>
     </Page>
+  );
+}
+
+/** The profile's Attach, and the target of a link from a document ("#row-profile"). */
+function ProfileDocumentsCard({ count, onChanged }: { count: number; onChanged: () => void }) {
+  const highlighted = useLocation({ select: (l) => l.hash }) === rowAnchor("profile");
+  const ref = useRef<HTMLDivElement>(null);
+  // As a table row does: marked, and given focus so keyboard users land on it.
+  useEffect(() => {
+    if (highlighted) ref.current?.focus({ preventScroll: true });
+  }, [highlighted]);
+  return (
+    <Card
+      ref={ref}
+      id={rowAnchor("profile")}
+      tabIndex={highlighted ? -1 : undefined}
+      data-highlighted={highlighted || undefined}
+      className="scroll-mt-20 data-highlighted:bg-primary/10 data-highlighted:shadow-[inset_4px_0_0_var(--color-primary)] data-highlighted:outline-none"
+    >
+      <CardHeader>
+        <CardTitle>
+          <SectionTitle>Documents</SectionTitle>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Last year's return, an extension or a letter from the IRS or your state.
+        </p>
+        <AttachDialog
+          recordType="profile"
+          recordId="profile"
+          recordDate=""
+          recordLabel="your tax profile"
+          count={count}
+          onChanged={onChanged}
+        />
+      </CardContent>
+    </Card>
   );
 }

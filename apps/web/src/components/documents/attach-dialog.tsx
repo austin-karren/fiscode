@@ -273,7 +273,10 @@ function AttachBody({
             {query.trim() ? `No documents match "${query.trim()}".` : "No documents yet."}
           </p>
         ) : (
-          <ul aria-label="Documents" className="grid max-h-72 gap-1 overflow-y-auto">
+          <ul
+            aria-label="Documents"
+            className="grid max-h-[min(18rem,max(6rem,calc(100dvh-24rem)))] gap-1 overflow-y-auto"
+          >
             {shown.map((d) => (
               <li
                 key={d.id}
