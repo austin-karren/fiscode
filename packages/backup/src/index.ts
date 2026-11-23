@@ -7,6 +7,7 @@ import {
   BackupTooNewError,
   BackupUnexpectedFileError,
   isoFromDate,
+  safeSegment,
 } from "@fiscode/core";
 import { Decrypter, Encrypter } from "age-encryption";
 import {
@@ -216,28 +217,6 @@ export const referencedBlobs = (bundle: Bundle): Map<string, Set<string>> => {
     }
   }
   return out;
-};
-
-// Windows can't create these: the characters, and the device names (Microsoft's "Naming Files":
-// CON, PRN, AUX, NUL, COM1-9 and LPT1-9 with superscript ¹²³ too, CONIN$, CONOUT$) with or
-// without an extension.
-const WINDOWS_RESERVED_CHARS = /[<>:"|?*]/g;
-const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³]|conin\$|conout\$)(\.|$)/i;
-
-/**
- * One path segment that unzips anywhere: control characters and slashes dropped, Windows'
- * reserved characters as "_", no trailing dots or spaces, and a device name ("CON", "nul.txt")
- * prefixed with "_". Only the human path changes: a restore uses the manifest's sha256.
- */
-const safeSegment = (name: string): string => {
-  const cleaned = [...name]
-    .filter((ch) => ch.charCodeAt(0) >= 32 && ch !== "/" && ch !== "\\")
-    .join("")
-    .replace(WINDOWS_RESERVED_CHARS, "_")
-    .trim()
-    .replace(/[. ]+$/, "");
-  if (cleaned === "") return "_";
-  return WINDOWS_DEVICE_NAME.test(cleaned) ? `_${cleaned}` : cleaned;
 };
 
 /** "name (2).pdf": the number before the extension. */

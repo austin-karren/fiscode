@@ -121,13 +121,22 @@ export const validDocumentName = (raw: string): string => {
 };
 
 /**
+ * Whether two names or paths are the same place to fiscode. The one comparison for folder names
+ * (`freeFolderName`) and vault paths (`vaultPath`), so they never disagree. It is
+ * `localeCompare` at "base" sensitivity: case- AND accent-insensitive ("Cafe" = "café"), and
+ * NFC/NFD forms compare equal. That is stricter than Windows (case-insensitive only); a stricter
+ * rule only adds a " (2)" that wasn't strictly needed, and never lets two names collide on disk.
+ */
+export const sameName = (a: string, b: string): boolean =>
+  a.localeCompare(b, "en", { sensitivity: "base" }) === 0;
+
+/**
  * A folder name free among `siblingNames`: the name itself, or "Name (2)", "Name (3)", ... the
  * first not taken, matched without case. Used wherever a folder comes back or comes in and must
  * not refuse (History restore, restoreTree, Add rows / Update rows of another device's folders).
  */
 export const freeFolderName = (name: string, siblingNames: readonly string[]): string => {
-  const taken = (n: string) =>
-    siblingNames.some((s) => s.localeCompare(n, "en", { sensitivity: "base" }) === 0);
+  const taken = (n: string) => siblingNames.some((s) => sameName(s, n));
   let out = name;
   for (let i = 2; taken(out); i++) out = `${name} (${i})`;
   return out;
