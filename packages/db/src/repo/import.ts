@@ -179,7 +179,7 @@ const insertQueries = (
   }
   for (const row of bundle.w2Jobs) add(db.insert(w2Job).values(row));
   for (const row of bundle.estimatedPayments) add(db.insert(estimatedPayment).values(row));
-  // Document rows only: the bytes are blobs on this device (blob-store.ts), never in a CSV.
+  // Document rows only: the bytes are blobs on this device (vault/store.ts), never in a CSV.
   for (const row of bundle.documentFolders) add(db.insert(documentFolder).values(row));
   for (const row of bundle.documents) add(db.insert(document).values(row));
   for (const row of bundle.documentLinks) add(db.insert(documentLink).values(row));

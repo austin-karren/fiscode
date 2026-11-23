@@ -13,7 +13,8 @@ const originalTz = process.env.TZ;
 process.env.TZ = "America/Denver";
 
 const { exampleBundle } = await import("@fiscode/csv");
-const { __setBlobStoreForTests, importBundle, memoryBlobStore } = await import("@fiscode/db");
+const { __setVaultStoreForTests, importBundle, memoryDir, vaultStore } =
+  await import("@fiscode/db");
 const { setupTestDb, teardownTestDb } = await import("@fiscode/db/test");
 const { createBackup } = await import("./index.ts");
 const { checkRoundtrip } = await import("./node.ts");
@@ -24,12 +25,12 @@ const LATE_EVENING = "2026-11-21T05:55:00.000Z"; // 22:55 on 2026-11-20 in Denve
 let sqlite: Database.Database;
 beforeEach(async () => {
   sqlite = setupTestDb();
-  __setBlobStoreForTests(memoryBlobStore());
+  __setVaultStoreForTests(vaultStore(memoryDir()));
   await importBundle(exampleBundle() as never, "import-restore");
 });
 afterEach(() => {
   vi.useRealTimers();
-  __setBlobStoreForTests(undefined);
+  __setVaultStoreForTests(undefined);
   teardownTestDb(sqlite);
 });
 afterAll(() => {

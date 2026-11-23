@@ -27,7 +27,7 @@ import {
   type Cents,
 } from "@fiscode/core";
 import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
-import { getBlobStore, sha256Hex } from "../blob-store.ts";
+import { getVaultStore, sha256Hex } from "../vault/store.ts";
 import { getDb, runAtomic, type AtomicQuery } from "../client.ts";
 import {
   client,
@@ -457,7 +457,7 @@ const storeBytes = async (bytes: NamedBlob) => {
   const mime = documentMimeFor(bytes.name, bytes.type);
   if (!mime) throw new DocumentTypeNotAllowedError(bytes.name);
   const sha256 = await sha256Hex(bytes);
-  await getBlobStore().put(sha256, bytes);
+  await getVaultStore().put(sha256, bytes);
   return { mime, sha256, sizeBytes: bytes.size };
 };
 
@@ -547,7 +547,7 @@ export const documentRepo = {
   /** The current bytes, typed with the row's mime. Throws DocumentBytesMissingError. */
   async readBytes(id: string): Promise<Blob> {
     const d = await requireDocument(id);
-    const blob = await getBlobStore().get(d.sha256);
+    const blob = await getVaultStore().get(d.sha256);
     if (!blob) throw new DocumentBytesMissingError();
     return new Blob([blob], { type: d.mime });
   },
@@ -585,7 +585,7 @@ export const documentRepo = {
         sha256: after.sha256,
         sizeBytes: after.sizeBytes,
         name: after.name,
-        available: await getBlobStore().has(after.sha256),
+        available: await getVaultStore().has(after.sha256),
       });
     }
     return out;

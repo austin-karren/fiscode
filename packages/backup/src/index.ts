@@ -22,7 +22,7 @@ import {
 } from "@fiscode/csv";
 // Subpaths, not "@fiscode/db": its index loads boot.ts, which needs Vite (import.meta.glob), and
 // the headless script runs under plain Bun.
-import { getBlobStore, sha256Hex, type BlobStore } from "@fiscode/db/blob-store";
+import { getVaultStore, sha256Hex, type ShaStore } from "@fiscode/db/vault";
 import { buildBundle, importBundle } from "@fiscode/db/repo";
 import { strToU8, strFromU8, unzipSync, zipSync, type Zippable } from "fflate";
 
@@ -278,7 +278,7 @@ export const humanPaths = (bundle: Bundle): Map<string, string> => {
  */
 export const buildBackupZip = async (
   bundle: Bundle,
-  store: BlobStore,
+  store: ShaStore,
   options: {
     createdAt: string;
     build?: string;
@@ -372,7 +372,7 @@ export const createBackup = async (options: {
   options.onProgress?.({ phase: "reading", done: 0, total: 1 });
   const bundle = await buildBundle({ includeDeleted: true, includeHistory: true });
   options.onProgress?.({ phase: "reading", done: 1, total: 1 });
-  const { bytes, manifest, fileName } = await buildBackupZip(bundle, getBlobStore(), {
+  const { bytes, manifest, fileName } = await buildBackupZip(bundle, getVaultStore(), {
     createdAt: options.createdAt ?? new Date().toISOString(),
     build: options.build,
     onProgress: options.onProgress,
@@ -564,7 +564,7 @@ export const planBackupRestore = (
 /** Write the bytes, then the rows in one transaction (replacing everything, as Restore does). */
 export const restoreBackupInto = async (
   file: Extract<BackupFile, { ok: true }>,
-  store: BlobStore,
+  store: ShaStore,
   options: { onProgress?: ProgressFn } = {},
 ): Promise<void> => {
   const blobs = [...file.blobs];
@@ -585,4 +585,4 @@ export const restoreBackupInto = async (
 export const restoreBackup = (
   file: Extract<BackupFile, { ok: true }>,
   options: { onProgress?: ProgressFn } = {},
-): Promise<void> => restoreBackupInto(file, getBlobStore(), options);
+): Promise<void> => restoreBackupInto(file, getVaultStore(), options);

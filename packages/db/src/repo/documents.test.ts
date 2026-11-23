@@ -12,7 +12,14 @@ import {
   RecordNotFoundError,
 } from "@fiscode/core";
 import { setupTestDb, teardownTestDb } from "../test/setup-db.ts";
-import { __setBlobStoreForTests, memoryBlobStore, sha256Hex } from "../blob-store.ts";
+import {
+  __setVaultStoreForTests,
+  memoryDir,
+  sha256Hex,
+  vaultStore,
+  type VaultDirHandle,
+  type VaultStore,
+} from "../vault/index.ts";
 import {
   clientRepo,
   documentLinkRepo,
@@ -29,14 +36,16 @@ import { getDb } from "../client.ts";
 import { documentFolder } from "../schema/index.ts";
 
 let sqlite: Database.Database;
-let store: ReturnType<typeof memoryBlobStore>;
+let root: VaultDirHandle;
+let store: VaultStore;
 beforeEach(() => {
   sqlite = setupTestDb();
-  store = memoryBlobStore();
-  __setBlobStoreForTests(store);
+  root = memoryDir();
+  store = vaultStore(root);
+  __setVaultStoreForTests(store);
 });
 afterEach(() => {
-  __setBlobStoreForTests(undefined);
+  __setVaultStoreForTests(undefined);
   teardownTestDb(sqlite);
 });
 
@@ -150,7 +159,13 @@ describe("documentRepo", () => {
     const b = await documentRepo.upload(file("b.pdf", "same bytes"));
     expect(a.sha256).toBe(await sha256Hex(new Blob(["same bytes"])));
     expect(a.sha256).toBe(b.sha256);
-    expect(store.size()).toBe(1);
+    const blobs = await (await root.getDirectoryHandle("documents")).getDirectoryHandle("blobs");
+    const files: string[] = [];
+    for await (const [, prefix] of blobs.entries()) {
+      if (prefix.kind === "directory")
+        for await (const [name] of prefix.entries()) files.push(name);
+    }
+    expect(files).toEqual([a.sha256]);
     expect(a.id).not.toBe(b.id);
     expect(a.mime).toBe("application/pdf");
     expect(a.sizeBytes).toBe(10);
@@ -207,7 +222,7 @@ describe("documentRepo", () => {
 
   it("readBytes throws DocumentBytesMissingError when this device has no blob", async () => {
     const d = await documentRepo.upload(file("m.pdf", "m"));
-    __setBlobStoreForTests(memoryBlobStore());
+    __setVaultStoreForTests(vaultStore(memoryDir()));
     await expect(documentRepo.readBytes(d.id)).rejects.toBeInstanceOf(DocumentBytesMissingError);
   });
 
