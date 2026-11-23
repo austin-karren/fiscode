@@ -6,7 +6,15 @@ import {
   BackupPassphraseError,
   BackupTooNewError,
   BackupUnexpectedFileError,
+  folderPathFits,
+  freeFolderName,
   isoFromDate,
+  MAX_VAULT_PATH,
+  sameName,
+  shortenFolderNames,
+  VAULT_DOCUMENTS_DIR,
+  VAULT_UNFILED_DIR,
+  vaultPath,
   safeSegment,
   StorageQuotaError,
 } from "@fiscode/core";
@@ -857,6 +865,95 @@ export const planBackupRestore = (
   documents: file.documents,
 });
 
+/** A document path a restore shortened to fit the vault (§ 3.8), for the result line in PR 11. */
+export type RestoreShortened = { documentId: string; from: string; to: string };
+
+/** What a restore did that the user should see: the paths it shortened to fit (§ 3.8). */
+export type RestoreResult = { shortened: RestoreShortened[] };
+
+/**
+ * The never-refuse fallback for a restore (§ 3.8): each manifest path whose folder part fails
+ * `folderPathFits` gets its folder names shortened in one pass (`shortenFolderNames`, then the
+ * § 4 " (n)" rule among its new siblings), and a file name still too long has its title shortened
+ * by `vaultPath`. Paths that fit are kept as they are, so a restore stays 1:1 where it can.
+ * Deepest folders first, so a folder shared by several paths gets one disk name.
+ */
+export const fitRestorePaths = (
+  documents: ReadonlyMap<string, { path: string }>,
+): { paths: Map<string, string>; shortened: RestoreShortened[] } => {
+  const dirOf = (p: string) => p.slice(0, p.lastIndexOf("/"));
+  const entries = [...documents].toSorted(
+    ([a, x], [b, y]) => byString(x.path, y.path) || byString(a, b),
+  );
+  // Every folder's new disk path, by its manifest path; and each new folder's children's names.
+  const dirMap = new Map<string, string>([[VAULT_DOCUMENTS_DIR, VAULT_DOCUMENTS_DIR]]);
+  const children = new Map<string, string[]>();
+  const childOf = (parent: string, name: string) => {
+    const list = children.get(parent) ?? [];
+    if (!list.includes(name)) list.push(name);
+    children.set(parent, list);
+  };
+  const dirs = [...new Set(entries.map(([, d]) => dirOf(d.path)))];
+  for (const dir of dirs) {
+    const segs = dir.split("/");
+    for (let i = 1; i < segs.length; i++) childOf(segs.slice(0, i).join("/"), segs[i]!);
+  }
+  for (const dir of dirs.toSorted(
+    (a, b) => b.split("/").length - a.split("/").length || byString(a, b),
+  )) {
+    if (dirMap.has(dir)) continue;
+    const segs = dir.split("/").slice(1);
+    const fitted = folderPathFits(dir).fits ? segs : shortenFolderNames(segs).names;
+    let parentOld = VAULT_DOCUMENTS_DIR;
+    for (let i = 0; i < segs.length; i++) {
+      const old = `${parentOld}/${segs[i]}`;
+      let next = dirMap.get(old);
+      if (next === undefined) {
+        const parentNew = dirMap.get(parentOld)!;
+        let name = segs[i]!;
+        if (fitted[i] !== segs[i]) {
+          const siblings = (children.get(parentNew) ?? []).filter((n) => n !== segs[i]);
+          name = freeFolderName(fitted[i]!, siblings);
+          childOf(parentNew, name);
+        }
+        next = `${parentNew}/${name}`;
+        dirMap.set(old, next);
+        if (parentNew !== parentOld) childOf(parentNew, name);
+      }
+      parentOld = old;
+    }
+  }
+  const paths = new Map<string, string>();
+  const shortened: RestoreShortened[] = [];
+  const taken: string[] = [];
+  for (const [id, { path }] of entries) {
+    const dir = dirMap.get(dirOf(path))!;
+    let to = `${dir}/${path.slice(path.lastIndexOf("/") + 1)}`;
+    if (to.length > MAX_VAULT_PATH || taken.some((t) => sameName(t, to))) {
+      const name = path.slice(path.lastIndexOf("/") + 1);
+      const dot = name.lastIndexOf(".");
+      const stem = dot > 0 ? name.slice(0, dot) : name;
+      const date = /^(\d{4}-\d{2}-\d{2}) /.exec(stem)?.[1] ?? null;
+      const segs = dir.split("/").slice(1);
+      const unfiled = segs.length === 1 && segs[0] === VAULT_UNFILED_DIR;
+      const fit = vaultPath(
+        {
+          folders: unfiled ? null : segs,
+          date,
+          title: date ? stem.slice(date.length + 1) : stem,
+          ext: dot > 0 ? name.slice(dot + 1) : "bin",
+        },
+        taken,
+      );
+      to = `${dir}/${fit.path.slice(fit.path.lastIndexOf("/") + 1)}`;
+    }
+    taken.push(to);
+    paths.set(id, to);
+    if (to !== path) shortened.push({ documentId: id, from: path, to });
+  }
+  return { paths, shortened };
+};
+
 /**
  * The file half of a restore, as one plan (ADR § 6): `_fiscode/` files first (the copy rule),
  * then each document at its manifest path (bytes already at a path are kept in trash first), then
@@ -867,6 +964,7 @@ const planRestoreFiles = async (
   plan: PlanBuilder,
   store: VaultStore,
   file: Extract<BackupFile, { ok: true }>,
+  paths: ReadonlyMap<string, string>,
   step: () => void,
 ) => {
   const bytesOf = (sha: string) => new Blob([part(file.blobs.get(sha)!)]);
@@ -876,7 +974,11 @@ const planRestoreFiles = async (
     await plan.keep(oldBytesFolder(path), await plan.stage(bytesOf(sha)), sha);
   }
   const targets = new Set<string>();
-  for (const { path, sha256 } of [...(file.vault?.documents.values() ?? [])].toSorted(byPath)) {
+  const docs = [...(file.vault?.documents ?? [])].map(([id, d]) => ({
+    path: paths.get(id)!,
+    sha256: d.sha256,
+  }));
+  for (const { path, sha256 } of docs.toSorted(byPath)) {
     step();
     targets.add(path);
     if (await store.holds(path, sha256)) continue;
@@ -914,16 +1016,18 @@ const planRestoreFiles = async (
  * The caller confirms first when there is data here. Replaces every row (one backup-restore
  * snapshot in History) and makes the tree the backup's, in one journaled tree change:
  * - format 2: every file to its manifest path, and each row's vault_path from the manifest, so
- *   the restored vault has the backup's `(path, sha256)` pairs;
+ *   the restored vault has the backup's `(path, sha256)` pairs, except a path over the § 3.8
+ *   budget, which is shortened (never refused) and listed in the result for PR 11's report;
  * - format 1: the bytes into the by-sha store first (outside the plan: a crash leaves only extra
  *   by-sha bytes), then the boot backstop's placement (§ 10 step 5).
  * Throws VaultMigratingError while the migration runs and VaultBusyError when another tab holds
- * the vault.
+ * the vault. The placement after the tree change takes the lock again: a crash between the two
+ * leaves format-1 rows unplaced until the next boot's backstop places them.
  */
 export const restoreBackup = async (
   file: Extract<BackupFile, { ok: true }>,
   options: { onProgress?: ProgressFn } = {},
-): Promise<void> => {
+): Promise<RestoreResult> => {
   assertVaultWritable();
   const store = getVaultStore();
   const total = (file.vault ? file.documents.files : file.blobs.size) + 1;
@@ -935,13 +1039,14 @@ export const restoreBackup = async (
       await store.put(sha, new Blob([part(bytes)]));
     }
   }
+  const fitted = fitRestorePaths(file.vault?.documents ?? new Map());
   await runTreeChange(async (plan) => {
     // Its own reason in History (not a CSV import's "import-restore"), with the backup's time.
     const queries = await importBundleQueries(file.bundle as never, "backup-restore", {
       backup: { createdAt: file.manifest.createdAt },
     });
-    await planRestoreFiles(plan, store, file, step);
-    for (const [id, { path }] of file.vault?.documents ?? []) {
+    await planRestoreFiles(plan, store, file, fitted.paths, step);
+    for (const [id, path] of fitted.paths) {
       queries.push(getDb().update(document).set({ vaultPath: path }).where(eq(document.id, id)));
     }
     return { queries, result: undefined };
@@ -950,6 +1055,7 @@ export const restoreBackup = async (
   // by the boot backstop's rules (§ 10 step 5), not on the next reload.
   await withVaultLock(() => placeUnplacedDocuments(store, linkedDates), { wait: true });
   options.onProgress?.({ phase: "writing", done: total, total });
+  return { shortened: fitted.shortened };
 };
 
 // ─── Export vault (ADR § 9, for d-ux's PR 12) ────────────────────────────────────────────────

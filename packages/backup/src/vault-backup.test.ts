@@ -118,7 +118,7 @@ const rezip = (entries: Record<string, Uint8Array>) =>
   new Blob([zipSync(entries) as unknown as ArrayBuffer]);
 
 describe("restore is 1:1 (ADR § 9)", () => {
-  it("into an empty store: the same (path, sha256) pairs, the same vault_paths, a byte-identical backup", async () => {
+  it("into an empty store (every path fits): the same (path, sha256) pairs, the same vault_paths, a byte-identical backup, nothing shortened", async () => {
     await seed();
     const pairs = await treePairs();
     // Live documents' paths. A soft-deleted row keeps its last path in sqlite only (a hint for
@@ -135,8 +135,9 @@ describe("restore is 1:1 (ADR § 9)", () => {
 
     emptyProfile();
     expect(await treePairs()).toEqual([]);
-    await restoreBackup(await open(first.blob));
+    const result = await restoreBackup(await open(first.blob));
 
+    expect(result.shortened).toEqual([]);
     expect(await treePairs()).toEqual(pairs);
     expect(await livePaths()).toEqual(paths);
     const second = await backup();
@@ -206,6 +207,37 @@ describe("restore is 1:1 (ADR § 9)", () => {
     emptyProfile();
     await restoreBackup(await open(first.blob));
     expect((await documentRepo.readBytes(doc!.id)).size).toBe(doc!.sizeBytes);
+  });
+});
+
+describe("restore never refuses a path over budget (§ 3.8)", () => {
+  it("shortens the folders and title to fit, writes the row's vault_path, and reports it", async () => {
+    await seed();
+    const entries = await zipOf((await backup()).blob);
+    const vault = JSON.parse(strFromU8(entries["fiscode.json"]!)) as {
+      documents: Record<string, { path: string; sha256: string; sizeBytes: number }>;
+    } & Record<string, unknown>;
+    const [id, d] = Object.entries(vault.documents)[0]!;
+    const long = `documents/${"A".repeat(100)}/${"B".repeat(100)}/2026-01-02 ${"t".repeat(60)}.pdf`;
+    const moved = { ...entries, [long]: entries[d.path]! };
+    delete moved[d.path];
+    const v = { ...vault, documents: { ...vault.documents, [id]: { ...d, path: long } } };
+    const blob = rezip({ ...moved, "fiscode.json": strToU8(JSON.stringify(v)) });
+
+    emptyProfile();
+    const result = await restoreBackup(await open(blob));
+
+    expect(result.shortened).toHaveLength(1);
+    const { documentId, from, to } = result.shortened[0]!;
+    expect({ documentId, from }).toEqual({ documentId: id, from: long });
+    expect(to.length).toBeLessThanOrEqual(240);
+    expect(to).toMatch(/^documents\/A+\/B+\/2026-01-02 t+\.pdf$/);
+    expect((await documentVaultPaths()).get(id)).toBe(to);
+    expect(await getVaultStore().holds(to, d.sha256)).toBe(true);
+    // The others are restored 1:1.
+    for (const [other, o] of Object.entries(vault.documents)) {
+      if (other !== id) expect((await documentVaultPaths()).get(other)).toBe(o.path);
+    }
   });
 });
 
