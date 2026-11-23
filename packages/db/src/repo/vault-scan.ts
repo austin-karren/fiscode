@@ -46,6 +46,12 @@ export type ScanMoved = {
   sha256: string;
   /** The folder adopting gives it: the nearest folder fiscode knows above `foundAt`; null = Unfiled. */
   adoptFolderId: string | null;
+  /**
+   * Set when `foundAt` is another row's own path (a swap or rotation of names outside the app).
+   * Adopt every entry of the swap together ("adopt all"); move back refuses while the other
+   * file is there.
+   */
+  swapped?: true;
 };
 
 /** A row whose file is nowhere in `documents/`: the row shows "File not on this device". */
@@ -143,9 +149,13 @@ export type ScanResult = ScanReport | { status: "skipped"; reason: "migrating" |
 
 export const SCAN_REPORT_KEY = "vault_scan_report";
 
-/** The badge count on Documents ("3 to review"). `changed` is done already, so it isn't counted. */
+/**
+ * The badge count on Documents ("3 to review"). Every edit and move counts, `changed` included:
+ * it is recorded already, but the user should see it until they dismiss it (acknowledgeChanged).
+ */
 export const scanReviewCount = (r: ScanReport) =>
   r.moved.length +
+  r.changed.length +
   r.ambiguous.length +
   r.tooLarge.length +
   r.missing.length +
@@ -393,15 +403,62 @@ const scan = async (
   // B1: the row's own path first. A file there with another sha is an outside edit, never a
   // move, even when its old bytes turn up elsewhere (a conflict copy usually holds them).
   const locate = await folderLocator();
+  const moved: ScanMoved[] = [];
+  const ambiguous: ScanAmbiguous[] = [];
+
+  // S2: swaps first. A row's own path holding the sha of another displaced row whose own path
+  // still has a file is that row moved there (a swap or rotation of names), never an outside
+  // edit: recording it would silently link each document to the other's bytes.
+  const withFile = displaced.filter((d) => d.atPath);
+  const swapIn = new Map<string, string[]>(); // row id → the displaced own paths holding its sha
+  const taken = new Set<string>(); // row ids whose own path holds another row's file
+  for (const d of withFile) {
+    const sha = shaOf.get(key(d.row.vaultPath));
+    const from = withFile.filter((q) => q !== d && q.row.sha256 === sha);
+    if (from.length !== 1) continue;
+    const q = from[0]!;
+    swapIn.set(q.row.id, [...(swapIn.get(q.row.id) ?? []), d.row.vaultPath]);
+    taken.add(d.row.id);
+  }
+  for (const d of withFile) {
+    const found = swapIn.get(d.row.id);
+    if (!found) continue;
+    if (found.length > 1) {
+      ambiguous.push({
+        documentId: d.row.id,
+        name: d.row.name,
+        path: d.row.vaultPath,
+        sha256: d.row.sha256,
+        foundAt: found.toSorted(),
+      });
+      continue;
+    }
+    moved.push({
+      documentId: d.row.id,
+      name: d.row.name,
+      path: d.row.vaultPath,
+      foundAt: found[0]!,
+      sha256: d.row.sha256,
+      adoptFolderId: locate(found[0]!),
+      swapped: true,
+    });
+  }
+
   const edits: { row: DocumentRow; bytes: Blob; sha: string }[] = [];
   const tooLarge: ScanTooLarge[] = [];
   const gone: typeof displaced = [];
   for (const d of displaced) {
-    if (!d.atPath) {
+    const isTaken = taken.has(d.row.id);
+    const isSwapped = swapIn.has(d.row.id);
+    // A row moved by a swap whose own path holds unknown bytes (an edit after the swap): that
+    // file stays unclaimed, so it shows as new in folder rather than as anyone's version.
+    if (d.atPath && (isTaken || !isSwapped)) claimed.add(key(d.row.vaultPath));
+    if (isSwapped) continue;
+    // No file at its path, or another row's file there: its own bytes may be elsewhere.
+    if (!d.atPath || isTaken) {
       gone.push(d);
       continue;
     }
-    claimed.add(key(d.row.vaultPath));
     if (d.atPath.size > MAX_DOCUMENT_BYTES) {
       tooLarge.push({
         documentId: d.row.id,
@@ -415,8 +472,6 @@ const scan = async (
   }
 
   // Then moves: the row's sha at exactly one other path that isn't a conflict copy.
-  const moved: ScanMoved[] = [];
-  const ambiguous: ScanAmbiguous[] = [];
   for (const d of gone) {
     const found = candidates.filter(
       (c) => c.sha === d.row.sha256 && !claimed.has(key(c.path)) && !looksLikeConflict(c.path),
@@ -730,6 +785,15 @@ export const importNewFiles = async (items: readonly ScanNewFile[]): Promise<Doc
     unknown: r.unknown.filter((u) => !paths.has(key(u.path))),
   }));
   return changes.map((c) => documents.get(c.next.id)!);
+};
+
+/** Dismiss outside edits from the badge: they are recorded already (History has them). */
+export const acknowledgeChanged = (items: readonly ScanChanged[]): Promise<void> => {
+  const ids = new Set(items.map((c) => c.documentId));
+  return dropFromLastReport((r) => ({
+    ...r,
+    changed: r.changed.filter((c) => !ids.has(c.documentId)),
+  }));
 };
 
 /**

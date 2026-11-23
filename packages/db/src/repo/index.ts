@@ -282,6 +282,7 @@ export { linkedDates } from "./documents.ts";
 export { prepareVault, resumeVaultMigration, runVaultStartup } from "./vault-boot.ts";
 export type { ShortenedFolder } from "./document-tree.ts";
 export {
+  acknowledgeChanged,
   adoptMoved,
   applyRecordDates,
   importNewFiles,

@@ -26,6 +26,7 @@ import {
 import { __resetVaultMigrationStateForTests, setVaultMigrationState } from "../vault/state.ts";
 import { documentLinkRepo, documentRepo, expenseRepo, folderRepo } from "./index.ts";
 import {
+  acknowledgeChanged,
   adoptMoved,
   applyRecordDates,
   importNewFiles,
@@ -172,21 +173,6 @@ describe("scanVault: the § 6 table", () => {
     // History can still go back to the bytes from before the edit.
     const versions = await documentRepo.versions(d.id);
     expect(versions.map((v) => v.available)).toEqual([true, true]);
-  });
-
-  it("checks a row's own path first: a swap of two names is two outside edits, nothing lost", async () => {
-    const a = await upload("A.pdf", "aaa");
-    const b = await upload("B.pdf", "bbb");
-    await outside(a.vaultPath!, "bbb");
-    await outside(b.vaultPath!, "aaa");
-    const r = done(await scanVault());
-    expect(r.moved).toEqual([]);
-    expect(r.changed.map((c) => [c.documentId, c.oldBytesKept]).sort()).toEqual(
-      [
-        [a.id, true],
-        [b.id, true],
-      ].sort(),
-    );
   });
 
   it("lists an allow-listed file with no row as new in its folder; ignores other files and _fiscode/", async () => {
@@ -674,5 +660,101 @@ describe("review r1 (d-data ruling)", () => {
       expect(Object.keys(JSON.parse(await f.text()) as object)).toHaveLength(1);
       expect((await store.list("")).map((e) => e.name)).not.toContain("vault-scan-cache.json");
     });
+  });
+});
+
+describe("review r2 (d-data ruling): S2 swaps are moves, never edits", () => {
+  const noEditsRecorded = async (ids: string[], shas: string[]) => {
+    for (const [i, id] of ids.entries()) expect((await rowOf(id)).sha256).toBe(shas[i]);
+  };
+
+  it("a 2-way swap of names is two moves, offered for adopt all, and nothing is relinked", async () => {
+    const a = await upload("A.pdf", "aaa");
+    const b = await upload("B.pdf", "bbb");
+    await outside(a.vaultPath!, "bbb");
+    await outside(b.vaultPath!, "aaa");
+    const r = done(await scanVault());
+    expect(r.changed).toEqual([]);
+    expect(r.unknown).toEqual([]);
+    expect(r.missing).toEqual([]);
+    expect(r.moved.map((m) => [m.documentId, m.foundAt, m.swapped]).sort()).toEqual(
+      [
+        [a.id, b.vaultPath, true],
+        [b.id, a.vaultPath, true],
+      ].sort(),
+    );
+    expect(scanReviewCount(r)).toBe(2);
+    await noEditsRecorded([a.id, b.id], [a.sha256, b.sha256]);
+    // Adopt all: each document takes the name of the place its bytes are now.
+    await adoptMoved(r.moved);
+    expect((await rowOf(a.id)).name).toBe("B.pdf");
+    expect((await rowOf(b.id)).name).toBe("A.pdf");
+    const after = done(await scanVault());
+    expect(after.ok).toBe(2);
+    expect(scanReviewCount(after)).toBe(0);
+  });
+
+  it("a 3-way rotation is three moves", async () => {
+    const a = await upload("A.pdf", "aaa");
+    const b = await upload("B.pdf", "bbb");
+    const c = await upload("C.pdf", "ccc");
+    await outside(a.vaultPath!, "ccc");
+    await outside(b.vaultPath!, "aaa");
+    await outside(c.vaultPath!, "bbb");
+    const r = done(await scanVault());
+    expect(r.changed).toEqual([]);
+    expect(r.moved.map((m) => [m.documentId, m.foundAt]).sort()).toEqual(
+      [
+        [a.id, b.vaultPath],
+        [b.id, c.vaultPath],
+        [c.id, a.vaultPath],
+      ].sort(),
+    );
+    expect(scanReviewCount(r)).toBe(3);
+    await noEditsRecorded([a.id, b.id, c.id], [a.sha256, b.sha256, c.sha256]);
+    await adoptMoved(r.moved);
+    expect(done(await scanVault()).ok).toBe(3);
+  });
+
+  it("a swap plus a real edit: the pair is moved, the edit recorded, and all three counted", async () => {
+    const a = await upload("A.pdf", "aaa");
+    const b = await upload("B.pdf", "bbb");
+    const c = await upload("C.pdf", "ccc");
+    await outside(a.vaultPath!, "bbb");
+    await outside(b.vaultPath!, "aaa");
+    await outside(c.vaultPath!, "ccc edited");
+    const r = done(await scanVault());
+    expect(r.moved.map((m) => m.documentId).sort()).toEqual([a.id, b.id].sort());
+    expect(r.changed.map((x) => x.documentId)).toEqual([c.id]);
+    expect(scanReviewCount(r)).toBe(3);
+    await noEditsRecorded([a.id, b.id], [a.sha256, b.sha256]);
+    // Dismissing the edit clears it from the badge; it stays recorded.
+    await acknowledgeChanged(r.changed);
+    const last = (await readLastScanReport())!;
+    expect(last.changed).toEqual([]);
+    expect(scanReviewCount(last)).toBe(2);
+    expect((await rowOf(c.id)).sha256).toBe(await sha256Hex(new Blob(["ccc edited"])));
+  });
+
+  it("a swap then an edit of one swapped file: one move, one missing, the edited file new", async () => {
+    const a = await upload("A.pdf", "aaa");
+    const b = await upload("B.pdf", "bbb");
+    await outside(a.vaultPath!, "bbb");
+    await outside(b.vaultPath!, "aaa edited");
+    const r = done(await scanVault());
+    expect(r.changed).toEqual([]);
+    expect(r.moved.map((m) => [m.documentId, m.foundAt])).toEqual([[b.id, a.vaultPath]]);
+    expect(r.missing.map((m) => m.documentId)).toEqual([a.id]);
+    expect(r.unknown.map((u) => u.path)).toEqual([b.vaultPath]);
+    await noEditsRecorded([a.id, b.id], [a.sha256, b.sha256]);
+  });
+
+  it("move back refuses a swap while the other file is at the row's path", async () => {
+    const a = await upload("A.pdf", "aaa");
+    const b = await upload("B.pdf", "bbb");
+    await outside(a.vaultPath!, "bbb");
+    await outside(b.vaultPath!, "aaa");
+    const r = done(await scanVault());
+    await expect(moveBack(r.moved.slice(0, 1))).rejects.toBeInstanceOf(VaultNameTakenError);
   });
 });

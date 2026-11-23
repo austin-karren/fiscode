@@ -1,5 +1,5 @@
 import { folderPathFits, VaultPathTooLongError } from "@fiscode/core";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { getDb, type AtomicQuery } from "../client.ts";
 import {
   document,
@@ -188,6 +188,8 @@ export const changeTree = (
 
       const queries: AtomicQuery[] = [...(changes.queries ?? [])];
       const docsOut = new Map<string, DocumentRow>();
+      const docQueriesAt = queries.length;
+      const repathed: string[] = [];
       const order = [...affected.keys()]
         .map((id) => docChanges.get(id)?.next ?? docsBefore.get(id)!)
         .toSorted(byAdded);
@@ -206,6 +208,8 @@ export const changeTree = (
         );
         if (placed.taken) taken.push(placed.taken);
         docsOut.set(next.id, placed.row);
+        if (prev && !change?.insert && placed.row.vaultPath !== prev.vaultPath)
+          repathed.push(next.id);
         if (change?.insert && !change.placeOnly) {
           queries.push(db.insert(document).values(placed.row));
           queries.push(
@@ -225,6 +229,16 @@ export const changeTree = (
               .where(eq(document.id, next.id)),
           );
         }
+      }
+
+      // Rows that trade paths (adopting a swap) would collide on the unique path index one update
+      // at a time: clear their paths first, in the same transaction.
+      if (repathed.length > 1) {
+        queries.splice(
+          docQueriesAt,
+          0,
+          db.update(document).set({ vaultPath: null }).where(inArray(document.id, repathed)),
+        );
       }
 
       const foldersOut = new Map<string, DocumentFolderRow>();
