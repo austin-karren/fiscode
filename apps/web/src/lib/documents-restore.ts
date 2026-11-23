@@ -1,10 +1,21 @@
-import { documentRepo, folderRepo } from "@fiscode/db";
+import { documentRepo, folderRepo, type ShortenedFolder } from "@fiscode/db";
 import type { DocumentFolderRow, DocumentRow } from "@fiscode/csv";
 import { folderPath } from "./documents-view";
 
 // A restore never fails: a taken name comes back as "Name (2)" and a gone parent as the year's
-// root or the top (#84). Say so when that happened; otherwise just "Restored".
-export async function landedLine(before: DocumentFolderRow): Promise<string> {
+// root or the top (#84). Say so when that happened; otherwise just "Restored". A folder name the
+// restore shortened to fit the path budget (`restoreTree`'s `shortened`, § 3.8) gets its own line.
+export async function landedLine(
+  before: DocumentFolderRow,
+  shortened: readonly ShortenedFolder[] = [],
+): Promise<string> {
+  const line = await placedLine(before);
+  if (shortened.length === 0) return line;
+  const cuts = shortened.map((s) => `${s.from} → ${s.to}`).join(", ");
+  return `${line} Shortened to fit: ${cuts}.`;
+}
+
+async function placedLine(before: DocumentFolderRow): Promise<string> {
   const after = await folderRepo.get(before.id);
   if (!after) return `Restored ${before.name}.`;
   const all = await folderRepo.list();

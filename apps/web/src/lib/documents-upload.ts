@@ -27,14 +27,16 @@ export async function uploadFiles(
   const { ok, failed } = await documentRepo.uploadMany(files, { folderId });
   const added = ok.map((d): UploadResult => {
     const first = known.get(d.sha256);
+    // Where the file landed in the vault folder (§ 11.5): the date and a " (n)" may be added.
+    const added = d.vaultPath ? `Added ${d.name} at ${d.vaultPath}` : `Added ${d.name}`;
     if (!first) {
       known.set(d.sha256, d);
-      return { name: d.name, ok: true, line: `Added ${d.name}.`, doc: d };
+      return { name: d.name, ok: true, line: `${added}.`, doc: d };
     }
     return {
       name: d.name,
       ok: true,
-      line: `Added ${d.name}: the same file as ${first.name} in ${pathOf(first.folderId)}.`,
+      line: `${added}: the same file as ${first.name} in ${pathOf(first.folderId)}.`,
       sameAs: first,
       doc: d,
     };

@@ -284,3 +284,32 @@ describe("restoring a document whose folder is in Trash (REVIEW #83 r5 F4)", () 
     );
   });
 });
+
+describe("vault paths in result lines (vault PR 8)", () => {
+  it("says the path each added file was saved at", async () => {
+    const folder = await folderRepo.create({ name: "Demo saved" });
+    const path = "documents/Demo saved/demo-saved.pdf";
+    const spy = vi.spyOn(documentRepo, "uploadMany").mockImplementationOnce(async (files, opts) => {
+      const real = await documentRepo.upload(files[0]!, opts);
+      return { ok: [{ ...real, vaultPath: path }], failed: [] };
+    });
+    const results = await uploadFiles(
+      [file("demo-saved.pdf", "%PDF saved", "application/pdf")],
+      folder.id,
+      [],
+      () => "Demo saved",
+    );
+    spy.mockRestore();
+    expect(results.map((r) => r.line)).toEqual([`Added demo-saved.pdf at ${path}.`]);
+  });
+
+  it("adds a 'shortened to fit' line when a restore shortened a folder name", async () => {
+    const folder = await folderRepo.create({ name: "Demo long folder name" });
+    const line = await landedLine(folder, [
+      { folderId: folder.id, from: "Demo long folder name", to: "Demo long" },
+    ]);
+    expect(line).toBe(
+      "Restored Demo long folder name. Shortened to fit: Demo long folder name → Demo long.",
+    );
+  });
+});

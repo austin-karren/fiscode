@@ -267,3 +267,22 @@ describe("a new folder can go at the top level (d-ux docs polish 1)", () => {
     );
   });
 });
+
+describe("name dialog note (vault PR 8)", () => {
+  it("describes the dialog with its note, such as a default folder's 'Only <year>'", () => {
+    render(
+      <NameDialog
+        open
+        onOpenChange={() => {}}
+        title="Rename folder"
+        label="Folder name"
+        submitLabel="Rename"
+        note="Only 2031: other years keep their own Expenses folder."
+        onSubmit={async () => {}}
+      />,
+    );
+    expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
+      "Only 2031: other years keep their own Expenses folder.",
+    );
+  });
+});

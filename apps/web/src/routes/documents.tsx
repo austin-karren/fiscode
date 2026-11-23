@@ -15,7 +15,12 @@ import { NameDialog } from "../components/documents/name-dialog";
 import { MoveDialog } from "../components/documents/move-dialog";
 import { DocumentSheet } from "../components/documents/document-sheet";
 import { FolderTree } from "../components/documents/folder-tree";
-import { ALLOWED_DOCUMENT_MIMES, YEAR_ROOT_KEY, validDocumentName } from "@fiscode/core";
+import {
+  ALLOWED_DOCUMENT_MIMES,
+  YEAR_ROOT_KEY,
+  validDocumentName,
+  vaultFolderRules,
+} from "@fiscode/core";
 import { documentLinkRepo, documentRepo, folderRepo } from "@fiscode/db";
 import type { DocumentRow, DocumentFolderRow } from "@fiscode/csv";
 import { fileKind, folderPath, formatBytes, subtreeOf } from "../lib/documents-view";
@@ -75,6 +80,8 @@ function DocumentsPage() {
   const refresh = () => router.invalidate();
   const { tree, folders, folderId, docs, linkCounts } = data;
   const current = folders.find((f) => f.id === folderId);
+  // Year folders are fixed; a year's default folders can be renamed but stay in their year (§ 5).
+  const rules = vaultFolderRules(current?.defaultKey ?? null);
   const openDoc = data.allDocs.find((d) => d.id === search.doc && d.deletedAt === null);
 
   const [dialog, setDialog] = useState<
@@ -115,8 +122,8 @@ function DocumentsPage() {
       action: {
         label: "Undo",
         onClick: async () => {
-          await folderRepo.restoreTree(deleted);
-          toast(await landedLine(folder));
+          const { shortened } = await folderRepo.restoreTree(deleted);
+          toast(await landedLine(folder, shortened));
           await refresh();
         },
       },
@@ -195,18 +202,22 @@ function DocumentsPage() {
                   </Button>
                   {current ? (
                     <>
-                      <Button
-                        variant="ghost"
-                        onClick={() => setDialog({ kind: "rename-folder", folder: current })}
-                      >
-                        Rename folder
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        onClick={() => setDialog({ kind: "move-folder", folder: current })}
-                      >
-                        Move folder
-                      </Button>
+                      {rules.rename ? (
+                        <Button
+                          variant="ghost"
+                          onClick={() => setDialog({ kind: "rename-folder", folder: current })}
+                        >
+                          Rename folder
+                        </Button>
+                      ) : null}
+                      {rules.move ? (
+                        <Button
+                          variant="ghost"
+                          onClick={() => setDialog({ kind: "move-folder", folder: current })}
+                        >
+                          Move folder
+                        </Button>
+                      ) : null}
                       <Button
                         variant="ghost"
                         className="text-destructive hover:text-destructive"
@@ -371,6 +382,7 @@ function DocumentsPage() {
         title="Rename folder"
         label="Folder name"
         initial={dialog?.kind === "rename-folder" ? dialog.folder.name : ""}
+        note={dialog?.kind === "rename-folder" ? renameNote(dialog.folder) : undefined}
         submitLabel="Rename"
         onSubmit={async (name) => {
           if (dialog?.kind !== "rename-folder") return;
@@ -452,6 +464,12 @@ const documentNameProblem = (name: string): string | undefined => {
     return err instanceof Error ? err.message : "That name can't be used.";
   }
 };
+
+// A year's default folder is renamed in that year only: other years keep their own (§ 5, D5).
+const renameNote = (folder: DocumentFolderRow): string | undefined =>
+  folder.defaultKey !== null && folder.defaultKey !== YEAR_ROOT_KEY && folder.taxYear !== null
+    ? `Only ${folder.taxYear}: other years keep their own ${folder.name} folder.`
+    : undefined;
 
 const n = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
