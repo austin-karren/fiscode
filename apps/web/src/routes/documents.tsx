@@ -21,6 +21,7 @@ import { useVaultReadOnly } from "../lib/vault-migration";
 import { ALLOWED_DOCUMENT_MIMES, YEAR_ROOT_KEY, validDocumentName } from "@fiscode/core";
 import { documentLinkRepo, documentRepo, folderRepo } from "@fiscode/db";
 import type { DocumentRow, DocumentFolderRow } from "@fiscode/csv";
+import { openFolderId, parseDocumentsSearch } from "../lib/documents-search";
 import { errorLine, fileKind, folderPath, formatBytes, subtreeOf } from "../lib/documents-view";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { uploadFiles, type UploadResult } from "../lib/documents-upload";
@@ -28,16 +29,8 @@ import { landedLine, restoreDocument } from "../lib/documents-restore";
 import { focusAfterRemoval } from "../lib/focus-after-removal";
 import { formatDate } from "../lib/format-date";
 
-type Search = { folder?: string; unfiled?: boolean; doc?: string; trash?: boolean; q?: string };
-
 export const Route = createFileRoute("/documents")({
-  validateSearch: (s: Record<string, unknown>): Search => ({
-    folder: typeof s.folder === "string" ? s.folder : undefined,
-    unfiled: s.unfiled === true || s.unfiled === "1" || s.unfiled === 1 ? true : undefined,
-    doc: typeof s.doc === "string" ? s.doc : undefined,
-    trash: s.trash === true || s.trash === "1" || s.trash === 1 ? true : undefined,
-    q: typeof s.q === "string" && s.q ? s.q : undefined,
-  }),
+  validateSearch: parseDocumentsSearch,
   loaderDeps: ({ search }) => search,
   loader: async ({ deps }) => {
     const year = yearOf(todayIso());
@@ -52,8 +45,7 @@ export const Route = createFileRoute("/documents")({
     ]);
     // By default_key, so a renamed year folder is still the year's.
     const yearFolder = folders.find((f) => f.defaultKey === YEAR_ROOT_KEY && f.taxYear === year);
-    // Unfiled: the documents with no folder (null), listed like any folder's.
-    const folderId = deps.unfiled ? null : (deps.folder ?? yearFolder?.id ?? null);
+    const folderId = openFolderId(deps, yearFolder?.id);
     const docs = deps.q
       ? await documentRepo.search(deps.q)
       : await documentRepo.listInFolder(folderId);
