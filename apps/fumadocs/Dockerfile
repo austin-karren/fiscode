@@ -12,7 +12,7 @@
 # repo root and "Dockerfile" to apps/fumadocs/Dockerfile.
 
 # ----- deps ----------------------------------------------------------------
-FROM oven/bun:1.3.14-alpine AS deps
+FROM oven/bun:1.4.3-alpine AS deps
 WORKDIR /repo
 
 COPY package.json bun.lock ./
@@ -31,7 +31,7 @@ COPY packages/config/package.json packages/config/
 RUN bun install --frozen-lockfile --ignore-scripts
 
 # ----- build ---------------------------------------------------------------
-FROM oven/bun:1.3.14-alpine AS build
+FROM oven/bun:1.4.3-alpine AS build
 WORKDIR /repo
 
 # Reuse the entire installed tree (root + every packages/*/node_modules).

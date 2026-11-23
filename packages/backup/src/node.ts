@@ -97,10 +97,10 @@ export const openProfileDir = async (dir: string): Promise<() => void> => {
 type Sqlite = { exec(sql: string): unknown; close(): void };
 
 /**
- * The SQLite driver for where this runs: Bun's built-in bun:sqlite under Bun (the repo's pinned
- * Bun 1.3 can't load better-sqlite3's native addon: it crashes), better-sqlite3 under Node (the
- * tests). The module names are variables so neither runtime's bundler or type checker needs the
- * other's driver.
+ * The SQLite driver for where this runs: Bun's built-in bun:sqlite under Bun (no native addon
+ * needed; old Bun crashed loading better-sqlite3's), better-sqlite3 under Node (the tests). The
+ * module names are variables so neither runtime's bundler or type checker needs the other's
+ * driver.
  */
 const openSqlite = async (file: string): Promise<{ sqlite: Sqlite; db: unknown }> => {
   if (typeof (globalThis as { Bun?: unknown }).Bun !== "undefined") {
