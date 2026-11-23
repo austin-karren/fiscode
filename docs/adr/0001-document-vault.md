@@ -247,6 +247,10 @@ Two backends behind one interface (replacing `BlobStore` with a `VaultStore`):
   in IndexedDB. Permission: on each visit `queryPermission({mode:"readwrite"})` returns `granted`,
   `prompt` or `denied`; `requestPermission` needs a user gesture. Chrome 122+ offers "Allow on every
   visit", which makes `granted` stick; otherwise the user re-grants with one click per session.
+- **sqlite never moves to the picked folder** (Austin, 2026-11-23). `fiscode.sqlite` always stays
+  in OPFS (§ 8). The picked folder holds what Austin opens outside the app: `documents/`,
+  `exports/` and `backups/`, plus `fiscode.json` and `.fiscode/`, which the app needs to keep
+  them consistent.
 - When a folder is picked, the vault lives there and OPFS keeps a read cache of recently viewed
   files only (D7). Without a folder, OPFS is the vault and the user gets the tree out through
   export and backup.
@@ -385,7 +389,7 @@ Austin accepted every recommendation. The "Chosen" column is binding; the other 
 | D4  | Path length budget | (a) 240 chars total, 120 bytes per name; (b) no total limit | (a): Windows Nextcloud clients refuse longer paths |
 | D5  | Year folders | (a) fixed; (b) renamable | (a) |
 | D6  | A file moved outside the app | (a) adopt the new place into sqlite; (b) move it back; (c) ask each time | (c) in the scan report, with "adopt all" |
-| D7  | With a picked folder, keep a full OPFS copy? | (a) cache only recently viewed; (b) full mirror | (a): halves storage; the folder is the vault. **Trade-off:** while the permission is lapsed, every file not recently viewed shows "File not on this device" until you click Reconnect (the banner says "Reconnect to see your files"). With "Allow on every visit" in Chrome this is rare; (b) avoids it at double the storage |
+| D7  | With a picked folder, keep a full OPFS copy? | (a) cache only recently viewed; (b) full mirror | (a): OPFS holds sqlite plus a document cache; the picked folder holds `documents/`, `exports/` and `backups/`, and sqlite never moves there (Austin, 2026-11-23). halves storage; the folder is the vault. **Trade-off:** while the permission is lapsed, every file not recently viewed shows "File not on this device" until you click Reconnect (the banner says "Reconnect to see your files"). With "Allow on every visit" in Chrome this is rare; (b) avoids it at double the storage |
 | D8  | Write the latest CSV into `exports/` on every backup | yes / no | yes: makes the vault restorable without the app |
 | D9  | After migration, keep `documents/blobs` one release | yes / no | yes, then delete in the next release |
 | D10 | Writes while the folder isn't granted | (a) block with a message; (b) queue and replay | (a) |
