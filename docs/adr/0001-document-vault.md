@@ -179,9 +179,9 @@ to folder and file names alike; this extends today's `safeSegment`:
    - **Restore, History revert and import never refuse.** When a restored or imported folder would
      not fit, folder names on its path are shortened in one bounded pass, from the top folder
      down, each cut at a grapheme boundary to no less than 1 grapheme (then the § 4 ` (n)` rule if the
-     shorter name is taken). If it still does not fit after that pass, the result is `fits: false`. The item
-     is kept where it is and reported, and nothing loops or refuses, and the result line reports it ("Restored *Long name…* as
-     *Long na (2)*: the full name was too long for the vault").
+     shorter name is taken). If it still does not fit after that pass, the result is `fits: false` and the
+     item is kept where it is; nothing loops or refuses. Either way the result line says what
+     happened ("Restored *Long name…* as *Long na (2)*: the full name was too long for the vault").
    - `folderPathFits(newPath, deepestDescendantSuffix = ""): { fits, overBy }` in `packages/core`
      is the pure check the dialogs use before saving, so they can show "Name too long" (PR 1). The repo enforces it in PR 3. Decision D4.
 
@@ -485,9 +485,9 @@ changes.
 | 6 | d-data | Reconcile scan + `ScanReport` (§ 6) | 3 |
 | 7 | d-data | Picked-folder backend, permission state, cache (§ 7, § 11.1-2) | 6 |
 | 8 | d-ux | Upload and rename dialogs show the final path; category rules in the tree (§ 11.5-6) | 1, 3 |
-| 9 | d-ux | Migration banner and read-only Documents during it (§ 10); long-op progress, cancel and error lines (§ 11.3, 11.7); the migration report and the restore/import "shortened to fit" lines, shown in `/documents/check` | 3 (migration and journaled rename/move, which used to be PR 4); 11 (the `/documents/check` page) |
+| 9 | d-ux | Migration banner and read-only Documents during it (§ 10); progress and cancel for migration and long ops, and their error lines (§ 11.3, 11.7) | 3 (migration and journaled rename/move, which used to be PR 4) |
 | 10 | d-ux | Vault settings: pick folder, reconnect banner, Firefox/Safari line (§ 11.1-2) | 7 |
-| 11 | d-ux | Scan report page `/documents/check`: moved, missing, new, conflicts (§ 11.4) | 6 |
+| 11 | d-ux | Scan report page `/documents/check`: moved, missing, new, conflicts (§ 11.4); also the migration report (§ 10) and the restore/import "shortened to fit" result lines (§ 3.8) | 3, 6 |
 | 12 | d-ux | Export vault: button, folder choice (picker, or a zip download without one), progress and cancel; "Busy in another tab" line (§ 9, § 11.3, § 11.9) | 2 (lock), 5 |
 
 PRs 1-3, 5 and 6 are useful alone (OPFS vault, better backups) before any picked folder exists.
