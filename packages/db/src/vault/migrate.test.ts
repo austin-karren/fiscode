@@ -270,3 +270,11 @@ describe("app start", () => {
     expect(getVaultMigrationState()).toEqual({ phase: "done" });
   });
 });
+
+describe("app start never blocks the app", () => {
+  it("prepareVault reports failed instead of throwing", async () => {
+    sqlite.exec("DROP TABLE meta");
+    await expect(prepareVault()).resolves.toBeUndefined();
+    expect(getVaultMigrationState().phase).toBe("failed");
+  });
+});

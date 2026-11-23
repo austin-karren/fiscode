@@ -15,11 +15,22 @@ import { linkedDates } from "./documents.ts";
 // first render, so Documents is read-only from its first paint when the migration is still to do.
 // `runVaultStartup` runs after: journal recovery, then the migration or the backstop.
 
-/** Reads whether the migration is done and sets the state. No lock, no file access. */
+/**
+ * Reads whether the migration is done and sets the state. No lock, no file access. Never throws:
+ * the app must render even when the vault can't start (the state says `failed`).
+ */
 export const prepareVault = async (): Promise<void> => {
-  setVaultMigrationState(
-    (await isVaultMigrated()) ? { phase: "done" } : { phase: "migrating", done: 0, total: 0 },
-  );
+  try {
+    setVaultMigrationState(
+      (await isVaultMigrated()) ? { phase: "done" } : { phase: "migrating", done: 0, total: 0 },
+    );
+  } catch (err) {
+    setVaultMigrationState({
+      phase: "failed",
+      message: err instanceof Error ? err.message : String(err),
+    });
+    console.error("vault prepare", err);
+  }
 };
 
 /**
