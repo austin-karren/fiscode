@@ -76,6 +76,7 @@ exists outside a zip.
 ```
 
 OPFS only, never in the vault folder (device-local):
+
 ```
 vault-journal.json                   pending tree operations (§ 6)
 ```
@@ -98,15 +99,15 @@ vault-journal.json                   pending tree operations (§ 6)
   - `resolveOldBytes(sha)`: look in `_fiscode/versions/`, then `_fiscode/trash/`. Every read from
     `_fiscode/` uses it.
   - **Copy rule:** copy a sha into `versions/` or `trash/` only if neither of them holds it already.
-  So a sha lives in exactly one of them: wherever it was first written. The migration puts
-  History-referenced shas in `versions/` and the rest in `trash/`. After that, the folder a sha is in
-  says only which op saved it first, and no reader depends on it.
+    So a sha lives in exactly one of them: wherever it was first written. The migration puts
+    History-referenced shas in `versions/` and the rest in `trash/`. After that, the folder a sha is in
+    says only which op saved it first, and no reader depends on it.
 - **Bytes leave `_fiscode/` only by copy, never by move** (temp name, then rename into place).
   Two documents can share one sha there (D12), so moving it out for one would strip the other.
   A `_fiscode/` file is removed only when no row and no History entry references its sha, which
   today means never.
 - The backup zip's contents become exactly `fiscode.json` + `documents/` + `_fiscode/versions` +
-  `_fiscode/trash` + the CSV, so unzipping a backup *is* a vault (§ 9).
+  `_fiscode/trash` + the CSV, so unzipping a backup _is_ a vault (§ 9).
 
 ### Manifest `fiscode.json`
 
@@ -117,13 +118,17 @@ vault-journal.json                   pending tree operations (§ 6)
   "writtenAt": "2026-11-23T10:00:00Z",
   "app": { "csvSchema": "…", "build": "…" },
   "documents": {
-    "<document id>": { "path": "documents/2026/Expenses/2026-03-04 Amazon NAS.pdf",
-                       "sha256": "<64 hex>", "sizeBytes": 123456 }
+    "<document id>": {
+      "path": "documents/2026/Expenses/2026-03-04 Amazon NAS.pdf",
+      "sha256": "<64 hex>",
+      "sizeBytes": 123456,
+    },
   },
-  "blobs": {                     // every other referenced byte file
-    "<sha256>": { "path": "_fiscode/versions/ab/<sha256>", "sizeBytes": 999 }
+  "blobs": {
+    // every other referenced byte file
+    "<sha256>": { "path": "_fiscode/versions/ab/<sha256>", "sizeBytes": 999 },
   },
-  "missing": ["<sha256>"]        // referenced but not on this device (as the backup has today)
+  "missing": ["<sha256>"], // referenced but not on this device (as the backup has today)
 }
 ```
 
@@ -144,6 +149,7 @@ vaultPath(doc, folders, takenPathsLowercase):
 ```
 
 **Derivation.** `<YYYY-MM-DD> <title>.<ext>`.
+
 - `date`: the date of the linked record (expense, income, mileage) when exactly one is linked,
   else the date the document was added. Decision D2.
 - `title`: the document's editable `name` with its extension removed. The user edits the title;
@@ -154,6 +160,7 @@ vaultPath(doc, folders, takenPathsLowercase):
 
 **Sanitising** (strictest of Windows, macOS, Linux, Nextcloud, Google Drive), applied per segment
 to folder and file names alike; this extends today's `safeSegment`:
+
 1. Unicode NFC (macOS stores NFD; Nextcloud compares NFC; without this one name can sync as two).
 2. Drop C0/C1 control characters and DEL.
 3. Replace `< > : " / \ | ? *` with `_` (Windows; `/` and `\` everywhere). Nextcloud also refuses
@@ -181,7 +188,7 @@ to folder and file names alike; this extends today's `safeSegment`:
      down, each cut at a grapheme boundary to no less than 1 grapheme (then the § 4 ` (n)` rule if the
      shorter name is taken). If it still does not fit after that pass, the result is `fits: false` and the
      item is kept where it is; nothing loops or refuses. Either way the result line says what
-     happened ("Restored *Long name…* as *Long na (2)*: the full name was too long for the vault").
+     happened ("Restored _Long name…_ as _Long na (2)_: the full name was too long for the vault").
    - `folderPathFits(newPath, deepestDescendantSuffix = ""): { fits, overBy }` in `packages/core`
      is the pure check the dialogs use before saving, so they can show "Name too long" (PR 1). The repo enforces it in PR 3. Decision D4.
 
@@ -205,17 +212,18 @@ subset of what it accepts, so a Drive mirror needs no further rewriting.
 - A year is a top-level folder under `documents/`: `documents/<year>/`. Its default children are
   the categories. Today's keys map as:
 
-  | default_key       | today's name     | vault folder        |
-  |-------------------|------------------|---------------------|
-  | `year-root`       | `<year>`         | `documents/<year>/` |
-  | `expenses`        | Expenses         | `Expenses` (D3)     |
-  | `income`          | Income           | `Income`            |
-  | `mileage`         | Mileage          | `Mileage`           |
-  | `health-insurance`| Health insurance | `Health insurance`  |
-  | `tax-forms`       | Tax forms        | `Tax forms`         |
-  | `other`           | Other            | `Other`             |
+  | default_key        | today's name     | vault folder        |
+  | ------------------ | ---------------- | ------------------- |
+  | `year-root`        | `<year>`         | `documents/<year>/` |
+  | `expenses`         | Expenses         | `Expenses` (D3)     |
+  | `income`           | Income           | `Income`            |
+  | `mileage`          | Mileage          | `Mileage`           |
+  | `health-insurance` | Health insurance | `Health insurance`  |
+  | `tax-forms`        | Tax forms        | `Tax forms`         |
+  | `other`            | Other            | `Other`             |
 
   The folder on disk is the folder's current `name`, and D3 keeps "Expenses", so nothing is renamed.
+
 - **User folders** are ordinary directories at their place in the tree, at any depth ≤ 8, inside
   a year or at the top level beside the years.
 - `Unfiled` (`folder_id` null) is `documents/Unfiled/`. A user folder named "Unfiled" at the top
@@ -235,6 +243,7 @@ that spans both, so we use a **write-ahead journal**, kept in OPFS (§ 2).
 Order of operations for any tree change (upload, rename, move, replace bytes, soft delete,
 restore from Trash, and **a History revert** that changes a document's name, folder, bytes or
 deleted state, or a folder's name or parent; a History revert of notes only is not a tree change):
+
 1. Compute the plan in memory: a new `planId` (uuid), the new rows, and a list of file ops
    `{op: "copy" | "move" | "remove", from, to, sha256}`.
 2. Write the plan to OPFS `vault-journal.json` (writables commit only on `close()`).
@@ -249,6 +258,7 @@ deleted state, or a folder's name or parent; a History revert of notes only is n
 
 Bytes that must survive for undo are recorded as their own ops. Each one cites the two § 2 rules:
 the copy rule for writes and `resolveOldBytes` for reads.
+
 - **Soft delete:** `copy live → trash/<sha>` under the copy rule, then `remove live`.
 - **Replace bytes** and **a History revert to older bytes:** `copy live → versions/<current sha>`
   under the copy rule, then `copy resolveOldBytes(<old sha>) → <tmp>` (replace has no old sha:
@@ -274,15 +284,15 @@ directory move is not supported everywhere. Large folders report progress (§ 11
 sqlite wins for metadata and the tree wins for bytes, through a **reconcile scan** that walks
 `documents/` and compares to sqlite by path and sha256:
 
-| Found                                                      | Action                                         |
-|------------------------------------------------------------|------------------------------------------------|
-| Row's path holds the right sha                             | ok                                             |
-| Row's path missing, same sha found elsewhere in `documents/` | treat as an outside move: offer to adopt the new folder/name (D6) or move it back |
-| Row's path missing, sha nowhere                            | row shows "File not on this device" (existing state) |
-| Row's path holds a different sha                           | an outside edit: keep the new bytes as a new version (old bytes to `versions/` under the § 2 copy rule, so skipped when either folder holds them), History records it |
-| File with no row                                           | listed as "New in folder": one click to import it as a document in that folder |
-| `.*.fiscode-tmp`                                           | deleted (leftover of a crashed write)          |
-| A sync conflict copy: Nextcloud `* (conflicted copy *)`; Drive `<stem> (1).<ext>` **only when** `<stem>.<ext>` exists beside it and has a row | listed as a conflict, never imported silently. A lone `Invoice (1).pdf` is an ordinary "New in folder" file |
+| Found                                                                                                                                         | Action                                                                                                                                                                |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Row's path holds the right sha                                                                                                                | ok                                                                                                                                                                    |
+| Row's path missing, same sha found elsewhere in `documents/`                                                                                  | treat as an outside move: offer to adopt the new folder/name (D6) or move it back                                                                                     |
+| Row's path missing, sha nowhere                                                                                                               | row shows "File not on this device" (existing state)                                                                                                                  |
+| Row's path holds a different sha                                                                                                              | an outside edit: keep the new bytes as a new version (old bytes to `versions/` under the § 2 copy rule, so skipped when either folder holds them), History records it |
+| File with no row                                                                                                                              | listed as "New in folder": one click to import it as a document in that folder                                                                                        |
+| `.*.fiscode-tmp`                                                                                                                              | deleted (leftover of a crashed write)                                                                                                                                 |
+| A sync conflict copy: Nextcloud `* (conflicted copy *)`; Drive `<stem> (1).<ext>` **only when** `<stem>.<ext>` exists beside it and has a row | listed as a conflict, never imported silently. A lone `Invoice (1).pdf` is an ordinary "New in folder" file                                                           |
 
 **Two devices, one synced folder** is out of scope for phase 1: one device writes the vault. A
 second device's scan would list the first device's uploads as "New in folder", and it imports
@@ -458,36 +468,36 @@ folder would not sync and History and Trash would break after a mirror or restor
 to another device would also be replayed against that device's different sqlite. No D-number
 changes.
 
-| #   | Decision | Options | Chosen |
-|-----|----------|---------|----------------|
-| D1  | Default vault backend | (a) OPFS by default, picked folder opt-in; (b) require a picked folder on Chromium | (a): works in every browser, no lost data if the permission lapses |
-| D2  | Date prefix source | (a) linked record's date, else added date; (b) always added date; (c) a document date field the user sets | (a), plus later (c) when the PDF importer reads dates |
-| D3  | Rename "Expenses" to "Receipts" | (a) yes for new years and migrate existing default folders; (b) keep "Expenses" | (b): matches the app's own nav words; the brief's "Receipts" was an example |
-| D4  | Path length budget | (a) 240 chars total, 120 bytes per name; (b) no total limit | (a): Windows Nextcloud clients refuse longer paths |
-| D5  | Year folders | (a) fixed; (b) renamable | (a) |
-| D6  | A file moved outside the app | (a) adopt the new place into sqlite; (b) move it back; (c) ask each time | (c) in the scan report, with "adopt all" |
-| D7  | With a picked folder, keep a full OPFS copy? | (a) cache only recently viewed; (b) full mirror | (a): OPFS holds sqlite plus a document cache; the picked folder holds `documents/`, `exports/` and `backups/`, and sqlite never moves there (Austin, 2026-11-23). Halves storage; the folder is the vault. **Trade-off:** while the permission is lapsed, every file not recently viewed shows "File not on this device" until you click Reconnect (the banner says "Reconnect to see your files"). With "Allow on every visit" in Chrome this is rare; (b) avoids it at double the storage |
-| D8  | Write the latest CSV into `exports/` on every backup | yes / no | yes: makes the vault restorable without the app |
-| D9  | After migration, keep `documents/blobs` one release | yes / no | yes, then delete in the next release |
-| D10 | Writes while the folder isn't granted | (a) block with a message; (b) queue and replay | (a) |
-| D11 | PDF preview | (a) browser viewer; (b) bundle pdf.js | (a) for now |
-| D12 | Duplicate bytes in two documents | (a) a real copy per document; (b) one file, the other a row only | (a): the tree must read right without the app |
+| #   | Decision                                             | Options                                                                                                   | Chosen                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Default vault backend                                | (a) OPFS by default, picked folder opt-in; (b) require a picked folder on Chromium                        | (a): works in every browser, no lost data if the permission lapses                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| D2  | Date prefix source                                   | (a) linked record's date, else added date; (b) always added date; (c) a document date field the user sets | (a), plus later (c) when the PDF importer reads dates                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| D3  | Rename "Expenses" to "Receipts"                      | (a) yes for new years and migrate existing default folders; (b) keep "Expenses"                           | (b): matches the app's own nav words; the brief's "Receipts" was an example                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| D4  | Path length budget                                   | (a) 240 chars total, 120 bytes per name; (b) no total limit                                               | (a): Windows Nextcloud clients refuse longer paths                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| D5  | Year folders                                         | (a) fixed; (b) renamable                                                                                  | (a)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| D6  | A file moved outside the app                         | (a) adopt the new place into sqlite; (b) move it back; (c) ask each time                                  | (c) in the scan report, with "adopt all"                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| D7  | With a picked folder, keep a full OPFS copy?         | (a) cache only recently viewed; (b) full mirror                                                           | (a): OPFS holds sqlite plus a document cache; the picked folder holds `documents/`, `exports/` and `backups/`, and sqlite never moves there (Austin, 2026-11-23). Halves storage; the folder is the vault. **Trade-off:** while the permission is lapsed, every file not recently viewed shows "File not on this device" until you click Reconnect (the banner says "Reconnect to see your files"). With "Allow on every visit" in Chrome this is rare; (b) avoids it at double the storage |
+| D8  | Write the latest CSV into `exports/` on every backup | yes / no                                                                                                  | yes: makes the vault restorable without the app                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| D9  | After migration, keep `documents/blobs` one release  | yes / no                                                                                                  | yes, then delete in the next release                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| D10 | Writes while the folder isn't granted                | (a) block with a message; (b) queue and replay                                                            | (a)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| D11 | PDF preview                                          | (a) browser viewer; (b) bundle pdf.js                                                                     | (a) for now                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| D12 | Duplicate bytes in two documents                     | (a) a real copy per document; (b) one file, the other a row only                                          | (a): the tree must read right without the app                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 ## 15. PR split
 
-| # | Owner | PR | Depends on |
-|---|-------|----|-----------|
-| 1 | d-data | `vaultFileName`, `vaultPath` and `folderPathFits` pure functions + tests in `packages/core` (§ 3, § 4) | — |
-| 2 | d-data | `VaultStore` interface, OPFS backend, journal and roll-forward/back, the `fiscode-vault` **Web Lock and `BroadcastChannel`**, `VaultBusyError` (§ 6, § 7, § 11.9); `BlobStore` callers move over. Until PR 3 the OPFS backend still reads and writes by sha (`documents/blobs`), since no `vault_path` exists yet; preview getter unchanged | 1 |
-| 3 | d-data | **Migration and journaled writes, one PR** (needs a migration slot): `vault_path` column and `vault_applied` table via `db:generate`, the resumable blob→tree job with its every-boot backstop, verification (§ 10), **and** every repo tree op through the journal (upload, rename, move, replace, soft delete, restore, History revert; § 6). They ship together so no write lands row-only after the job has run | 2 |
-| 4 | — | (folded into PR 3) | — |
-| 5 | d-data | Backup format 2 and Export vault, 1:1 restore test (§ 9) | 3 |
-| 6 | d-data | Reconcile scan + `ScanReport` (§ 6) | 3 |
-| 7 | d-data | Picked-folder backend, permission state, cache (§ 7, § 11.1-2) | 6 |
-| 8 | d-ux | Upload and rename dialogs show the final path; category rules in the tree (§ 11.5-6) | 1, 3 |
-| 9 | d-ux | Migration banner and read-only Documents during it (§ 10); progress and cancel for migration and long ops, and their error lines (§ 11.3, 11.7) | 3 (migration and journaled rename/move, which used to be PR 4) |
-| 10 | d-ux | Vault settings: pick folder, reconnect banner, Firefox/Safari line (§ 11.1-2) | 7 |
-| 11 | d-ux | Scan report page `/documents/check`: moved, missing, new, conflicts (§ 11.4); also the migration report (§ 10) and the restore/import "shortened to fit" result lines (§ 3.8) | 3, 6 |
-| 12 | d-ux | Export vault: button, folder choice (picker, or a zip download without one), progress and cancel; "Busy in another tab" line (§ 9, § 11.3, § 11.9) | 2 (lock), 5 |
+| #   | Owner  | PR                                                                                                                                                                                                                                                                                                                                                                                                                  | Depends on                                                     |
+| --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 1   | d-data | `vaultFileName`, `vaultPath` and `folderPathFits` pure functions + tests in `packages/core` (§ 3, § 4)                                                                                                                                                                                                                                                                                                              | —                                                              |
+| 2   | d-data | `VaultStore` interface, OPFS backend, journal and roll-forward/back, the `fiscode-vault` **Web Lock and `BroadcastChannel`**, `VaultBusyError` (§ 6, § 7, § 11.9); `BlobStore` callers move over. Until PR 3 the OPFS backend still reads and writes by sha (`documents/blobs`), since no `vault_path` exists yet; preview getter unchanged                                                                         | 1                                                              |
+| 3   | d-data | **Migration and journaled writes, one PR** (needs a migration slot): `vault_path` column and `vault_applied` table via `db:generate`, the resumable blob→tree job with its every-boot backstop, verification (§ 10), **and** every repo tree op through the journal (upload, rename, move, replace, soft delete, restore, History revert; § 6). They ship together so no write lands row-only after the job has run | 2                                                              |
+| 4   | —      | (folded into PR 3)                                                                                                                                                                                                                                                                                                                                                                                                  | —                                                              |
+| 5   | d-data | Backup format 2 and Export vault, 1:1 restore test (§ 9)                                                                                                                                                                                                                                                                                                                                                            | 3                                                              |
+| 6   | d-data | Reconcile scan + `ScanReport` (§ 6)                                                                                                                                                                                                                                                                                                                                                                                 | 3                                                              |
+| 7   | d-data | Picked-folder backend, permission state, cache (§ 7, § 11.1-2)                                                                                                                                                                                                                                                                                                                                                      | 6                                                              |
+| 8   | d-ux   | Upload and rename dialogs show the final path; category rules in the tree (§ 11.5-6)                                                                                                                                                                                                                                                                                                                                | 1, 3                                                           |
+| 9   | d-ux   | Migration banner and read-only Documents during it (§ 10); progress and cancel for migration and long ops, and their error lines (§ 11.3, 11.7)                                                                                                                                                                                                                                                                     | 3 (migration and journaled rename/move, which used to be PR 4) |
+| 10  | d-ux   | Vault settings: pick folder, reconnect banner, Firefox/Safari line (§ 11.1-2)                                                                                                                                                                                                                                                                                                                                       | 7                                                              |
+| 11  | d-ux   | Scan report page `/documents/check`: moved, missing, new, conflicts (§ 11.4); also the migration report (§ 10) and the restore/import "shortened to fit" result lines (§ 3.8)                                                                                                                                                                                                                                       | 3, 6                                                           |
+| 12  | d-ux   | Export vault: button, folder choice (picker, or a zip download without one), progress and cancel; "Busy in another tab" line (§ 9, § 11.3, § 11.9)                                                                                                                                                                                                                                                                  | 2 (lock), 5                                                    |
 
 PRs 1-3, 5 and 6 are useful alone (OPFS vault, better backups) before any picked folder exists.
