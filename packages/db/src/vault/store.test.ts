@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { memoryDir, type VaultDirHandle } from "./dir.ts";
-import { oldBytesPath, sha256Hex, vaultStore } from "./store.ts";
+import { oldBytesPath, sha256Hex, vaultStore, VaultWrongKindError } from "./store.ts";
 
 const bytes = (s: string) => new Blob([s]);
 const setup = () => {
@@ -35,6 +35,51 @@ describe("vaultStore by path", () => {
     await store.write("documents/2026/Expenses/a.pdf", bytes("two"));
     expect(await names(root, ["vault", "documents", "2026", "Expenses"])).toEqual(["a.pdf"]);
     expect(await (await store.read("documents/2026/Expenses/a.pdf"))!.text()).toBe("two");
+  });
+
+  it("replaces through remove-then-move where an engine won't move onto a taken name", async () => {
+    const root = memoryDir();
+    const strict = (dir: VaultDirHandle): VaultDirHandle => ({
+      ...dir,
+      getDirectoryHandle: async (n, o) => strict(await dir.getDirectoryHandle(n, o)),
+      getFileHandle: async (n, o) => {
+        const file = await dir.getFileHandle(n, o);
+        return {
+          ...file,
+          async move(newName) {
+            const taken = await dir.getFileHandle(newName).then(
+              () => true,
+              () => false,
+            );
+            if (taken) throw new DOMException(newName, "InvalidModificationError");
+            await file.move(newName);
+          },
+        };
+      },
+    });
+    const store = vaultStore(strict(root));
+    await store.write("x/a.pdf", bytes("one"));
+    await store.write("x/a.pdf", bytes("two"));
+    expect(await names(root, ["vault", "x"])).toEqual(["a.pdf"]);
+    expect(await (await store.read("x/a.pdf"))!.text()).toBe("two");
+    const sha = await sha256Hex(bytes("blob"));
+    await store.put(sha, bytes("blob"));
+    expect(await names(root, ["documents", "blobs", sha.slice(0, 2)])).toEqual([sha]);
+  });
+
+  it("gives a typed error, not 'not found', where a folder sits at a file's path", async () => {
+    const { store } = setup();
+    await store.write("documents/2026/a.pdf", bytes("a"));
+    for (const op of [
+      () => store.read("documents/2026"),
+      () => store.write("documents/2026", bytes("x")),
+      () => store.remove("documents/2026"),
+      () => store.read("documents/2026/a.pdf/inner.pdf"),
+      () => store.list("documents/2026/a.pdf"),
+    ]) {
+      await expect(op()).rejects.toBeInstanceOf(VaultWrongKindError);
+    }
+    expect(await store.list("documents")).toEqual([{ name: "2026", kind: "directory" }]);
   });
 
   it("moves idempotently, and finishes a half-done move", async () => {
@@ -73,6 +118,18 @@ describe("vaultStore by path", () => {
     await store.remove("documents/2026/Income/b.pdf");
     expect(await store.list("documents/2026")).toEqual([{ name: "a.pdf", kind: "file" }]);
     expect(await store.list("nowhere")).toEqual([]);
+  });
+
+  it("hides the temp file a crashed write leaves", async () => {
+    const { root, store } = setup();
+    await store.write("documents/a.pdf", bytes("a"));
+    const dir = await (await root.getDirectoryHandle("vault")).getDirectoryHandle("documents");
+    const tmp = await (
+      await dir.getFileHandle(".b.pdf.fiscode-tmp", { create: true })
+    ).createWritable();
+    await tmp.write(bytes("half"));
+    await tmp.close();
+    expect(await store.list("documents")).toEqual([{ name: "a.pdf", kind: "file" }]);
   });
 });
 

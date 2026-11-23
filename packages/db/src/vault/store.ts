@@ -1,5 +1,26 @@
-import { StorageQuotaError, VaultFileLockedError } from "@fiscode/core";
-import { isNotFound, type VaultDirHandle, type VaultFileHandle } from "./dir.ts";
+import { DocumentError, StorageQuotaError, VaultFileLockedError } from "@fiscode/core";
+import { isNotFound, isTypeMismatch, type VaultDirHandle, type VaultFileHandle } from "./dir.ts";
+
+/**
+ * A path, or a folder on the way to it, is a folder where a file is expected (or a file where a
+ * folder is). Not "not found": the name is taken, so nothing may be written there.
+ */
+export class VaultWrongKindError extends DocumentError {
+  override readonly name = "VaultWrongKindError";
+  constructor(readonly path: string) {
+    super(`"${path}" is a folder where a file should be, or a file where a folder should be.`);
+  }
+}
+
+/** Runs `fn`, turning a file-system type mismatch at `path` into VaultWrongKindError. */
+const kindChecked = async <T>(path: string, fn: () => Promise<T>): Promise<T> => {
+  try {
+    return await fn();
+  } catch (err) {
+    if (isTypeMismatch(err)) throw new VaultWrongKindError(path);
+    throw err;
+  }
+};
 
 /** Lowercase hex sha256 of the bytes (Web Crypto; also in Node 20+). */
 export const sha256Hex = async (bytes: Blob): Promise<string> => {
@@ -43,7 +64,10 @@ export type VaultStore = {
   move(from: string, to: string, sha256: string): Promise<void>;
   /** Done when `path` is gone. Removes directories left empty, up to the vault root. */
   remove(path: string): Promise<void>;
-  /** The entries of a directory, sorted; empty when it doesn't exist. */
+  /**
+   * The entries of a directory, sorted; empty when it doesn't exist. Hides `.<name>.fiscode-tmp`
+   * leftovers of a crashed write: they are never documents (the PR 6 scan deletes them).
+   */
   list(dir: string): Promise<VaultEntry[]>;
 
   /** Old bytes: `_fiscode/versions/`, then `_fiscode/trash/` (ADR § 2). */
@@ -67,6 +91,7 @@ const isQuotaError = (err: unknown): boolean =>
 const isLockedError = (err: unknown): boolean =>
   err instanceof DOMException &&
   (err.name === "NoModificationAllowedError" || err.name === "InvalidStateError");
+const isLockedErrorOrQuota = (err: unknown) => isLockedError(err) || isQuotaError(err);
 
 const split = (path: string) => {
   const parts = path.split("/").filter((p) => p !== "");
@@ -86,7 +111,9 @@ export const vaultStore = (root: VaultDirHandle): VaultStore => {
   const fileAt = async (path: string): Promise<VaultFileHandle | undefined> => {
     const { dirs, name } = split(path);
     try {
-      return await (await walk(await vaultDir(false), dirs, false)).getFileHandle(name);
+      return await kindChecked(path, async () =>
+        (await walk(await vaultDir(false), dirs, false)).getFileHandle(name),
+      );
     } catch (err) {
       if (isNotFound(err)) return undefined;
       throw err;
@@ -107,6 +134,23 @@ export const vaultStore = (root: VaultDirHandle): VaultStore => {
     }
   };
 
+  /**
+   * Writes `.<name>.fiscode-tmp`, then renames it over `name`, so `name` never holds a
+   * half-written file (ADR § 6 step 3). Chromium's move() replaces an existing file in one step
+   * (probed on PR #102). An engine that refuses to move onto a taken name gets the target removed
+   * first: that leaves a moment with no file at `name`, which the journal's ops repair on recovery.
+   */
+  const writeAtomic = async (dir: VaultDirHandle, name: string, bytes: Blob, label: string) => {
+    const tmp = await writeFile(dir, `.${name}${TMP_SUFFIX}`, bytes, label);
+    try {
+      await tmp.move(name);
+    } catch (err) {
+      if (!(err instanceof DOMException) || isLockedErrorOrQuota(err)) throw err;
+      await removeIn(dir, name);
+      await tmp.move(name);
+    }
+  };
+
   const blobDir = async (sha: string, create: boolean) =>
     walk(root, ["documents", "blobs", sha.slice(0, 2)], create);
   const blobHandle = async (sha: string) => {
@@ -124,7 +168,7 @@ export const vaultStore = (root: VaultDirHandle): VaultStore => {
     },
     async put(sha, bytes) {
       if (await store.has(sha)) return;
-      await writeFile(await blobDir(sha, true), sha, bytes, sha);
+      await writeAtomic(await blobDir(sha, true), sha, bytes, sha);
     },
     async get(sha) {
       const handle = await blobHandle(sha);
@@ -141,11 +185,14 @@ export const vaultStore = (root: VaultDirHandle): VaultStore => {
     },
     async write(path, bytes) {
       const { dirs, name } = split(path);
-      const dir = await walk(await vaultDir(true), dirs, true);
-      const tmpName = `.${name}${TMP_SUFFIX}`;
-      const tmp = await writeFile(dir, tmpName, bytes, path);
-      // One rename that replaces any file at `name`, so the final name never lacks a file.
-      await tmp.move(name);
+      await kindChecked(path, async () => {
+        const dir = await walk(await vaultDir(true), dirs, true);
+        // A folder at `name` must not be removed by the fallback below.
+        await dir.getFileHandle(name).catch((err: unknown) => {
+          if (!isNotFound(err)) throw err;
+        });
+        await writeAtomic(dir, name, bytes, path);
+      });
     },
     async copy(from, to, sha) {
       if (await store.holds(to, sha)) return;
@@ -170,6 +217,14 @@ export const vaultStore = (root: VaultDirHandle): VaultStore => {
         }
       } catch (err) {
         if (isNotFound(err)) return;
+        if (isTypeMismatch(err)) throw new VaultWrongKindError(path);
+        throw err;
+      }
+      try {
+        await dir.getFileHandle(name);
+      } catch (err) {
+        if (isNotFound(err)) return;
+        if (isTypeMismatch(err)) throw new VaultWrongKindError(path);
         throw err;
       }
       await removeIn(dir, name);
@@ -189,10 +244,14 @@ export const vaultStore = (root: VaultDirHandle): VaultStore => {
         );
       } catch (err) {
         if (isNotFound(err)) return [];
+        if (isTypeMismatch(err)) throw new VaultWrongKindError(path);
         throw err;
       }
       const out: VaultEntry[] = [];
-      for await (const [name, handle] of dir.entries()) out.push({ name, kind: handle.kind });
+      for await (const [name, handle] of dir.entries()) {
+        if (name.startsWith(".") && name.endsWith(TMP_SUFFIX)) continue;
+        out.push({ name, kind: handle.kind });
+      }
       return out.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     },
 

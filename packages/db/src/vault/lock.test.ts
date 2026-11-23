@@ -45,6 +45,19 @@ describe("withVaultLock", () => {
     expect(await withVaultLock(async () => "ran", { locks })).toBe("ran");
   });
 
+  it("releases the lock when the work throws", async () => {
+    const locks = fakeLocks();
+    await expect(
+      withVaultLock(
+        async () => {
+          throw new Error("boom");
+        },
+        { locks },
+      ),
+    ).rejects.toThrow("boom");
+    expect(await withVaultLock(async () => "next", { locks })).toBe("next");
+  });
+
   it("makes background work wait its turn", async () => {
     const locks = fakeLocks();
     const order: string[] = [];

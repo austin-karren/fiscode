@@ -65,7 +65,7 @@ export const applyOp = async (store: VaultStore, op: FileOp) => {
 /** The inverse of `op`, also idempotent, so it is safe on an op that never ran. */
 export const undoOp = async (store: VaultStore, op: FileOp) => {
   if (op.op === "move") {
-    // Not yet moved: `from` still holds it, and `to` was free when planned (assertTargetsFree).
+    // Not yet moved: `from` still holds it, and `to` was free when planned (checkPlan).
     if (await store.holds(op.from, op.sha256)) return store.remove(op.to);
     return store.move(op.to, op.from, op.sha256);
   }
@@ -89,12 +89,23 @@ const restoreOld = async (store: VaultStore, path: string, sha256: string) => {
 const isOldBytes = (path: string) => path.startsWith("_fiscode/");
 
 /**
- * A move, or a copy that doesn't replace, must land on a free path, so undoing it can remove
+ * Removes must keep their bytes first. A move, or a copy that doesn't replace, must land on a free path, so undoing it can remove
  * `to` without losing a file that was there before. PR 3 turns this into the name check.
  */
-const assertTargetsFree = async (store: VaultStore, plan: Plan) => {
-  for (const op of plan.ops) {
-    if (op.op === "remove" || (op.op === "copy" && (op.replaces || isOldBytes(op.to)))) continue;
+const checkPlan = async (store: VaultStore, plan: Plan) => {
+  for (const [i, op] of plan.ops.entries()) {
+    if (op.op === "remove") {
+      // Undoing a remove restores from _fiscode/, so its bytes must be kept there first: by an
+      // earlier copy in this plan (the copy rule) or already (ADR § 6).
+      const keptHere = plan.ops
+        .slice(0, i)
+        .some((o) => o.op === "copy" && isOldBytes(o.to) && o.sha256 === op.sha256);
+      if (!keptHere && !(await store.resolveOldBytes(op.sha256))) {
+        throw new Error(`Plan ${plan.planId} removes "${op.from}" before keeping its bytes`);
+      }
+      continue;
+    }
+    if (op.op === "copy" && (op.replaces || isOldBytes(op.to))) continue;
     if (await store.read(op.to)) throw new VaultNameTakenError(op.to);
   }
 };
@@ -143,7 +154,7 @@ export const vaultJournal = (
       withVaultLock(
         async () => {
           await recover();
-          await assertTargetsFree(store, plan);
+          await checkPlan(store, plan);
           await writeJournal(root, plan);
           try {
             await rollForward(store, plan);

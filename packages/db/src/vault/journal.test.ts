@@ -177,4 +177,12 @@ describe("vaultJournal.recover: a crash after each step", () => {
     });
     await expect(err).rejects.toThrow('Rolling back after "Error: sqlite said no" failed');
   });
+
+  it("refuses a plan that removes a file before keeping its bytes", async () => {
+    const s = await setup();
+    const plan: Plan = { planId: "p4", ops: s.plan.ops.slice(1) }; // no copy to trash first
+    await expect(s.journal.run(plan, async () => {})).rejects.toThrow("before keeping its bytes");
+    expect(await s.before()).toBe(true);
+    expect(await readJournal(s.root)).toBeUndefined();
+  });
 });

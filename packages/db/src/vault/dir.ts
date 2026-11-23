@@ -21,7 +21,11 @@ export type VaultDirHandle = {
 };
 
 export const isNotFound = (err: unknown): boolean =>
-  err instanceof DOMException && (err.name === "NotFoundError" || err.name === "TypeMismatchError");
+  err instanceof DOMException && err.name === "NotFoundError";
+
+/** A file where a folder was expected, or the other way round. */
+export const isTypeMismatch = (err: unknown): boolean =>
+  err instanceof DOMException && err.name === "TypeMismatchError";
 
 const notFound = (name: string) => new DOMException(`${name} not found`, "NotFoundError");
 
