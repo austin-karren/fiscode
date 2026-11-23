@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted (2026-11-23)
 ---
 
 # Document vault: documents are real files in a readable tree; sqlite holds metadata
@@ -12,8 +12,8 @@ writes, what a backup zip contains, and what Nextcloud or Drive will later mirro
 the source of truth for metadata, links and history; the tree is the source of the bytes. The two
 are kept in step by a journal and a reconcile scan.
 
-This ADR is design only. Every "Decision needed" is listed in § 14; the recommended option is what
-the rest of the text assumes.
+This ADR is design only. Austin accepted it on 2026-11-23. The decisions taken are listed in § 14, and
+the rest of the text follows them.
 
 ## 1. Current state
 
@@ -56,7 +56,7 @@ exists outside a zip.
   fiscode.json                       manifest (below)
   documents/
     2026/
-      Receipts/2026-03-04 Amazon NAS.pdf
+      Expenses/2026-03-04 Amazon NAS.pdf
       Income/2026-01-31 Acme 1099-NEC.pdf
       Mileage/…
       Health insurance/…
@@ -96,7 +96,7 @@ exists outside a zip.
   "writtenAt": "2026-11-23T10:00:00Z",
   "app": { "csvSchema": "…", "build": "…" },
   "documents": {
-    "<document id>": { "path": "documents/2026/Receipts/2026-03-04 Amazon NAS.pdf",
+    "<document id>": { "path": "documents/2026/Expenses/2026-03-04 Amazon NAS.pdf",
                        "sha256": "<64 hex>", "sizeBytes": 123456 }
   },
   "blobs": {                     // every other referenced byte file
@@ -172,14 +172,14 @@ subset of what it accepts, so a Drive mirror needs no further rewriting.
   | default_key       | today's name     | vault folder        |
   |-------------------|------------------|---------------------|
   | `year-root`       | `<year>`         | `documents/<year>/` |
-  | `expenses`        | Expenses         | `Receipts` (D3)     |
+  | `expenses`        | Expenses         | `Expenses` (D3)     |
   | `income`          | Income           | `Income`            |
   | `mileage`         | Mileage          | `Mileage`           |
   | `health-insurance`| Health insurance | `Health insurance`  |
   | `tax-forms`       | Tax forms        | `Tax forms`         |
   | `other`           | Other            | `Other`             |
 
-  The folder on disk is the folder's current `name`, so if D3 keeps "Expenses" nothing renames.
+  The folder on disk is the folder's current `name`, and D3 keeps "Expenses", so nothing is renamed.
 - **User folders** are ordinary directories at their place in the tree, at any depth ≤ 8, inside
   a year or at the top level beside the years.
 - `Unfiled` (`folder_id` null) is `documents/Unfiled/`. A user folder named "Unfiled" at the top
@@ -373,9 +373,11 @@ works in all four engines on desktop; on iOS Safari it shows page 1 inline and a
 preview is not good enough (D11). The bytes are verified against sha256 on first read from the
 picked folder, since sync may have changed them (§ 6).
 
-## 14. Decisions needed from Austin
+## 14. Decisions taken (Austin, 2026-11-23)
 
-| #   | Decision | Options | Recommendation |
+Austin accepted every recommendation. The "Chosen" column is binding; the other options are kept for the record.
+
+| #   | Decision | Options | Chosen |
 |-----|----------|---------|----------------|
 | D1  | Default vault backend | (a) OPFS by default, picked folder opt-in; (b) require a picked folder on Chromium | (a): works in every browser, no lost data if the permission lapses |
 | D2  | Date prefix source | (a) linked record's date, else added date; (b) always added date; (c) a document date field the user sets | (a), plus later (c) when the PDF importer reads dates |
