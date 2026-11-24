@@ -148,6 +148,8 @@ function NameForm({
           // to the page body and fires a blur that cleared the save's error (REVIEW #116 r2).
           readOnly={busy}
           aria-busy={busy || undefined}
+          // Read-only only while a save runs: it looks off too, like a disabled field.
+          className="read-only:bg-muted read-only:text-muted-foreground"
           aria-invalid={invalid ? true : undefined}
           aria-describedby={
             [errorShown ? `${id}-error` : "", preview ? `${id}-path` : ""]

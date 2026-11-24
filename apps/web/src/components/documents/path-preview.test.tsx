@@ -297,6 +297,9 @@ describe("REVIEW #116 r2: focus stays put while a save runs", () => {
     expect(field).toHaveFocus();
     expect(field).toHaveAttribute("readonly");
     expect(field).not.toBeDisabled();
+    // It looks off while it's off (REVIEW #116 r3): muted field, faded Rename.
+    expect(field).toHaveClass("read-only:bg-muted");
+    expect(screen.getByRole("button", { name: "Rename" })).toHaveClass("aria-disabled:opacity-50");
     fireEvent.blur(field);
     await act(async () => fail(new FolderFixedError("year")));
     expect(screen.getByRole("alert")).toHaveTextContent(new FolderFixedError("year").message);
