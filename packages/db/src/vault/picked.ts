@@ -5,7 +5,7 @@ import {
   VaultPermissionError,
 } from "@fiscode/core";
 import { isNotFound, type VaultDirHandle } from "./dir.ts";
-import { announceVaultChange, withVaultLock } from "./lock.ts";
+import { announceVaultChange, onVaultChange, withVaultLock } from "./lock.ts";
 import { MANIFEST_FILE } from "./manifest.ts";
 import { assertVaultWritable } from "./state.ts";
 import {
@@ -106,9 +106,10 @@ export const vaultCache = (root: VaultDirHandle) => {
         let total = 0;
         const keep: Entry[] = [];
         for (const e of next) {
-          total += e.size;
-          if (keep.length < CACHE_MAX_FILES && (total <= CACHE_MAX_BYTES || keep.length === 0)) {
+          const fits = total + e.size <= CACHE_MAX_BYTES || keep.length === 0;
+          if (keep.length < CACHE_MAX_FILES && fits) {
             keep.push(e);
+            total += e.size;
           } else await files.remove(e.path);
         }
         await writeJson(root, CACHE_INDEX, keep);
@@ -175,10 +176,9 @@ export const pickedFolderStore = (
       }
       return cache.read(path);
     },
-    async holds(path, sha) {
-      const bytes = await store.read(path);
-      return bytes !== undefined && (await sha256Hex(bytes)) === sha;
-    },
+    // The folder only: a cached copy says nothing about what the folder holds, and a check
+    // isn't a view, so it doesn't touch the cache.
+    holds: (path, sha) => guarded(() => inner.holds(path, sha)),
     write: (path, bytes) =>
       guarded(async () => {
         await inner.write(path, bytes);
@@ -273,7 +273,13 @@ const handleStore = () => (handles ??= indexedDbHandleStore());
  * App start (before the first render): use the picked folder when one is kept, else OPFS. Never
  * throws; a store that can't be read leaves OPFS, which still holds the cache.
  */
+let following = false;
 export const initVaultBackend = async (): Promise<void> => {
+  // Another tab's switch changes the kept handle: pick the backend up again (§ 11.9).
+  if (!following) {
+    following = true;
+    onVaultChange(() => void initVaultBackend());
+  }
   try {
     picked = canPickFolder() || handles ? await handleStore().get() : undefined;
   } catch (err) {
@@ -343,7 +349,9 @@ const copyTree = async (
   let n = 0;
   for (const path of files) {
     if (signal?.aborted) throw new OperationCancelledError();
-    if (!done.has(path)) {
+    // Every path is checked on the target, journaled or not: a resume may target another
+    // folder, or the source may have changed since. The journal only saves the copies.
+    {
       const bytes = await from.read(path);
       if (!bytes) throw new VaultIntegrityError(path);
       const sha = await sha256Hex(bytes);
@@ -354,8 +362,10 @@ const copyTree = async (
         await to.write(path, bytes);
         if (!(await to.holds(path, sha))) throw new VaultIntegrityError(path);
       }
-      journal.done.push(path);
-      await writeJson(root, SWITCH_JOURNAL, journal);
+      if (!done.has(path)) {
+        journal.done.push(path);
+        await writeJson(root, SWITCH_JOURNAL, journal);
+      }
     }
     onProgress?.({ phase: "copying", done: ++n, total: files.length });
   }

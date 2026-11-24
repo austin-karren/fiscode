@@ -4,6 +4,7 @@ import { memoryDir, type VaultDirHandle } from "./dir.ts";
 import {
   __setVaultBackendForTests,
   canPickFolder,
+  CACHE_MAX_BYTES,
   CACHE_MAX_FILES,
   initVaultBackend,
   pendingVaultSwitch,
@@ -152,7 +153,9 @@ describe("pickedFolderStore", () => {
     state.permission = "prompt";
     expect(await text(await store.read("documents/seen.pdf"))).toBe("seen");
     expect(await store.read("documents/unseen.pdf")).toBeUndefined();
-    expect(await store.holds("documents/seen.pdf", await sha256Hex(bytes("seen")))).toBe(true);
+    await expect(
+      store.holds("documents/seen.pdf", await sha256Hex(bytes("seen"))),
+    ).rejects.toBeInstanceOf(VaultPermissionError);
     expect((await store.resolveOldBytes(sha))?.path).toBe(oldBytesPath("trash", sha));
   });
 
@@ -176,6 +179,17 @@ describe("vaultCache", () => {
       `${CACHE_MAX_FILES}`,
     );
     expect(await text(await cache.read("documents/1.pdf"))).toBe("1");
+  });
+
+  it("an oversized file alone doesn't push out the files after it that fit", async () => {
+    const cache = vaultCache(opfs);
+    await cache.put("documents/small.pdf", bytes("s"));
+    await cache.put("documents/huge.pdf", new Blob([new Uint8Array(CACHE_MAX_BYTES)]));
+    await cache.put("documents/new.pdf", bytes("n"));
+    expect(await text(await cache.read("documents/new.pdf"))).toBe("n");
+    expect(await cache.read("documents/huge.pdf")).toBeUndefined();
+    await cache.put("documents/newer.pdf", bytes("m"));
+    expect(await text(await cache.read("documents/new.pdf"))).toBe("n");
   });
 });
 
@@ -253,6 +267,22 @@ describe("switching", () => {
     await switchVaultToFolder(folder);
     expect(await pendingVaultSwitch()).toBeUndefined();
     expect(handles.value).toBe(folder);
+  });
+
+  it("a resume into another folder still copies the files the journal counted", async () => {
+    await seed();
+    const ac = new AbortController();
+    await expect(
+      switchVaultToFolder(fakeFolder().folder, {
+        signal: ac.signal,
+        onProgress: (p) => p.done === 2 && ac.abort(),
+      }),
+    ).rejects.toBeInstanceOf(OperationCancelledError);
+    const { folder, dir } = fakeFolder();
+    await switchVaultToFolder(folder);
+    for (const p of ["fiscode.json", "documents/2026/Expenses/a.pdf", "exports/x.csv"]) {
+      expect(await has(dir, p)).toBe(true);
+    }
   });
 
   it("refuses to overwrite a different file already in the folder", async () => {
