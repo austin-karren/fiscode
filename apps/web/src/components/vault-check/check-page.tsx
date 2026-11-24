@@ -128,15 +128,32 @@ export function CheckPage({
             edited or added outside the app. Nothing is deleted from here.
           </p>
           <ReadOnlyNote reason={readOnly} />
-          <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={off} onClick={() => void checkNow()}>
-              {check.at === "running" ? "Checking…" : "Check now"}
-            </Button>
-            {report ? (
-              <span className="text-sm text-muted-foreground">
-                Last checked {formatDateTime(report.scannedAt)}
-              </span>
-            ) : null}
+          <div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button disabled={off} onClick={() => void checkNow()}>
+                {check.at === "running" ? "Checking…" : "Check now"}
+              </Button>
+              {report ? (
+                <span className="text-sm text-muted-foreground">
+                  Last checked {formatDateTime(report.scannedAt)}
+                </span>
+              ) : null}
+            </div>
+            {/* Always mounted, so a screen reader hears the lines when they arrive; the list
+                inside keeps its list role (REVIEW #118 r1). It shares
+                the row's grid cell, so empty it adds no gap (r2). */}
+            <div role="status">
+              {adopted.length > 0 ? (
+                <ul className="mt-3 grid gap-0.5 text-sm">
+                  {adopted.map((line, i) => (
+                    // Two files of the same name can go to Unfiled for the same reason.
+                    <li key={i} className="break-all">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
           </div>
           {check.at === "running" ? (
             <p role="status" className="text-sm">
@@ -144,20 +161,6 @@ export function CheckPage({
             </p>
           ) : null}
           {problem("check")}
-          {/* Always mounted, so a screen reader hears the lines when they arrive; the list
-              inside keeps its list role (REVIEW #118 r1). */}
-          <div role="status">
-            {adopted.length > 0 ? (
-              <ul className="grid gap-0.5 text-sm">
-                {adopted.map((line, i) => (
-                  // Two files of the same name can go to Unfiled for the same reason.
-                  <li key={i} className="break-all">
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
         </CardContent>
       </Card>
 
