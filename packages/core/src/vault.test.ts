@@ -85,6 +85,8 @@ describe("vaultFileName", () => {
       expect(name("12345 receipt")).toBe("2026-11-23 12345 receipt.pdf");
       expect(name("1899 deed")).toBe("2026-11-23 1899 deed.pdf");
       expect(name("2200 plan")).toBe("2026-11-23 2200 plan.pdf");
+    });
+    it("a leading date run into more text: prefixed", () => {
       expect(name("2026-08-12x")).toBe("2026-11-23 2026-08-12x.pdf");
     });
     it("a leading date that isn't a calendar day: prefixed", () => {

@@ -279,6 +279,17 @@ describe("scanVault: the § 6 table", () => {
     ]);
     expect(r.ok).toBe(1);
   });
+
+  it("a bare-year title has no date of its own to report", async () => {
+    const d = await upload("2025 W-2 Demo employer.pdf", "one");
+    const e = await expense("2026-03-16");
+    await documentLinkRepo.link(d.id, "expense", e.id);
+    expect((await rowOf(d.id)).vaultPath).toContain("/2025 W-2 Demo employer.pdf");
+    await expenseRepo.update(e.id, { date: "2026-04-02" } as never);
+    const r = done(await scanVault());
+    expect(r.redated).toEqual([]);
+    expect(r.ok).toBe(1);
+  });
 });
 
 describe("scan actions (D6: ask, with adopt all)", () => {

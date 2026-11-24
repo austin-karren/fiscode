@@ -93,7 +93,8 @@ const DATED_TITLE = /^(\d{4})-(\d{2})-(\d{2})(?: |$)/;
 // A tax-year label such as "2025 W-2". A space must follow: "2025" alone and "2025-budget" are
 // not read as a year label, so they keep the prefix.
 const YEAR_TITLE = /^(19\d{2}|2[01]\d{2}) /;
-// Only a real calendar day counts: "2026-13-40" and "2026-02-30" are not dates.
+// A leading year label or date. Only a real calendar day counts as a date: "2026-13-40" and
+// "2026-02-30" are not dates.
 const startsWithDate = (t: string): boolean => {
   if (YEAR_TITLE.test(t)) return true;
   const m = DATED_TITLE.exec(t);
@@ -112,8 +113,8 @@ const stripExt = (title: string, ext: string): { t: string; e: string } => {
 };
 /**
  * Whether a title already starts with a valid date or a year (1900-2199) and a space, so its
- * file name gets no date prefix. Pass
- * the file's `ext` when the title may end in it ("2026-08-12.pdf" is a dated title).
+ * file name gets no date prefix. Pass the file's `ext` when the title may end in it
+ * ("2026-08-12.pdf" is a dated title).
  */
 export const titleHasDate = (title: string, ext = ""): boolean =>
   startsWithDate(stripExt(title, ext).t);
@@ -130,8 +131,8 @@ export interface VaultFileNameInput {
 // The parts of a file name: "<prefix><title><suffix>.<ext>", sanitised, title not yet cut.
 const nameParts = ({ date, title, ext }: VaultFileNameInput) => {
   const { t, e } = stripExt(title, ext);
-  // A title that already starts with a date or a year names the file as it is, even when that date isn't
-  // the D2 date: prefixing it would give "2026-11-23 2026-08-12 ...".
+  // A title that already starts with a date or a year names the file as it is, even when that
+  // date isn't the D2 date: prefixing it would give "2026-11-23 2026-08-12 ...".
   if (startsWithDate(t)) return { prefix: "", title: t, ext: e };
   const prefix = date !== null && ISO_DATE.test(date) ? `${date} ` : "";
   return { prefix, title: t, ext: e };
