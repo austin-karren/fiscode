@@ -23,7 +23,8 @@ const utcDayFix = (doc: DocumentRow, linked: readonly string[]): string | undefi
 /**
  * The one-time re-path after the double-date fix (`vaultFileName`: a title that already starts
  * with a date gets no prefix). Every live placed document whose path differs from what the rule
- * gives now moves (and a prefix the app gave by the old UTC day takes the local day), each in its own journaled plan under the vault lock, with the collision rule.
+ * gives now moves (and a prefix the app gave by the old UTC day takes the local day), each in
+ * its own journaled plan under the vault lock, with the collision rule.
  * A crash or cancel leaves the moved files moved; the next run finishes the rest, then marks it
  * done. A path that would be over budget stays where it is. Returns how many files moved.
  */
@@ -49,9 +50,13 @@ export const repathDocuments = async (hooks: RunHooks = {}): Promise<number> => 
       .where(eq(document.id, listed.id))
       .limit(1)) as DocumentRow[];
     if (!doc || doc.deletedAt !== null || !doc.vaultPath) continue;
-    const fix = utcDayFix(doc, (await linkedDates([doc.id])).get(doc.id) ?? []);
+    const linked = await linkedDates([doc.id]);
+    // The preview reuses this read for the document itself, so it is one query per document.
+    const datesFor = (ids: readonly string[]) =>
+      ids.length === 1 && ids[0] === doc.id ? Promise.resolve(linked) : linkedDates(ids);
+    const fix = utcDayFix(doc, linked.get(doc.id) ?? []);
     const dates = fix ? [fix] : undefined;
-    const want = await previewDocumentPath(doc, false, linkedDates, dates);
+    const want = await previewDocumentPath(doc, false, datesFor, dates);
     if (!want.fits || want.path === doc.vaultPath) continue;
     // placeOnly: the place changes, not the document, so no History row.
     const { documents } = await changeTree(
