@@ -1,5 +1,6 @@
 import { assertVaultWritable } from "../vault/state.ts";
 import { newId } from "@fiscode/core";
+import { eq } from "drizzle-orm";
 
 import type { Bundle } from "../bundle.ts";
 import { getDb, runAtomic, type AtomicQuery } from "../client.ts";
@@ -18,11 +19,13 @@ import {
   documentFolder,
   document,
   documentLink,
+  meta,
   spouse,
   timeEntry,
   vehicle,
 } from "../schema/index.ts";
 import { buildBundle } from "./index.ts";
+import { REPATH_DONE_KEY } from "./vault-repath.ts";
 
 export type ImportReason =
   | "import-restore"
@@ -146,6 +149,10 @@ export const importBundleQueries = async (
     // UNIQUE constraint, so existing rows are left alone and only new ones land.
     queries.push(...insertQueries(bundle, "ignore-on-conflict"));
   }
+
+  // The bundle's rows can carry paths from before the double-date fix (an older backup): clear
+  // the re-path flag so the next boot's re-path checks them again. It is a no-op on fixed paths.
+  queries.push(db.delete(meta).where(eq(meta.key, REPATH_DONE_KEY)));
 
   return queries;
 };

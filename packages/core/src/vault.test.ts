@@ -10,6 +10,7 @@ import {
   vaultFileName,
   vaultFolderName,
   vaultFolderRules,
+  titleHasDate,
   vaultPath,
   vaultSegment,
   VaultPathTooLongError,
@@ -54,6 +55,44 @@ describe("safeSegment (backup format 1, frozen)", () => {
 });
 
 describe("vaultFileName", () => {
+  describe("a title that already starts with a date (no double prefix)", () => {
+    const name = (title: string) => vaultFileName({ date: "2026-11-23", title, ext: "pdf" });
+    it("no date in the title: prefixed", () => {
+      expect(name("Demo receipt")).toBe("2026-11-23 Demo receipt.pdf");
+    });
+    it("a leading date: the title as it is", () => {
+      expect(name("2026-11-23 Demo receipt")).toBe("2026-11-23 Demo receipt.pdf");
+    });
+    it("a leading date that differs from the record's: still the title as it is", () => {
+      expect(name("2026-08-12 Demo receipt")).toBe("2026-08-12 Demo receipt.pdf");
+      expect(name("2026-08-12")).toBe("2026-08-12.pdf");
+    });
+    it("a date not at the start: prefixed", () => {
+      expect(name("Receipt 2026-08-12")).toBe("2026-11-23 Receipt 2026-08-12.pdf");
+    });
+    it("a leading number that isn't a date: prefixed", () => {
+      expect(name("2026 budget")).toBe("2026-11-23 2026 budget.pdf");
+      expect(name("2026-08-12x")).toBe("2026-11-23 2026-08-12x.pdf");
+    });
+    it("a leading date that isn't a calendar day: prefixed", () => {
+      expect(name("2026-13-40 notes")).toBe("2026-11-23 2026-13-40 notes.pdf");
+      expect(name("2026-02-30")).toBe("2026-11-23 2026-02-30.pdf");
+      expect(name("2028-02-29")).toBe("2028-02-29.pdf");
+    });
+  });
+  describe("titleHasDate", () => {
+    it("tests the title without its extension when given one", () => {
+      expect(titleHasDate("2026-08-12.pdf", "pdf")).toBe(true);
+      expect(titleHasDate("2026-08-12 Bill.PDF", "pdf")).toBe(true);
+      expect(titleHasDate("2026-08-12.pdf")).toBe(false);
+      expect(titleHasDate("Bill.pdf", "pdf")).toBe(false);
+    });
+    it("only counts a valid calendar date", () => {
+      expect(titleHasDate("2026-13-40 notes")).toBe(false);
+      expect(titleHasDate("2026-02-30")).toBe(false);
+      expect(titleHasDate("2026-02-28")).toBe(true);
+    });
+  });
   it("prefixes the date and lower-cases the extension", () => {
     expect(vaultFileName({ date: "2026-03-04", title: "Demo NAS", ext: "PDF" })).toBe(
       "2026-03-04 Demo NAS.pdf",

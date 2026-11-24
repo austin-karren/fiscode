@@ -11,6 +11,8 @@ import { errorMessage } from "../vault/paths.ts";
 import { getVaultStore } from "../vault/store.ts";
 import { recoverVault } from "../vault/tree.ts";
 import { linkedDates } from "./documents.ts";
+import type { RunHooks, TreeProgress } from "./document-tree.ts";
+import { repathDocuments } from "./vault-repath.ts";
 
 // The vault's part of app start (ADR 0001 § 6, § 10). `prepareVault` is quick and runs before the
 // first render, so Documents is read-only from its first paint when the migration is still to do.
@@ -22,6 +24,25 @@ const incomplete = (err: unknown, signal?: AbortSignal) =>
     reason: signal?.aborted ? "cancelled" : "failed",
     message: errorMessage(err),
   });
+
+type StartupOptions = {
+  onProgress?: (p: MigrationProgress) => void;
+  /** The one-time re-path after the double-date fix: { phase: "repathing" | "done", done, total }. */
+  onRepathProgress?: (p: TreeProgress) => void;
+  signal?: AbortSignal;
+};
+
+/** The re-path job, once, after the migration. A failure is logged; the next boot resumes it. */
+const repathOnce = async (options: Pick<StartupOptions, "onRepathProgress" | "signal">) => {
+  try {
+    const hooks: RunHooks = {};
+    if (options.onRepathProgress) hooks.onProgress = options.onRepathProgress;
+    if (options.signal) hooks.signal = options.signal;
+    await repathDocuments(hooks);
+  } catch (err) {
+    console.error("vault re-path", err);
+  }
+};
 
 /**
  * Reads whether the migration is done and sets the state. No lock, no file access. Never throws:
@@ -46,17 +67,23 @@ export const prepareVault = async (): Promise<void> => {
  * after it is done (recovery, the backstop) is logged and leaves `done`: the scan reports it.
  */
 export const runVaultStartup = async (
-  options: { onProgress?: (p: MigrationProgress) => void; signal?: AbortSignal } = {},
+  options: StartupOptions = {},
 ): Promise<VaultMigrationReport | undefined> => {
   let migrated = false;
   try {
     migrated = await isVaultMigrated();
     await recoverVault();
-    if (!migrated) return await migrateToVault({ datesFor: linkedDates, ...options });
+    if (!migrated) {
+      const { onRepathProgress, ...rest } = options;
+      const report = await migrateToVault({ datesFor: linkedDates, ...rest });
+      if (await isVaultMigrated()) await repathOnce({ onRepathProgress, signal: rest.signal });
+      return report;
+    }
     await withVaultLock(() => placeUnplacedDocuments(getVaultStore(), linkedDates), {
       wait: true,
     });
     setVaultMigrationState({ phase: "done" });
+    await repathOnce(options);
     return undefined;
   } catch (err) {
     if (migrated) setVaultMigrationState({ phase: "done" });
@@ -68,7 +95,7 @@ export const runVaultStartup = async (
 
 /** The banner's Resume action after `migration-incomplete`: runs the job again from where it stopped. */
 export const resumeVaultMigration = (
-  options: { onProgress?: (p: MigrationProgress) => void; signal?: AbortSignal } = {},
+  options: StartupOptions = {},
 ): Promise<VaultMigrationReport | undefined> => {
   setVaultMigrationState({ phase: "migrating", done: 0, total: 0 });
   return runVaultStartup(options);

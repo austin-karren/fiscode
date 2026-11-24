@@ -46,8 +46,8 @@ import {
 import { historyQuery, recoverVaultHeld, runTreeChange, runTreeChangeHeld } from "../vault/tree.ts";
 import {
   changeTree,
-  fileDatePrefix,
   forHistory,
+  ownDatePrefix,
   type DocumentChange,
   type FolderChange,
 } from "./document-tree.ts";
@@ -739,7 +739,7 @@ const scan = async (
   const dates = await linkedDates(okRows.map((r) => r.id));
   const redated: ScanRedated[] = [];
   for (const row of okRows) {
-    const fileDate = fileDatePrefix(row.vaultPath);
+    const fileDate = ownDatePrefix(row);
     const expectedDate = documentDate(row.addedAt, dates.get(row.id) ?? []);
     if (fileDate && fileDate !== expectedDate) {
       redated.push({

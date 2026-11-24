@@ -362,6 +362,27 @@ describe("scan actions (D6: ask, with adopt all)", () => {
     expect(done(await scanVault()).redated).toEqual([]);
   });
 
+  it("never lists a dated-title file as redated, and apply-dates leaves it alone", async () => {
+    const d = await upload("2026-08-12 Demo bill.pdf", "one");
+    expect(d.vaultPath).toBe("documents/Unfiled/2026-08-12 Demo bill.pdf");
+    // Linked to a record of another date, D2 would differ from the title's date.
+    const e = await expense("2026-03-16");
+    await documentLinkRepo.link(d.id, "expense", e.id);
+    const linked = await rowOf(d.id);
+    expect(done(await scanVault()).redated).toEqual([]);
+    await applyRecordDates([
+      {
+        documentId: d.id,
+        name: linked.name,
+        path: linked.vaultPath!,
+        fileDate: "2026-08-12",
+        expectedDate: "2026-03-16",
+      },
+    ]);
+    expect((await rowOf(d.id)).vaultPath).toBe(linked.vaultPath);
+    expect(done(await scanVault()).redated).toEqual([]);
+  });
+
   it("keeps the last report, and an action drops the items it handled", async () => {
     const a = await upload("A.pdf", "aaa");
     await store.move(a.vaultPath!, "documents/Unfiled/A2.pdf", a.sha256);
