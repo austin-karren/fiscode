@@ -1,4 +1,9 @@
-import { OperationCancelledError, VaultNameTakenError, VaultPermissionError } from "@fiscode/core";
+import {
+  OperationCancelledError,
+  VaultAlreadyPickedError,
+  VaultNameTakenError,
+  VaultPermissionError,
+} from "@fiscode/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { memoryDir, type VaultDirHandle } from "./dir.ts";
 import {
@@ -168,6 +173,22 @@ describe("pickedFolderStore", () => {
     state.permission = "prompt";
     expect(await store.read("documents/a.pdf")).toBeUndefined();
   });
+
+  it("drops a cached path when a copy overwrites it (S5)", async () => {
+    const { folder, state } = fakeFolder();
+    const store = pickedFolderStore(folder, opfs);
+    await store.write("documents/a.pdf", bytes("a"));
+    await store.write("documents/b.pdf", bytes("b-old"));
+    await store.read("documents/b.pdf");
+    await store.remove("documents/b.pdf");
+    await store.write("documents/b.pdf", bytes("b-old"));
+    await store.read("documents/b.pdf");
+    await store.copy("documents/a.pdf", "documents/c.pdf", await sha256Hex(bytes("a")));
+    await store.read("documents/c.pdf");
+    await store.copy("documents/b.pdf", "documents/c.pdf", await sha256Hex(bytes("b-old")));
+    state.permission = "prompt";
+    expect(await store.read("documents/c.pdf")).toBeUndefined();
+  });
 });
 
 describe("vaultCache", () => {
@@ -216,6 +237,29 @@ describe("permission state (§ 11.1) and feature detection (§ 11.2)", () => {
   it("detects showDirectoryPicker", () => {
     expect(canPickFolder({})).toBe(false);
     expect(canPickFolder({ showDirectoryPicker: () => {} })).toBe(true);
+  });
+
+  it("hides the option on mobile even when showDirectoryPicker exists", () => {
+    const pick = () => {};
+    const media = (coarse: boolean, fine: boolean) => (q: string) => ({
+      matches: q.includes("any-pointer: fine") ? fine : coarse,
+    });
+    expect(
+      canPickFolder({ showDirectoryPicker: pick, navigator: { userAgentData: { mobile: true } } }),
+    ).toBe(false);
+    expect(
+      canPickFolder({ showDirectoryPicker: pick, navigator: { userAgentData: { mobile: false } } }),
+    ).toBe(true);
+    expect(
+      canPickFolder({
+        showDirectoryPicker: pick,
+        navigator: { userAgent: "Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile" },
+      }),
+    ).toBe(false);
+    expect(canPickFolder({ showDirectoryPicker: pick, matchMedia: media(true, false) })).toBe(
+      false,
+    );
+    expect(canPickFolder({ showDirectoryPicker: pick, matchMedia: media(false, true) })).toBe(true);
   });
 });
 
@@ -302,6 +346,93 @@ describe("switching", () => {
     await getVaultStore().write("fiscode.json", bytes('{"v":2}'));
     await switchVaultToFolder(folder);
     expect(await text(await getVaultStore().read("fiscode.json"))).toBe('{"v":2}');
+  });
+
+  const manifest = (v: number) =>
+    bytes(JSON.stringify({ format: "fiscode-vault", formatVersion: 1, v }));
+
+  it("switches back into a folder used before where documents changed (B2)", async () => {
+    await seed();
+    await getVaultStore().write("fiscode.json", manifest(1));
+    await getVaultStore().write("documents/2026/Expenses/same.pdf", bytes("same"));
+    const { folder, dir } = fakeFolder();
+    await switchVaultToFolder(folder);
+    await switchVaultToOpfs();
+    // Changed in OPFS since, plus a stray the user dropped into the folder meanwhile.
+    await getVaultStore().write("documents/2026/Expenses/a.pdf", bytes("a2"));
+    await getVaultStore().write("fiscode.json", manifest(2));
+    await dir
+      .getDirectoryHandle("documents", { create: true })
+      .then((d) => d.getFileHandle("stray.pdf", { create: true }));
+    await switchVaultToFolder(folder);
+    const store = getVaultStore();
+    expect(await text(await store.read("documents/2026/Expenses/a.pdf"))).toBe("a2");
+    expect(await text(await store.read("documents/2026/Expenses/same.pdf"))).toBe("same");
+    // The replaced bytes were kept first, under the copy rule.
+    const old = await store.resolveOldBytes(await sha256Hex(bytes("a")));
+    expect(await text(old?.bytes)).toBe("a");
+    expect(old?.path.startsWith("_fiscode/versions/")).toBe(true);
+    // The stray is untouched; the scan lists it as "New in folder".
+    expect(await has(dir, "documents/stray.pdf")).toBe(true);
+    expect(await pendingVaultSwitch()).toBeUndefined();
+  });
+
+  it("a switch back reads the folder, not stale cache bytes (S3)", async () => {
+    await seed();
+    const { folder, dir, state } = fakeFolder();
+    await switchVaultToFolder(folder);
+    await getVaultStore().read("exports/x.csv"); // cached as "csv"
+    // Edited outside fiscode, then the permission lapses.
+    const f = await (await dir.getDirectoryHandle("exports")).getFileHandle("x.csv");
+    const w = await f.createWritable();
+    await w.write(bytes("csv-new"));
+    await w.close();
+    let calls = 0;
+    const lapsing = {
+      ...folder,
+      queryPermission: async () => (calls++ < 2 ? "granted" : state.permission),
+    } as PickedDirHandle;
+    handles.value = lapsing;
+    await initVaultBackend();
+    state.permission = "prompt";
+    await expect(switchVaultToOpfs()).rejects.toBeInstanceOf(VaultPermissionError);
+    expect(handles.value).toBe(lapsing);
+    state.permission = "granted";
+    await switchVaultToOpfs();
+    expect(await text(await getVaultStore().read("exports/x.csv"))).toBe("csv-new");
+  });
+
+  it("on boot, a journal left by a crash after the flip is rolled forward (S4)", async () => {
+    await seed();
+    const { folder } = fakeFolder();
+    await switchVaultToFolder(folder);
+    // Simulate the crash window: journal still there, OPFS vault/ not yet removed.
+    const j = await opfs.getFileHandle("vault-switch.json", { create: true });
+    const w = await j.createWritable();
+    await w.write(bytes(JSON.stringify({ to: "folder", done: ["fiscode.json"] })));
+    await w.close();
+    await (
+      await opfs.getDirectoryHandle("vault", { create: true })
+    ).getFileHandle("orphan.pdf", {
+      create: true,
+    });
+    await initVaultBackend();
+    expect(await pendingVaultSwitch()).toBeUndefined();
+    expect(await has(opfs, "vault/orphan.pdf")).toBe(false);
+    await expect(switchVaultToFolder(folder)).rejects.toBeInstanceOf(VaultAlreadyPickedError);
+  });
+
+  it("on boot, a journal for a pending switch the other way stays", async () => {
+    await seed();
+    const ac = new AbortController();
+    await expect(
+      switchVaultToFolder(fakeFolder().folder, {
+        signal: ac.signal,
+        onProgress: (p) => p.done === 1 && ac.abort(),
+      }),
+    ).rejects.toBeInstanceOf(OperationCancelledError);
+    await initVaultBackend();
+    expect(await pendingVaultSwitch()).toEqual({ to: "folder", done: 1 });
   });
 
   it("needs the folder granted", async () => {

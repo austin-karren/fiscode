@@ -1,5 +1,6 @@
 import {
   OperationCancelledError,
+  VaultAlreadyPickedError,
   VaultIntegrityError,
   VaultNameTakenError,
   VaultPermissionError,
@@ -51,9 +52,32 @@ const SWITCH_JOURNAL = "vault-switch.json";
 export const CACHE_MAX_FILES = 200;
 export const CACHE_MAX_BYTES = 200 * 1024 * 1024;
 
-/** § 11.2: false in Firefox, Safari and every mobile browser. The picker option is then hidden. */
-export const canPickFolder = (g: object = globalThis): boolean =>
-  typeof (g as { showDirectoryPicker?: unknown }).showDirectoryPicker === "function";
+type DetectGlobals = {
+  showDirectoryPicker?: unknown;
+  navigator?: { userAgentData?: { mobile?: boolean }; userAgent?: string; maxTouchPoints?: number };
+  matchMedia?: (q: string) => { matches: boolean };
+};
+
+/**
+ * § 11.2: false in Firefox, Safari and every mobile browser; the picker option is then hidden.
+ * Feature detection first (showDirectoryPicker must exist). That alone is not enough, because a
+ * mobile Chromium may expose the function without a usable desktop picker, so a phone or tablet is
+ * also ruled out: `navigator.userAgentData.mobile` where Chromium gives it (the reliable signal),
+ * else a mobile UA string, else a coarse primary pointer with no fine pointer (touch-only device).
+ */
+export const canPickFolder = (g: object = globalThis): boolean => {
+  const { showDirectoryPicker, navigator: nav, matchMedia } = g as DetectGlobals;
+  if (typeof showDirectoryPicker !== "function") return false;
+  const mobile = nav?.userAgentData?.mobile;
+  if (typeof mobile === "boolean") return !mobile;
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(nav?.userAgent ?? "")) return false;
+  if (typeof matchMedia === "function") {
+    const touchOnly =
+      matchMedia("(pointer: coarse)").matches && !matchMedia("(any-pointer: fine)").matches;
+    if (touchOnly) return false;
+  }
+  return true;
+};
 
 const isNotAllowed = (err: unknown) =>
   err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "SecurityError");
@@ -143,6 +167,7 @@ export const pickedFolderStore = (
   folder: PickedDirHandle,
   opfs: VaultDirHandle,
   cache: VaultCache = vaultCache(opfs),
+  { cacheFallback = true }: { cacheFallback?: boolean } = {},
 ): VaultStore => {
   const inner = vaultStore(opfs, { tree: async () => folder });
   const granted = async () => (await folder.queryPermission({ mode: "readwrite" })) === "granted";
@@ -174,6 +199,8 @@ export const pickedFolderStore = (
           if (!isNotAllowed(err)) throw err;
         }
       }
+      // A switch back reads the folder only: cached bytes may be older than the folder (S3).
+      if (!cacheFallback) throw new VaultPermissionError();
       return cache.read(path);
     },
     // The folder only: a cached copy says nothing about what the folder holds, and a check
@@ -184,7 +211,11 @@ export const pickedFolderStore = (
         await inner.write(path, bytes);
         await cacheBestEffort(cache.drop(path));
       }),
-    copy: (from, to, sha) => guarded(() => inner.copy(from, to, sha)),
+    copy: (from, to, sha) =>
+      guarded(async () => {
+        await inner.copy(from, to, sha);
+        await cacheBestEffort(cache.drop(to));
+      }),
     move: (from, to, sha) =>
       guarded(async () => {
         await inner.move(from, to, sha);
@@ -287,7 +318,36 @@ export const initVaultBackend = async (): Promise<void> => {
     picked = undefined;
   }
   setActiveVaultStore(picked ? pickedFolderStore(picked, getVaultRoot()) : undefined);
+  try {
+    await settleStaleSwitch();
+  } catch (err) {
+    console.error("vault switch cleanup", err);
+  }
 };
+
+/**
+ * A crash after the flip (the handle kept or forgotten) but before the switch journal was removed
+ * leaves a journal whose direction already matches the backend in use. The switch is done: roll it
+ * forward by finishing its cleanup (OPFS `vault/` after a switch to the folder, the cache after one
+ * back) and clear the journal. A journal the other way is a real pending switch and stays.
+ */
+const settleStaleSwitch = async () => {
+  const root = getVaultRoot();
+  const journal = await readJson<SwitchJournal>(root, SWITCH_JOURNAL);
+  if (!journal) return;
+  if (journal.to === "folder" && picked) {
+    await removeOpfsTree(root);
+    await removeFile(root, SWITCH_JOURNAL);
+  } else if (journal.to === "opfs" && !picked) {
+    await vaultCache(root).clear();
+    await removeFile(root, SWITCH_JOURNAL);
+  }
+};
+
+const removeOpfsTree = (root: VaultDirHandle) =>
+  root.removeEntry(VAULT_DIR, { recursive: true }).catch((err: unknown) => {
+    if (!isNotFound(err)) console.warn("vault switch cleanup", err);
+  });
 
 /** § 11.1: "opfs" without a picked folder, else the folder's readwrite permission. */
 export const vaultPermissionState = async (): Promise<VaultPermission> =>
@@ -330,8 +390,15 @@ const listFiles = async (store: VaultStore): Promise<string[]> => {
 /**
  * Copies every vault file from `from` to `to`, verifying each sha on the copy. Journaled in OPFS
  * (`vault-switch.json`), so a cancel or crash resumes past what is already verified. The source
- * is left complete. A file at a target path with other bytes is the user's: VaultNameTakenError,
- * unless `overwrite` (OPFS, where only fiscode writes) or it is the manifest.
+ * is left complete. The target's existing tree is reconciled first, path by path:
+ * - same path and same sha: kept, nothing written;
+ * - other bytes in a folder this vault used before (its fiscode.json is a fiscode vault): the old
+ *   bytes are kept under `_fiscode/versions/` first (the copy rule, so nothing is lost), then the
+ *   path is replaced; the switch journal makes this resumable;
+ * - other bytes in a folder fiscode never used: the user's file, VaultNameTakenError;
+ * - a file only on the target (a stray): left alone; the next scan lists it as "New in folder".
+ * `overwrite` (OPFS, where only fiscode writes) replaces without asking. fiscode.json is rebuilt
+ * from sqlite, so it is always replaced.
  */
 const copyTree = async (
   from: VaultStore,
@@ -345,6 +412,7 @@ const copyTree = async (
   const journal: SwitchJournal = { to: direction, done: prev?.to === direction ? prev.done : [] };
   const done = new Set(journal.done);
   const files = await listFiles(from);
+  const usedBefore = overwrite || (await isFiscodeVault(to));
   onProgress?.({ phase: "copying", done: 0, total: files.length });
   let n = 0;
   for (const path of files) {
@@ -357,8 +425,12 @@ const copyTree = async (
       const sha = await sha256Hex(bytes);
       if (!(await to.holds(path, sha))) {
         // fiscode.json is rebuilt from sqlite, so a folder used before just gets the new one.
-        const owned = overwrite || path === MANIFEST_FILE;
-        if (!owned && (await to.read(path)) !== undefined) throw new VaultNameTakenError(path);
+        const existing = await to.read(path);
+        if (existing !== undefined && !overwrite && path !== MANIFEST_FILE) {
+          if (!usedBefore) throw new VaultNameTakenError(path);
+          const oldSha = await sha256Hex(existing);
+          if (!path.startsWith("_fiscode/")) await to.keepOldBytes("versions", path, oldSha);
+        }
         await to.write(path, bytes);
         if (!(await to.holds(path, sha))) throw new VaultIntegrityError(path);
       }
@@ -368,6 +440,18 @@ const copyTree = async (
       }
     }
     onProgress?.({ phase: "copying", done: ++n, total: files.length });
+  }
+};
+
+/** Whether the target's fiscode.json says a fiscode vault lived there (a folder used before). */
+const isFiscodeVault = async (store: VaultStore): Promise<boolean> => {
+  try {
+    const bytes = await store.read(MANIFEST_FILE);
+    if (!bytes) return false;
+    return (JSON.parse(await bytes.text()) as { format?: unknown }).format === "fiscode-vault";
+  } catch (err) {
+    if (err instanceof SyntaxError) return false;
+    throw err;
   }
 };
 
@@ -390,7 +474,7 @@ export const switchVaultToFolder = async (
   withVaultLock(
     async () => {
       assertVaultWritable();
-      if (picked) throw new Error("The vault is already in a picked folder.");
+      if (picked) throw new VaultAlreadyPickedError();
       const root = getVaultRoot();
       const target = pickedFolderStore(folder, root);
       if ((await folder.queryPermission({ mode: "readwrite" })) !== "granted") {
@@ -401,9 +485,7 @@ export const switchVaultToFolder = async (
       picked = folder;
       setActiveVaultStore(target);
       await removeFile(root, SWITCH_JOURNAL);
-      await root.removeEntry(VAULT_DIR, { recursive: true }).catch((err: unknown) => {
-        if (!isNotFound(err)) console.warn("vault switch cleanup", err);
-      });
+      await removeOpfsTree(root);
       announceVaultChange();
     },
     { long: true },
@@ -422,7 +504,9 @@ export const switchVaultToOpfs = async (options: SwitchOptions = {}): Promise<vo
         throw new VaultPermissionError();
       }
       const root = getVaultRoot();
-      await copyTree(getVaultStore(), opfsVaultStore(), "opfs", true, options);
+      // The folder is the authoritative copy: read it, never the D7 cache (S3).
+      const source = pickedFolderStore(picked, root, vaultCache(root), { cacheFallback: false });
+      await copyTree(source, opfsVaultStore(), "opfs", true, options);
       await handleStore().set(undefined);
       picked = undefined;
       setActiveVaultStore(undefined);
