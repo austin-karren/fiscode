@@ -46,7 +46,7 @@ import {
   type VaultMigrationReport,
 } from "@fiscode/db";
 import { VaultBusyError, VaultNameTakenError } from "@fiscode/core";
-import { CheckPage } from "./check-page";
+import { adoptsToUnfiled, CheckPage } from "./check-page";
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -281,6 +281,19 @@ describe("Check folder (vault PR 11)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import demo-new.pdf" }));
     await settled();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("says when Adopt moves a file to Unfiled, because fiscode has no folder there (REVIEW #112 r2)", () => {
+    const outside = { ...moved("x"), foundAt: "documents/Moved here/demo-move.txt" };
+    render(<CheckPage report={{ ...empty, moved: [outside] }} migration={undefined} />);
+    expect(screen.getByText(/Adopt moves it to Unfiled/)).toBeVisible();
+    expect(screen.getByText(/a folder made outside fiscode isn't added/)).toBeVisible();
+    expect(adoptsToUnfiled({ adoptFolderId: null, foundAt: "documents/Unfiled/a.txt" })).toBe(
+      false,
+    );
+    expect(adoptsToUnfiled({ adoptFolderId: "f", foundAt: "documents/2026/New/a.txt" })).toBe(
+      false,
+    );
   });
 
   it("hides the migration report when the migration had nothing to do (REVIEW #112 r1 F2)", () => {

@@ -4,6 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/aler
 import { Button, buttonVariants } from "@fiscode/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { CircleCheck } from "lucide-react";
+import { VAULT_DOCUMENTS_DIR, VAULT_UNFILED_DIR } from "@fiscode/core";
 
 import {
   acknowledgeChanged,
@@ -139,8 +140,10 @@ export function CheckPage({
         <>
           <Section title="Moved" items={report.moved.length}>
             <p className="text-sm text-muted-foreground">
-              Found at another place in your folder. Adopt keeps the new place; Move back returns
-              the file to where fiscode had it.
+              Found at another place in your folder. Adopt keeps the new place when it's in a folder
+              fiscode has; a folder made outside fiscode isn't added, so the file goes to the
+              nearest folder fiscode has above it, or Unfiled. Move back returns the file to where
+              fiscode had it.
             </p>
             {swapped.length > 0 ? (
               <div className="grid gap-2">
@@ -177,6 +180,9 @@ export function CheckPage({
                 <Item key={m.documentId} title={m.name}>
                   <Path label="Was">{m.path}</Path>
                   <Path label="Now">{m.foundAt}</Path>
+                  {adoptsToUnfiled(m) ? (
+                    <Note>Adopt moves it to Unfiled: fiscode has no folder there.</Note>
+                  ) : null}
                   {m.swapped ? (
                     <Note>Swapped with another file: use Adopt the swap above.</Note>
                   ) : (
@@ -403,6 +409,13 @@ export function CheckPage({
     </div>
   );
 }
+
+/**
+ * Adopting moves the file to Unfiled when no folder fiscode has is above where it was found
+ * (adoptFolderId null), unless it was found in Unfiled already (REVIEW #112 r2 F1).
+ */
+export const adoptsToUnfiled = (m: { adoptFolderId: string | null; foundAt: string }): boolean =>
+  m.adoptFolderId === null && !m.foundAt.startsWith(`${VAULT_DOCUMENTS_DIR}/${VAULT_UNFILED_DIR}/`);
 
 /** A vault that never needed moving has nothing to report (REVIEW #112 r1 F2). */
 export const migrationDidSomething = (r: VaultMigrationReport): boolean =>
