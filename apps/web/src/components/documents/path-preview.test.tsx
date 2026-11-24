@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FolderFixedError, OperationCancelledError } from "@fiscode/core";
+import { FolderFixedError, OperationCancelledError, VaultPathTooLongError } from "@fiscode/core";
 import type { RunHooks } from "@fiscode/db";
 
 import { previewLine, tooLongLine } from "../../lib/path-preview";
@@ -55,7 +55,8 @@ describe("path preview as you type (vault PR 8b)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Rename" }));
     await act(async () => {});
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert")).toHaveTextContent("Too long by 12 characters");
+    expect(screen.getByLabelText("Folder name")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Folder name")).toHaveFocus();
   });
 
   it("never shows an older name's answer for the current name", async () => {
@@ -97,9 +98,10 @@ describe("folder rename and move: progress, Cancel, typed errors (vault PR 8b)",
     render(<NameDialog {...base} initial="Demo" progress onSubmit={onSubmit} />);
     fireEvent.click(screen.getByRole("button", { name: "Rename" }));
     expect(await screen.findByText("Moving files (3 of 40)…")).toBeVisible();
-    const cancels = screen.getAllByRole("button", { name: /^Cancel/ });
-    expect(cancels[0]).toBeEnabled();
-    fireEvent.click(cancels[0]!);
+    // One Cancel: the footer's, which cancels the run (REVIEW #116 r1 F3).
+    const cancel = screen.getByRole("button", { name: /^Cancel/ });
+    expect(cancel).toBeEnabled();
+    fireEvent.click(cancel);
     expect(await screen.findByRole("alert")).toHaveTextContent(
       new OperationCancelledError().message,
     );
@@ -174,9 +176,106 @@ describe("folder rename and move: progress, Cancel, typed errors (vault PR 8b)",
     );
     fireEvent.click(screen.getByRole("button", { name: "Move" }));
     expect(await screen.findByText("Moving files (1 of 5)…")).toBeVisible();
-    fireEvent.click(screen.getAllByRole("button", { name: /^Cancel/ })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/Nothing was changed/);
     expect(signal?.aborted).toBe(true);
+  });
+});
+
+describe("REVIEW #116 r1", () => {
+  it("F1: Escape and the X don't close the dialog while it runs; Cancel is the way out", async () => {
+    const closed = vi.fn();
+    let reject!: (e: unknown) => void;
+    render(
+      <NameDialog
+        {...base}
+        onOpenChange={closed}
+        initial="Demo"
+        progress
+        onSubmit={(_n, _w, hooks) =>
+          new Promise((_, r) => {
+            reject = r;
+            hooks.onProgress?.({ phase: "moving", done: 10, total: 80 });
+            hooks.signal?.addEventListener("abort", () => r(new OperationCancelledError()));
+          })
+        }
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    await screen.findByText("Moving files (10 of 80)…");
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await act(async () => {});
+    expect(closed).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeVisible();
+    void reject;
+  });
+
+  it("F4: too long is an error on the field, and Enter before the preview shows one line", async () => {
+    vi.useFakeTimers();
+    const onSubmit = vi.fn(async () => {
+      throw new VaultPathTooLongError("documents/x");
+    });
+    render(
+      <NameDialog
+        {...base}
+        preview={async () => ({ path: "documents/x", fits: false, overBy: 35 })}
+        onSubmit={onSubmit}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Folder name"), { target: { value: "Long" } });
+    // Enter beats the 150 ms preview: the save's own error shows...
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    await act(async () => {});
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      new VaultPathTooLongError("documents/x").message,
+    );
+    // ...then the preview answers, and only its line stays.
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    expect(screen.queryByRole("alert")).toBeNull();
+    const line = screen.getByText(/^Too long by 35 characters/);
+    expect(line).toHaveClass("text-destructive");
+    expect(screen.getByLabelText("Folder name")).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("F6: a name the field refuses says why in the preview line as you type", async () => {
+    const preview = vi.fn(async () => ({ path: "documents/x", fits: true, overBy: 0 }));
+    render(
+      <NameDialog
+        {...base}
+        preview={preview}
+        validate={(n) => (n.length > 5 ? "Use 5 characters or fewer." : undefined)}
+        onSubmit={async () => {}}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Folder name"), { target: { value: "Too long" } });
+    expect(screen.getByText("Use 5 characters or fewer.")).toBeVisible();
+    expect(preview).not.toHaveBeenCalled();
+  });
+
+  it("a rename shows where the current name saves as soon as it opens", async () => {
+    vi.useFakeTimers();
+    const preview = vi.fn(async (n: string) => ({ path: `${P}${n}`, fits: true, overBy: 0 }));
+    render(<NameDialog {...base} initial="Demo" preview={preview} onSubmit={async () => {}} />);
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    expect(screen.getByText(`Saves as ${P}Demo`)).toBeVisible();
+  });
+
+  it("FolderFixedError shows its message on a rename", async () => {
+    render(
+      <NameDialog
+        {...base}
+        initial="2026"
+        progress
+        onSubmit={async () => {
+          throw new FolderFixedError("year");
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      new FolderFixedError("year").message,
+    );
   });
 });
 
