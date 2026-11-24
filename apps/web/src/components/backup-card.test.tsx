@@ -155,7 +155,11 @@ describe("Restore from backup", () => {
     ).toBeVisible();
     expect(within(dialog).getByText("You can undo this restore from History.")).toBeVisible();
     expect(within(dialog).getByText(/the state before this restore\.$/)).toBeVisible();
-    expect(within(dialog).getByRole("button", { name: "Restore" })).toHaveFocus();
+    // Focus moves in a passive effect, which React runs in its own scheduler task after
+    // the confirm step is in the DOM, so findByText can resolve first: wait for it.
+    await waitFor(() =>
+      expect(within(dialog).getByRole("button", { name: "Restore" })).toHaveFocus(),
+    );
     expect(within(dialog).getByText("demo-receipt.pdf")).toBeVisible();
     expect(vi.mocked(readBackup).mock.calls[1]![1]?.passphrase).toBe(PASS);
     fireEvent.click(within(dialog).getByRole("button", { name: "Restore" }));
