@@ -877,6 +877,13 @@ describe("outside edits stay in the report until acknowledged", () => {
     expect(r.changed[0]!.toSha256).toBe((await rowOf(d.id)).sha256);
   });
 
+  it("a move stays in the report until adopted or moved back: the tree still shows it", async () => {
+    const d = await upload("Demo receipt.pdf", "one");
+    await store.move(d.vaultPath!, "documents/Unfiled/Moved.pdf", d.sha256);
+    const first = done(await scanVault());
+    expect(done(await scanVault()).moved).toEqual(first.moved);
+  });
+
   it("drops a change whose document was deleted", async () => {
     const d = await upload("Demo receipt.pdf", "one");
     await outside(d.vaultPath!, "two");

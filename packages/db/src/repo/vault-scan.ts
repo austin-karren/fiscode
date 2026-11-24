@@ -459,8 +459,8 @@ const keepOverwrittenBytes = async (store: VaultStore, sha256: string): Promise<
 const hasBytes = async (store: VaultStore, sha256: string, okRows: readonly DocumentRow[]) => {
   if (okRows.some((r) => r.sha256 === sha256)) return true;
   if (await store.resolveOldBytes(sha256)) return true;
-  const blob = await store.get(sha256);
-  return blob !== undefined && (await sha256Hex(blob)) === sha256;
+  // Not hashed here (every scan, every missing row): putBack verifies the bytes it copies.
+  return store.has(sha256);
 };
 
 export type ScanProgress = { phase: "scanning"; done: number; total: number };
