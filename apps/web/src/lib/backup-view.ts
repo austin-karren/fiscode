@@ -1,4 +1,4 @@
-import type { BackupProgress, ExportVaultProgress } from "@fiscode/backup";
+import type { BackupProgress, ExportVaultProgress, RestoreResult } from "@fiscode/backup";
 
 // Words for the backup and restore dialogs: progress by phase, and passphrase strength.
 
@@ -68,3 +68,12 @@ export const cancelledExportLine = (
   const written = Math.min(last.done + 1, last.total);
   return `Export cancelled: ${written} of ${last.total} ${last.total === 1 ? "file" : "files"} written. They stay in the folder, with no fiscode.json, so it isn't a complete export.`;
 };
+
+/**
+ * A restore's "shortened to fit" lines (ADR § 3.8): each path or folder name that was too long
+ * for this device, as "from → to". Empty when every path fit (the 1:1 case).
+ */
+export const shortenedLines = (result: RestoreResult): string[] => [
+  ...result.foldersShortened.map((f) => `Folder ${f.from} → ${f.to}`),
+  ...result.shortened.map((s) => `${s.from} → ${s.to}`),
+];

@@ -20,7 +20,7 @@ vi.mock("@fiscode/backup", async (importOriginal) => ({
   createBackup: vi.fn(),
   readBackup: vi.fn(),
   planBackupRestore: vi.fn(),
-  restoreBackup: vi.fn(async () => {}),
+  restoreBackup: vi.fn(async () => ({ shortened: [], foldersShortened: [] })),
 }));
 
 import { createBackup, planBackupRestore, readBackup, restoreBackup } from "@fiscode/backup";
@@ -28,7 +28,7 @@ import { BackupFileCorruptError, BackupPassphraseError } from "@fiscode/core";
 import { toast } from "sonner";
 
 import { BackupCard } from "./backup-card";
-import { passphraseStrength } from "../lib/backup-view";
+import { passphraseStrength, shortenedLines } from "../lib/backup-view";
 
 afterEach(cleanup);
 beforeEach(() => vi.clearAllMocks());
@@ -240,5 +240,17 @@ describe("passphrase strength", () => {
     ["four plain demo words", "Strong"],
   ])("%j is %s", (value, label) => {
     expect(passphraseStrength(value, 12).label).toBe(label);
+  });
+});
+
+describe("a restore's 'shortened to fit' lines (vault PR 11)", () => {
+  it("names each folder and path that was shortened, and nothing when all fit", () => {
+    expect(shortenedLines({ shortened: [], foldersShortened: [] })).toEqual([]);
+    expect(
+      shortenedLines({
+        foldersShortened: [{ folderId: "f", from: "Demo long folder", to: "Demo long" }],
+        shortened: [{ documentId: "d", from: "documents/a long.pdf", to: "documents/a.pdf" }],
+      }),
+    ).toEqual(["Folder Demo long folder → Demo long", "documents/a long.pdf → documents/a.pdf"]);
   });
 });

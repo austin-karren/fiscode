@@ -29,7 +29,7 @@ import {
 } from "@fiscode/backup";
 import { BackupFileCorruptError, BackupPassphraseError } from "@fiscode/core";
 import { buildBundle } from "@fiscode/db";
-import { downloadBlob, passphraseStrength, progressLine } from "../lib/backup-view";
+import { downloadBlob, passphraseStrength, progressLine, shortenedLines } from "../lib/backup-view";
 import { errorLine, formatBytes } from "../lib/documents-view";
 import { formatDateTime } from "../lib/format-date";
 import { describePlan, Refusal } from "./import-card";
@@ -309,12 +309,31 @@ function RestoreBody({ confirm, onDone }: { confirm: boolean; onDone: () => void
 
   const write = async (fileName: string, ready: Ready) => {
     try {
-      await restoreBackup(ready, { onProgress: setProgress });
+      const result = await restoreBackup(ready, { onProgress: setProgress });
       await router.invalidate();
       const files = ready.documents.files;
-      toast.success(
-        `Restored ${fileName}${files > 0 ? `, with ${files} ${files === 1 ? "file" : "files"}` : ""}.`,
-      );
+      // A path too long for this device is shortened to fit, never refused (§ 3.8): say which,
+      // and keep the toast up until it's closed.
+      const lines = shortenedLines(result);
+      const done = `Restored ${fileName}${files > 0 ? `, with ${files} ${files === 1 ? "file" : "files"}` : ""}.`;
+      if (lines.length === 0) toast.success(done);
+      else
+        toast.success(done, {
+          description: (
+            <div className="grid gap-1">
+              <p>
+                {lines.length === 1 ? "1 name was" : `${lines.length} names were`} shortened to fit:
+              </p>
+              <ul className="grid list-disc gap-0.5 pl-4 break-all">
+                {lines.map((l) => (
+                  <li key={l}>{l}</li>
+                ))}
+              </ul>
+            </div>
+          ),
+          duration: Infinity,
+          closeButton: true,
+        });
       onDone();
     } catch (err) {
       setProgress(undefined);
