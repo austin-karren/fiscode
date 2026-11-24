@@ -26,7 +26,8 @@ vi.mock("@fiscode/db", async (importOriginal) => {
     getVaultMigrationState: () => state.current,
     onVaultMigrationState: () => () => {},
     scanVault: vi.fn(),
-    adoptMoved: vi.fn(async () => {}),
+    adoptMoved: vi.fn(async () => ({ folders: [], shortened: [], unfiled: [] })),
+    putBack: vi.fn(async () => {}),
     moveBack: vi.fn(async () => {}),
     acknowledgeChanged: vi.fn(async () => {}),
     importNewFiles: vi.fn(async () => []),
@@ -41,12 +42,13 @@ import {
   applyRecordDates,
   importNewFiles,
   moveBack,
+  putBack,
   scanVault,
   type ScanReport,
   type VaultMigrationReport,
 } from "@fiscode/db";
 import { VaultBusyError, VaultNameTakenError } from "@fiscode/core";
-import { adoptsToUnfiled, CheckPage } from "./check-page";
+import { CheckPage } from "./check-page";
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -283,24 +285,61 @@ describe("Check folder (vault PR 11)", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("says when Adopt moves a file to Unfiled, because fiscode has no folder there (REVIEW #112 r2)", () => {
-    const outside = { ...moved("x"), foundAt: "documents/Moved here/demo-move.txt" };
-    render(<CheckPage report={{ ...empty, moved: [outside] }} migration={undefined} />);
-    expect(screen.getByText(/Adopt moves it to Unfiled/)).toBeVisible();
-    expect(screen.getByText(/a folder made outside fiscode isn't added/)).toBeVisible();
-    expect(adoptsToUnfiled({ adoptFolderId: null, foundAt: "documents/Unfiled/a.txt" })).toBe(
-      false,
-    );
+  it("#114: says which folders Adopt makes, or why it uses Unfiled, and what it did", async () => {
+    const makes = { ...moved("x"), adoptNewFolders: ["Demo box", "March"] };
+    const year = { ...moved("y"), adoptFallback: "year" as const };
+    vi.mocked(adoptMoved).mockResolvedValueOnce({
+      folders: [{ name: "Demo box" }, { name: "March" }] as never,
+      shortened: [],
+      unfiled: [{ documentId: "y", foundAt: year.foundAt, reason: "year" }],
+    });
+    render(<CheckPage report={{ ...empty, moved: [makes, year] }} migration={undefined} />);
+    expect(screen.getByText(/makes any folder you made there/)).toBeVisible();
+    expect(screen.getByText("Adopt creates the folders Demo box / March.")).toBeVisible();
     expect(
-      adoptsToUnfiled({
-        adoptFolderId: null,
-        adoptNewFolders: ["Receipts"],
-        foundAt: "documents/Receipts/a.txt",
-      }),
-    ).toBe(false);
-    expect(adoptsToUnfiled({ adoptFolderId: "f", foundAt: "documents/2026/New/a.txt" })).toBe(
-      false,
+      screen.getByText(
+        "Adopt puts it in Unfiled: a new top-level folder can't be named like a year.",
+      ),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Adopt all" }));
+    expect(await screen.findByText("Created 2 folders: Demo box, March.")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Demo y went to Unfiled: a new top-level folder can't be named like a year.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("#114: an edit stays until acknowledged, with Acknowledge all", async () => {
+    const two = {
+      ...full,
+      changed: [...full.changed, { ...full.changed[0]!, documentId: "c2", name: "Demo edited 2" }],
+    };
+    render(<CheckPage report={two} migration={undefined} />);
+    expect(screen.getByText(/Each stays here until you acknowledge it/)).toBeVisible();
+    expect(screen.queryByText(/until the next check/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge all" }));
+    await vi.waitFor(() => expect(acknowledgeChanged).toHaveBeenCalledWith("all"));
+  });
+
+  it("#114: a restorable file gets Put it back, apart from Not on this device", async () => {
+    const restorable = {
+      documentId: "p",
+      name: "Demo back",
+      path: `${D}/Other/2026-11-23 Demo back.pdf`,
+      restorable: true as const,
+    };
+    render(
+      <CheckPage
+        report={{ ...full, missing: [...full.missing, restorable] }}
+        migration={undefined}
+      />,
     );
+    const s = section(/^Restorable from this device: 1/);
+    fireEvent.click(within(s).getByRole("button", { name: "Put it back Demo back" }));
+    await vi.waitFor(() => expect(putBack).toHaveBeenCalledWith([restorable]));
+    expect(section(/^Not on this device: 1/)).toBeVisible();
+    expect(within(section(/^Not on this device/)).queryByText("Demo back")).toBeNull();
   });
 
   it("hides the migration report when the migration had nothing to do (REVIEW #112 r1 F2)", () => {

@@ -4,7 +4,6 @@ import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/aler
 import { Button, buttonVariants } from "@fiscode/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@fiscode/ui/components/card";
 import { CircleCheck } from "lucide-react";
-import { VAULT_DOCUMENTS_DIR, VAULT_UNFILED_DIR } from "@fiscode/core";
 
 import {
   acknowledgeChanged,
@@ -13,6 +12,7 @@ import {
   getVaultStore,
   importNewFiles,
   moveBack,
+  putBack,
   scanReviewCount,
   scanVault,
   type ScanProgress,
@@ -21,7 +21,15 @@ import {
 } from "@fiscode/db";
 import { errorLine, formatBytes } from "../../lib/documents-view";
 import { formatDateTime } from "../../lib/format-date";
-import { baseName, count, scanProgressLine, skippedLine } from "../../lib/vault-check-view";
+import {
+  adoptCreatesLine,
+  adoptFallbackLine,
+  adoptResultLines,
+  baseName,
+  count,
+  scanProgressLine,
+  skippedLine,
+} from "../../lib/vault-check-view";
 import { useVaultReadOnly } from "../../lib/vault-migration";
 import { BACKUP_CARD_ID } from "../backup-card";
 import { ReadOnlyNote } from "../read-only-note";
@@ -50,12 +58,16 @@ export function CheckPage({
   // an action's in its section; anything tried next clears it (REVIEW #112 r1 F3).
   const [acting, setActing] = useState<string>();
   const [failed, setFailed] = useState<{ section: string; line: string }>();
+  // What the last adopt did beyond moving files (folders made, Unfiled and why), shown under
+  // Check now: the moved items are gone from the list by then. Cleared by the next thing tried.
+  const [adopted, setAdopted] = useState<string[]>([]);
   const busy = check.at === "running" || acting !== undefined;
   const off = busy || !!readOnly;
 
   const checkNow = async () => {
     setCheck({ at: "running" });
     setFailed(undefined);
+    setAdopted([]);
     try {
       const result = await scanVault({
         trigger: "check",
@@ -77,6 +89,7 @@ export function CheckPage({
   const act = async (section: string, run: () => Promise<unknown>) => {
     setActing(section);
     setFailed(undefined);
+    setAdopted([]);
     try {
       await run();
       await router.invalidate();
@@ -93,7 +106,15 @@ export function CheckPage({
       </p>
     ) : null;
 
+  const adopt = (items: ScanReport["moved"]) =>
+    act("moved", async () => {
+      const result = await adoptMoved(items);
+      setAdopted(adoptResultLines(result, new Map(items.map((m) => [m.documentId, m.name]))));
+    });
+
   const findings = report ? scanReviewCount(report) : 0;
+  const restorable = report?.missing.filter((m) => m.restorable) ?? [];
+  const notHere = report?.missing.filter((m) => !m.restorable) ?? [];
   // A swap is adopted as a whole: adopting one alone renames its partner's file (REVIEW #112 r1
   // F1), and Move back refuses while the other file is there.
   const swapped = report?.moved.filter((m) => m.swapped) ?? [];
@@ -123,6 +144,15 @@ export function CheckPage({
             </p>
           ) : null}
           {problem("check")}
+          {adopted.length > 0 ? (
+            <ul role="status" className="grid gap-0.5 text-sm">
+              {adopted.map((line) => (
+                <li key={line} className="break-all">
+                  {line}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -140,10 +170,8 @@ export function CheckPage({
         <>
           <Section title="Moved" items={report.moved.length}>
             <p className="text-sm text-muted-foreground">
-              Found at another place in your folder. Adopt keeps the new place when it's in a folder
-              fiscode has; a folder made outside fiscode isn't added, so the file goes to the
-              nearest folder fiscode has above it, or Unfiled. Move back returns the file to where
-              fiscode had it.
+              Found at another place in your folder. Adopt keeps the new place, and makes any folder
+              you made there; Move back returns the file to where fiscode had it.
             </p>
             {swapped.length > 0 ? (
               <div className="grid gap-2">
@@ -152,11 +180,7 @@ export function CheckPage({
                   together, so no file is renamed to make room.
                 </p>
                 <div>
-                  <Button
-                    size="sm"
-                    disabled={off}
-                    onClick={() => void act("moved", () => adoptMoved(swapped))}
-                  >
+                  <Button size="sm" disabled={off} onClick={() => void adopt(swapped)}>
                     Adopt the swap
                   </Button>
                 </div>
@@ -168,7 +192,7 @@ export function CheckPage({
                   size="sm"
                   variant={swapped.length > 0 ? "outline" : "default"}
                   disabled={off}
-                  onClick={() => void act("moved", () => adoptMoved(report.moved))}
+                  onClick={() => void adopt(report.moved)}
                 >
                   Adopt all
                 </Button>
@@ -180,8 +204,10 @@ export function CheckPage({
                 <Item key={m.documentId} title={m.name}>
                   <Path label="Was">{m.path}</Path>
                   <Path label="Now">{m.foundAt}</Path>
-                  {adoptsToUnfiled(m) ? (
-                    <Note>Adopt moves it to Unfiled: fiscode has no folder there.</Note>
+                  {m.adoptFallback ? (
+                    <Note>{adoptFallbackLine(m.adoptFallback)}</Note>
+                  ) : m.adoptNewFolders?.length ? (
+                    <Note>{adoptCreatesLine(m.adoptNewFolders)}</Note>
                   ) : null}
                   {m.swapped ? (
                     <Note>Swapped with another file: use Adopt the swap above.</Note>
@@ -191,7 +217,7 @@ export function CheckPage({
                         size="sm"
                         variant="outline"
                         disabled={off}
-                        onClick={() => void act("moved", () => adoptMoved([m]))}
+                        onClick={() => void adopt([m])}
                       >
                         Adopt <span className="sr-only">{m.name}</span>
                       </Button>
@@ -212,15 +238,15 @@ export function CheckPage({
 
           <Section title="Edited outside fiscode" items={report.changed.length}>
             <p className="text-sm text-muted-foreground">
-              Already saved as a new version, so History has the change. It shows here until the
-              next check; Acknowledge clears it now.
+              Already saved as a new version, so History has the change. Each stays here until you
+              acknowledge it.
             </p>
             {report.changed.length > 1 ? (
               <div>
                 <Button
                   size="sm"
                   disabled={off}
-                  onClick={() => void act("changed", () => acknowledgeChanged(report.changed))}
+                  onClick={() => void act("changed", () => acknowledgeChanged("all"))}
                 >
                   Acknowledge all
                 </Button>
@@ -328,9 +354,46 @@ export function CheckPage({
             </Items>
           </Section>
 
-          <Section title="Not on this device" items={report.missing.length}>
+          <Section title="Restorable from this device" items={restorable.length}>
+            <p className="text-sm text-muted-foreground">
+              Gone from your folder, but this device still has the file. Put it back writes it where
+              fiscode had it.
+            </p>
+            {restorable.length > 1 ? (
+              <div>
+                <Button
+                  size="sm"
+                  disabled={off}
+                  onClick={() => void act("restorable", () => putBack(restorable))}
+                >
+                  Put all back
+                </Button>
+              </div>
+            ) : null}
+            {problem("restorable")}
             <Items>
-              {report.missing.map((m) => (
+              {restorable.map((m) => (
+                <Item key={m.documentId} title={m.name}>
+                  {m.path ? <Path>{m.path}</Path> : null}
+                  <Actions>
+                    <DocLink id={m.documentId} name={m.name} />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={off}
+                      onClick={() => void act("restorable", () => putBack([m]))}
+                    >
+                      Put it back <span className="sr-only">{m.name}</span>
+                    </Button>
+                  </Actions>
+                </Item>
+              ))}
+            </Items>
+          </Section>
+
+          <Section title="Not on this device" items={notHere.length}>
+            <Items>
+              {notHere.map((m) => (
                 <Item key={m.documentId} title={m.name}>
                   {m.path ? <Path>{m.path}</Path> : null}
                   <p className="text-sm">
@@ -409,19 +472,6 @@ export function CheckPage({
     </div>
   );
 }
-
-/**
- * Adopting moves the file to Unfiled when it neither has a folder nor makes one (adoptFolderId
- * null, no adoptNewFolders), unless it was found in Unfiled already (REVIEW #112 r2 F1).
- */
-export const adoptsToUnfiled = (m: {
-  adoptFolderId: string | null;
-  adoptNewFolders?: readonly string[];
-  foundAt: string;
-}): boolean =>
-  m.adoptFolderId === null &&
-  !m.adoptNewFolders?.length &&
-  !m.foundAt.startsWith(`${VAULT_DOCUMENTS_DIR}/${VAULT_UNFILED_DIR}/`);
 
 /** A vault that never needed moving has nothing to report (REVIEW #112 r1 F2). */
 export const migrationDidSomething = (r: VaultMigrationReport): boolean =>
