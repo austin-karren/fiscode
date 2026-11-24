@@ -279,6 +279,52 @@ describe("REVIEW #116 r1", () => {
   });
 });
 
+describe("REVIEW #116 r2: focus stays put while a save runs", () => {
+  it("keeps focus on the field (read-only, not disabled) and the save's error survives a blur", async () => {
+    let fail!: (e: unknown) => void;
+    render(
+      <NameDialog
+        {...base}
+        initial="Demo"
+        progress
+        onSubmit={() => new Promise((_, r) => (fail = r))}
+      />,
+    );
+    const field = screen.getByLabelText("Folder name");
+    field.focus();
+    fireEvent.submit(field.closest("form")!);
+    await act(async () => {});
+    expect(field).toHaveFocus();
+    expect(field).toHaveAttribute("readonly");
+    expect(field).not.toBeDisabled();
+    fireEvent.blur(field);
+    await act(async () => fail(new FolderFixedError("year")));
+    expect(screen.getByRole("alert")).toHaveTextContent(new FolderFixedError("year").message);
+  });
+
+  it("keeps focus on Move while it runs", async () => {
+    render(
+      <MoveDialog
+        open
+        onOpenChange={() => {}}
+        title="Move Demo"
+        tree={[]}
+        exclude={new Set()}
+        topLabel="Top level"
+        current={null}
+        progress
+        onMove={() => new Promise(() => {})}
+      />,
+    );
+    const move = screen.getByRole("button", { name: "Move" });
+    move.focus();
+    fireEvent.click(move);
+    await act(async () => {});
+    expect(move).toHaveFocus();
+    expect(move).toHaveAttribute("aria-disabled", "true");
+  });
+});
+
 describe("words", () => {
   it("names each phase", () => {
     expect(treeProgressLine({ phase: "moving", done: 3, total: 40 })).toBe(

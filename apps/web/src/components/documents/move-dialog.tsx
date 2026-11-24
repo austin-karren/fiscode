@@ -102,9 +102,11 @@ function MoveForm({
       {progress ? <TreeRunLine run={run} /> : null}
       <DialogFooter>
         <RunCancelButton run={run} cancellable={progress} />
+        {/* aria-disabled, not disabled, while it runs: a disabled focused button drops focus. */}
         <Button
-          disabled={busy}
+          aria-disabled={busy || undefined}
           onClick={async () => {
+            if (busy) return;
             const hooks = run.start();
             try {
               await onMove(target === TOP ? null : target, hooks);

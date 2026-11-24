@@ -116,6 +116,7 @@ function NameForm({
     <EnterToSubmitForm
       onSubmit={async (e) => {
         e.preventDefault();
+        if (busy) return;
         const problem = validate?.(name);
         if (problem) return setError({ line: problem });
         // Blocked before the save when the preview says it won't fit; its line already says why
@@ -143,7 +144,10 @@ function NameForm({
           id={`${id}-name`}
           value={name}
           autoFocus
-          disabled={busy}
+          // Read-only, not disabled, while a save runs: disabling the focused field drops focus
+          // to the page body and fires a blur that cleared the save's error (REVIEW #116 r2).
+          readOnly={busy}
+          aria-busy={busy || undefined}
           aria-invalid={invalid ? true : undefined}
           aria-describedby={
             [errorShown ? `${id}-error` : "", preview ? `${id}-path` : ""]
@@ -160,6 +164,7 @@ function NameForm({
             ask(e.target.value, where);
           }}
           onBlur={() => {
+            if (busy) return;
             const problem = validate?.(name);
             setError(problem ? { line: problem } : undefined);
           }}
@@ -213,7 +218,8 @@ function NameForm({
         <RunCancelButton run={run} cancellable={showProgress} />
         {/* Enabled for any name: pressing it says why a name can't be used (blank included),
             rather than a disabled button that gives no reason. */}
-        <Button type="submit" disabled={busy}>
+        {/* aria-disabled, not disabled, while it runs: a disabled focused button drops focus. */}
+        <Button type="submit" aria-disabled={busy || undefined}>
           {submitLabel}
         </Button>
       </DialogFooter>

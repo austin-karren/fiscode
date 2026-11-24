@@ -333,9 +333,7 @@ describe("folder depth (vault PR 8: user folders to a depth of 8)", () => {
     );
     fireEvent.change(screen.getByLabelText("Folder name"), { target: { value: "Demo depth 9" } });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
-    // The create runs through the real repo and vault tree change (slower since #108); under a
-    // loaded full run it passed findBy's 1 s default, so this one wait gets 5 s.
-    expect(await screen.findByRole("alert", {}, { timeout: 5000 })).toHaveTextContent(
+    expect(await screen.findByRole("alert")).toHaveTextContent(
       "Folders can be nested 8 deep at most.",
     );
   });
