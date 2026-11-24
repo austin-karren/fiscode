@@ -30,3 +30,12 @@ export const openFolderId = (
 /** Where a link to a document goes: its folder's list, or Unfiled when it has none. */
 export const documentLinkSearch = (doc: { id: string; folderId: string | null }): DocumentsSearch =>
   doc.folderId === null ? { unfiled: true, doc: doc.id } : { folder: doc.folderId, doc: doc.id };
+
+/**
+ * The upload result lines a list shows: only in the list they were made in, and not over a
+ * search. A move clears them outright (they'd name where a file no longer is).
+ */
+export const uploadLinesFor = <T>(
+  uploaded: { folderId: string | null; results: T[] },
+  open: { folderId: string | null; q?: string },
+): T[] => (uploaded.folderId === open.folderId && !open.q ? uploaded.results : []);
