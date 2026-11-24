@@ -76,6 +76,9 @@ describe("vaultFileName", () => {
       expect(name("1900 deed")).toBe("1900 deed.pdf");
       expect(name("2199 plan")).toBe("2199 plan.pdf");
     });
+    it("a year not at the start: prefixed", () => {
+      expect(name("W-2 2025")).toBe("2026-11-23 W-2 2025.pdf");
+    });
     it("a bare year with no space after it: prefixed", () => {
       // "2025" alone and "2025-budget" don't read as a year label, so they keep the prefix.
       expect(name("2025")).toBe("2026-11-23 2025.pdf");
