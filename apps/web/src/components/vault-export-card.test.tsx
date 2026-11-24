@@ -112,13 +112,13 @@ describe("Export vault", () => {
     fireEvent.click(screen.getByRole("button", { name: "Export to a folder" }));
     expect(await screen.findByText("Writing files (0 of 2)…")).toBeVisible();
     const cancel = screen.getByRole("button", { name: "Cancel export" });
-    expect(cancel).toHaveFocus();
+    await vi.waitFor(() => expect(cancel).toHaveFocus());
     expect(screen.getByRole("button", { name: "Export to a folder" })).toBeDisabled();
     fireEvent.click(cancel);
     release();
     const note = await screen.findByText(/Export cancelled: 1 of 2 files written\./);
     expect(note).toHaveTextContent(/no fiscode\.json/);
-    expect(note).toHaveFocus();
+    await vi.waitFor(() => expect(note).toHaveFocus());
     expect(screen.queryByRole("button", { name: "Cancel export" })).toBeNull();
     expect(screen.getByRole("button", { name: "Export to a folder" })).toBeEnabled();
   });
@@ -128,7 +128,8 @@ describe("Export vault", () => {
     render(<VaultExportCard />);
     fireEvent.click(screen.getByRole("button", { name: "Download vault as zip" }));
     fireEvent.click(await screen.findByRole("button", { name: "Cancel export" }));
-    expect(await screen.findByText("Export cancelled. Nothing was downloaded.")).toHaveFocus();
+    const nothing = await screen.findByText("Export cancelled. Nothing was downloaded.");
+    await vi.waitFor(() => expect(nothing).toHaveFocus());
   });
 
   it("returns focus to the pressed button when the export finishes", async () => {
@@ -145,7 +146,7 @@ describe("Export vault", () => {
     fireEvent.click(screen.getByRole("button", { name: "Download vault as zip" }));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/Busy in another tab/);
-    expect(alert).toHaveFocus();
+    await vi.waitFor(() => expect(alert).toHaveFocus());
     run.mockRejectedValueOnce(new StorageQuotaError());
     fireEvent.click(screen.getByRole("button", { name: "Download vault as zip" }));
     await vi.waitFor(() =>
