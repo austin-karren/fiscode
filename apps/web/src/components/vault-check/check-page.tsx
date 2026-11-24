@@ -144,15 +144,20 @@ export function CheckPage({
             </p>
           ) : null}
           {problem("check")}
-          {adopted.length > 0 ? (
-            <ul role="status" className="grid gap-0.5 text-sm">
-              {adopted.map((line) => (
-                <li key={line} className="break-all">
-                  {line}
-                </li>
-              ))}
-            </ul>
-          ) : null}
+          {/* Always mounted, so a screen reader hears the lines when they arrive; the list
+              inside keeps its list role (REVIEW #118 r1). */}
+          <div role="status">
+            {adopted.length > 0 ? (
+              <ul className="grid gap-0.5 text-sm">
+                {adopted.map((line, i) => (
+                  // Two files of the same name can go to Unfiled for the same reason.
+                  <li key={i} className="break-all">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 

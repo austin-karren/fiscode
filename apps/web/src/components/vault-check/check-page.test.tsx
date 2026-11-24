@@ -302,7 +302,12 @@ describe("Check folder (vault PR 11)", () => {
       ),
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Adopt all" }));
+    const status = screen.getAllByRole("status").find((n) => n.querySelector("ul") === null)!;
+    expect(status).toBeEmptyDOMElement();
     expect(await screen.findByText("Created 2 folders: Demo box, March.")).toBeVisible();
+    // The live region was there before its text, and the lines stay a list (REVIEW #118 r1).
+    expect(status.querySelector("ul")).not.toBeNull();
+    expect(within(status).getAllByRole("listitem")).toHaveLength(2);
     expect(
       screen.getByText(
         "Demo y went to Unfiled: a new top-level folder can't be named like a year.",
