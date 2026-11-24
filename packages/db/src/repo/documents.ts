@@ -130,6 +130,25 @@ const assertNameFree = (
   if (taken) throw new FolderNameTakenError(name);
 };
 
+/** Move rules for `folder` under `newParentId`, before any write: fixed, cycle, depth. */
+const assertMovable = async (
+  folder: DocumentFolderRow,
+  newParentId: string | null,
+  folders: DocumentFolderRow[],
+) => {
+  if (!vaultFolderRules(folder.defaultKey).move) throw new FolderFixedError(folder.defaultKey);
+  const id = folder.id;
+  if (newParentId !== null) {
+    await requireFolder(newParentId);
+    if (subtreeIds(id, folders).includes(newParentId)) throw new FolderCycleError();
+  }
+  const all = new Map(folders.map((f) => [f.id, f]));
+  // The deepest level below this folder, counting itself as 1.
+  const height = (fid: string): number =>
+    1 + Math.max(0, ...folders.filter((f) => f.parentId === fid).map((f) => height(f.id)));
+  if (depthOf(newParentId, all) + height(id) > MAX_FOLDER_DEPTH) throw new FolderTooDeepError();
+};
+
 export const folderRepo = {
   ...folderCrud,
 
@@ -215,27 +234,17 @@ export const folderRepo = {
     hooks: RunHooks = {},
   ): Promise<DocumentFolderRow> {
     const folder = await requireFolder(id);
-    if (!vaultFolderRules(folder.defaultKey).move) {
-      throw new FolderFixedError(folder.defaultKey);
-    }
     const folders = await liveFolders();
-    if (newParentId !== null) {
-      await requireFolder(newParentId);
-      if (subtreeIds(id, folders).includes(newParentId)) throw new FolderCycleError();
-    }
-    const all = new Map(folders.map((f) => [f.id, f]));
-    // The deepest level below this folder, counting itself as 1.
-    const height = (fid: string): number =>
-      1 + Math.max(0, ...folders.filter((f) => f.parentId === fid).map((f) => height(f.id)));
-    if (depthOf(newParentId, all) + height(id) > MAX_FOLDER_DEPTH) throw new FolderTooDeepError();
+    await assertMovable(folder, newParentId, folders);
     assertNameFree(folder.name, newParentId, folders, id);
     return folderUpdate(folder, { parentId: newParentId }, hooks);
   },
 
   /**
    * Field changes through the tree, so a name or parent change moves the files below (§ 6). A
-   * name or parent change goes through `rename` / `move`, so it has their rules and errors
-   * (FolderFixedError and the rest). Revert, restore and import never come through here.
+   * name or parent change has the rules and errors of `rename` / `move` (FolderFixedError and the
+   * rest), all checked before any write, and both land in one journaled plan. Revert, restore
+   * and import never come through here.
    */
   async update(
     id: string,
@@ -243,12 +252,23 @@ export const folderRepo = {
   ): Promise<DocumentFolderRow | undefined> {
     const folder = await folderCrud.get(id);
     if (!folder) return undefined;
-    const { name, parentId, ...rest } = patch as Partial<DocumentFolderRow>;
-    if (name !== undefined && name !== folder.name) await folderRepo.rename(id, name);
-    if (parentId !== undefined && parentId !== folder.parentId) {
-      await folderRepo.move(id, parentId);
+    const { name: rawName, parentId, ...rest } = patch as Partial<DocumentFolderRow>;
+    const fields: Partial<DocumentFolderRow> = { ...rest };
+    const renames = rawName !== undefined && rawName !== folder.name;
+    const moves = parentId !== undefined && parentId !== folder.parentId;
+    if (renames || moves) {
+      const folders = await liveFolders();
+      const name = renames ? validFolderName(rawName) : folder.name;
+      const parent = moves ? parentId : (folder.parentId ?? null);
+      if (renames && !vaultFolderRules(folder.defaultKey).rename) {
+        throw new FolderFixedError(folder.defaultKey);
+      }
+      if (moves) await assertMovable(folder, parent, folders);
+      assertNameFree(name, parent, folders, id);
+      if (renames) fields.name = name;
+      if (moves) fields.parentId = parent;
     }
-    return folderUpdate(await requireFolder(id), rest);
+    return folderUpdate(folder, fields);
   },
 
   /** A folder never goes alone: its subtree and documents go with it (`softDeleteTree`). */

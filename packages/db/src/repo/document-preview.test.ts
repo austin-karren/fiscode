@@ -239,6 +239,30 @@ describe("fixed folders (D5, ADR § 5)", () => {
     expect(await snapshot()).toEqual(before);
   });
 
+  it("update() with a name and a parent is all or nothing, in one History row", async () => {
+    const [, expenses] = await folderRepo.ensureYearDefaults(2026);
+    const other = await folderRepo.create({ name: "Other things" });
+    const before = await snapshot();
+    // The rename alone is allowed; the move is not, so nothing is written.
+    await expect(
+      folderRepo.update(expenses!.id, { name: "Receipts", parentId: other.id }),
+    ).rejects.toBeInstanceOf(FolderFixedError);
+    expect(await snapshot()).toEqual(before);
+    // A plain folder takes both in one plan.
+    const mine = await folderRepo.create({ name: "Mine" });
+    const count = () =>
+      (
+        sqlite.prepare("SELECT count(*) AS n FROM history WHERE entity_id = ?").get(mine.id) as {
+          n: number;
+        }
+      ).n;
+    const n = count();
+    const next = await folderRepo.update(mine.id, { name: "Ours", parentId: other.id });
+    expect(next).toMatchObject({ name: "Ours", parentId: other.id });
+    expect(count()).toBe(n + 1);
+    expect(await readJournal(root)).toBeUndefined();
+  });
+
   it("History revert, Trash restore and import never refuse a fixed folder", async () => {
     const [year] = await folderRepo.ensureYearDefaults(2026);
     const deleted = await folderRepo.softDeleteTree(year!.id);

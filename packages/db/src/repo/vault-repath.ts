@@ -1,17 +1,29 @@
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { getDb } from "../client.ts";
 import { document, meta, type DocumentRow } from "../schema/index.ts";
-import { byAdded } from "../vault/paths.ts";
-import { changeTree, previewDocumentPath, type RunHooks } from "./document-tree.ts";
+import { addedDay, byAdded, documentDate } from "../vault/paths.ts";
+import { changeTree, ownDatePrefix, previewDocumentPath, type RunHooks } from "./document-tree.ts";
 import { linkedDates } from "./documents.ts";
 
 /** Set to "done" in `meta` once every file has the path the fixed name rule gives. */
-export const REPATH_DONE_KEY = "vault_repath_dated_titles";
+export const REPATH_DONE_KEY = "vault_repath_v2";
+
+/**
+ * The local-day date a file named before the local-day fix should have, or undefined. Narrow:
+ * only a prefix the app added (not a title's date), with no single linked date, that equals the
+ * old UTC day of `addedAt` but not the local day. A user's own rename to another date is kept.
+ */
+const utcDayFix = (doc: DocumentRow, linked: readonly string[]): string | undefined => {
+  const own = ownDatePrefix(doc);
+  const local = addedDay(doc.addedAt);
+  if (!own || own !== doc.addedAt.slice(0, 10) || own === local) return undefined;
+  return documentDate(doc.addedAt, linked) === local ? local : undefined;
+};
 
 /**
  * The one-time re-path after the double-date fix (`vaultFileName`: a title that already starts
  * with a date gets no prefix). Every live placed document whose path differs from what the rule
- * gives now moves, each in its own journaled plan under the vault lock, with the collision rule.
+ * gives now moves (and a prefix the app gave by the old UTC day takes the local day), each in its own journaled plan under the vault lock, with the collision rule.
  * A crash or cancel leaves the moved files moved; the next run finishes the rest, then marks it
  * done. A path that would be over budget stays where it is. Returns how many files moved.
  */
@@ -37,11 +49,13 @@ export const repathDocuments = async (hooks: RunHooks = {}): Promise<number> => 
       .where(eq(document.id, listed.id))
       .limit(1)) as DocumentRow[];
     if (!doc || doc.deletedAt !== null || !doc.vaultPath) continue;
-    const want = await previewDocumentPath(doc, false, linkedDates);
+    const fix = utcDayFix(doc, (await linkedDates([doc.id])).get(doc.id) ?? []);
+    const dates = fix ? [fix] : undefined;
+    const want = await previewDocumentPath(doc, false, linkedDates, dates);
     if (!want.fits || want.path === doc.vaultPath) continue;
     // placeOnly: the place changes, not the document, so no History row.
     const { documents } = await changeTree(
-      { documents: [{ next: doc, placeOnly: true, op: "update" }] },
+      { documents: [{ next: doc, placeOnly: true, dates, op: "update" }] },
       { strict: false, datesFor: linkedDates },
     );
     if (documents.get(doc.id)?.vaultPath !== doc.vaultPath) moved++;

@@ -1,5 +1,5 @@
 import { todayIso } from "@fiscode/core";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import { setupTestDb, teardownTestDb } from "../test/setup-db.ts";
 import {
@@ -138,6 +138,63 @@ describe("repathDocuments", () => {
     expect(await repathDocuments({ signal: ctl.signal })).toBe(0);
     expect(doneFlag()).toBeUndefined();
     expect(await repathDocuments()).toBe(2);
+  });
+});
+
+describe("names made by the old UTC-day rule", () => {
+  const tz = process.env.TZ;
+  beforeEach(() => {
+    process.env.TZ = "America/Los_Angeles";
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // 23:30 local on 2026-08-12 is 06:30 UTC on 2026-08-13.
+    vi.setSystemTime(new Date(2026, 7, 12, 23, 30));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    process.env.TZ = tz;
+  });
+
+  /** Put a document at `name` in Unfiled, as an older build named it. */
+  const placeAt = async (id: string, name: string) => {
+    const d = (await documentRepo.get(id))!;
+    const at = `documents/Unfiled/${name}`;
+    await store.write(at, (await store.read(d.vaultPath!))!);
+    await store.remove(d.vaultPath!);
+    sqlite.prepare("UPDATE document SET vault_path = ? WHERE id = ?").run(at, id);
+  };
+
+  it("moves an app-added UTC-day prefix to the local day, and keeps the rest", async () => {
+    const utc = await documentRepo.upload(file("Demo receipt.pdf", "u"));
+    const own = await documentRepo.upload(file("Demo lease.pdf", "o"));
+    const titled = await documentRepo.upload(file("2026-08-13 Demo bill.pdf", "t"));
+    expect(utc.addedAt.slice(0, 10)).toBe("2026-08-13");
+    expect(utc.vaultPath).toBe("documents/Unfiled/2026-08-12 Demo receipt.pdf");
+    await placeAt(utc.id, "2026-08-13 Demo receipt.pdf");
+    // A date the user gave the file by hand is not the app's UTC day: it stays.
+    await placeAt(own.id, "2026-07-01 Demo lease.pdf");
+    expect(titled.vaultPath).toBe("documents/Unfiled/2026-08-13 Demo bill.pdf");
+
+    expect(await repathDocuments()).toBe(1);
+    expect((await documentRepo.get(utc.id))!.vaultPath).toBe(
+      "documents/Unfiled/2026-08-12 Demo receipt.pdf",
+    );
+    expect((await documentRepo.get(own.id))!.vaultPath).toBe(
+      "documents/Unfiled/2026-07-01 Demo lease.pdf",
+    );
+    expect((await documentRepo.get(titled.id))!.vaultPath).toBe(
+      "documents/Unfiled/2026-08-13 Demo bill.pdf",
+    );
+    expect(await store.read("documents/Unfiled/2026-08-13 Demo receipt.pdf")).toBeUndefined();
+  });
+
+  it("runs again where the v1 flag was set", async () => {
+    sqlite
+      .prepare("INSERT INTO meta (key, value) VALUES ('vault_repath_dated_titles', 'done')")
+      .run();
+    const utc = await documentRepo.upload(file("Demo receipt.pdf", "u"));
+    await placeAt(utc.id, "2026-08-13 Demo receipt.pdf");
+    expect(await repathDocuments()).toBe(1);
+    expect(doneFlag()).toBe("done");
   });
 });
 

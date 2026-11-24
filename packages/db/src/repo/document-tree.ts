@@ -99,6 +99,15 @@ const subtrees = (ids: Iterable<string>, live: readonly DocumentFolderRow[]) => 
 export const fileDatePrefix = (path: string | null): string | undefined =>
   path?.slice(path.lastIndexOf("/") + 1).match(/^(\d{4}-\d{2}-\d{2}) /)?.[1];
 
+/**
+ * The date prefix the app put on a placed document's file, or undefined. A file named after a
+ * dated title has no prefix of its own: the date it starts with is the title's.
+ */
+export const ownDatePrefix = (
+  doc: Pick<DocumentRow, "name" | "mime" | "vaultPath">,
+): string | undefined =>
+  titleHasDate(doc.name, extForMime(doc.mime)) ? undefined : fileDatePrefix(doc.vaultPath);
+
 /** A document's place, keeping its " (n)" when its name is otherwise unchanged (§ 4: no renumbering). */
 const placeDocument = (
   doc: DocumentRow,
@@ -190,11 +199,7 @@ const targetFor = (
   dates: readonly string[],
   taken: readonly string[],
 ) => {
-  // A file named after a dated title has no prefix of its own to keep.
-  const kept =
-    prev && !titleHasDate(prev.name, extForMime(prev.mime))
-      ? fileDatePrefix(prev.vaultPath)
-      : undefined;
+  const kept = prev ? ownDatePrefix(prev) : undefined;
   const useDates = change?.dates ?? (kept ? [kept] : dates);
   // Place it as if at its old path, so an unchanged name keeps its suffix.
   return placeDocument({ ...next, vaultPath: prev?.vaultPath ?? null }, ctx, useDates, taken);
@@ -219,9 +224,10 @@ export const previewDocumentPath = async (
   next: DocumentRow,
   insert: boolean,
   datesFor: TreeChangeOptions["datesFor"],
+  dates?: readonly string[],
 ): Promise<PathPreview> => {
   const { folderRows, docRows } = await currentRows();
-  const change: DocumentChange = { next, insert, op: insert ? "insert" : "update" };
+  const change: DocumentChange = { next, insert, dates, op: insert ? "insert" : "update" };
   const plan = await layoutTree(
     folderRows,
     docRows,
