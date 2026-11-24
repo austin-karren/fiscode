@@ -411,11 +411,17 @@ export function CheckPage({
 }
 
 /**
- * Adopting moves the file to Unfiled when no folder fiscode has is above where it was found
- * (adoptFolderId null), unless it was found in Unfiled already (REVIEW #112 r2 F1).
+ * Adopting moves the file to Unfiled when it neither has a folder nor makes one (adoptFolderId
+ * null, no adoptNewFolders), unless it was found in Unfiled already (REVIEW #112 r2 F1).
  */
-export const adoptsToUnfiled = (m: { adoptFolderId: string | null; foundAt: string }): boolean =>
-  m.adoptFolderId === null && !m.foundAt.startsWith(`${VAULT_DOCUMENTS_DIR}/${VAULT_UNFILED_DIR}/`);
+export const adoptsToUnfiled = (m: {
+  adoptFolderId: string | null;
+  adoptNewFolders?: readonly string[];
+  foundAt: string;
+}): boolean =>
+  m.adoptFolderId === null &&
+  !m.adoptNewFolders?.length &&
+  !m.foundAt.startsWith(`${VAULT_DOCUMENTS_DIR}/${VAULT_UNFILED_DIR}/`);
 
 /** A vault that never needed moving has nothing to report (REVIEW #112 r1 F2). */
 export const migrationDidSomething = (r: VaultMigrationReport): boolean =>

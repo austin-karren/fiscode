@@ -291,6 +291,13 @@ describe("Check folder (vault PR 11)", () => {
     expect(adoptsToUnfiled({ adoptFolderId: null, foundAt: "documents/Unfiled/a.txt" })).toBe(
       false,
     );
+    expect(
+      adoptsToUnfiled({
+        adoptFolderId: null,
+        adoptNewFolders: ["Receipts"],
+        foundAt: "documents/Receipts/a.txt",
+      }),
+    ).toBe(false);
     expect(adoptsToUnfiled({ adoptFolderId: "f", foundAt: "documents/2026/New/a.txt" })).toBe(
       false,
     );

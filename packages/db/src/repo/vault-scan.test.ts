@@ -31,6 +31,7 @@ import {
   applyRecordDates,
   importNewFiles,
   moveBack,
+  putBack,
   readLastScanReport,
   scanReviewCount,
   scanVault,
@@ -141,6 +142,7 @@ describe("scanVault: the § 6 table", () => {
   it("reports a row whose file is nowhere as missing", async () => {
     const d = await upload("Demo receipt.pdf", "one");
     await store.remove(d.vaultPath!);
+    await dropBlob(d.sha256);
     const r = done(await scanVault());
     expect(r.missing).toEqual([{ documentId: d.id, name: "Demo receipt.pdf", path: d.vaultPath }]);
   });
@@ -166,10 +168,11 @@ describe("scanVault: the § 6 table", () => {
     expect(await store.holds(oldBytesPath("versions", d.sha256), d.sha256)).toBe(true);
     const h = await getDb().select().from(history).where(eq(history.entityId, d.id));
     expect(h.map((x) => x.op)).toEqual(["insert", "update"]);
-    // The next scan finds nothing to do.
+    // The next scan records nothing more; the edit stays listed until acknowledged.
     const again = done(await scanVault());
-    expect(again.changed).toEqual([]);
+    expect(again.changed).toEqual(r.changed);
     expect(again.ok).toBe(1);
+    expect(await getDb().select().from(history).where(eq(history.entityId, d.id))).toHaveLength(2);
     // History can still go back to the bytes from before the edit.
     const versions = await documentRepo.versions(d.id);
     expect(versions.map((v) => v.available)).toEqual([true, true]);
@@ -541,6 +544,29 @@ describe("scanVault: more than one tab (§ 11.9)", () => {
     expect((await scanVault({ trigger: "focus", locks })).status).toBe("done");
   });
 
+  it("an acknowledge in another tab during a scan is never undone by that scan", async () => {
+    const a = await upload("A.pdf", "aaa");
+    const b = await upload("B.pdf", "bbb");
+    await outside(a.vaultPath!, "aaa edited");
+    expect(done(await scanVault()).changed.map((c) => c.documentId)).toEqual([a.id]);
+    await outside(b.vaultPath!, "bbb edited");
+    const locks = fakeLocks();
+    // The other tab acknowledges A while this scan records B's edit: after the scan has read
+    // the last report and before it saves its own.
+    let ack: Promise<void> | undefined;
+    const put = store.put.bind(store);
+    vi.spyOn(store, "put").mockImplementation(async (...args) => {
+      ack ??= acknowledgeChanged("all", { locks });
+      await Promise.race([ack, new Promise((r) => setTimeout(r, 50))]);
+      return put(...args);
+    });
+    await scanVault({ trigger: "check", locks });
+    await ack;
+    vi.mocked(store.put).mockRestore();
+    expect((await readLastScanReport())!.changed).toEqual([]);
+    expect(done(await scanVault({ locks })).changed).toEqual([]);
+  });
+
   it("names the long-op lock apart from the vault lock", () => {
     expect(VAULT_LONG_LOCK).not.toBe(VAULT_LOCK);
   });
@@ -777,5 +803,237 @@ describe("review r2 (d-data ruling): S2 swaps are moves, never edits", () => {
     await outside(b.vaultPath!, "aaa");
     const r = done(await scanVault());
     await expect(moveBack(r.moved.slice(0, 1))).rejects.toBeInstanceOf(VaultNameTakenError);
+  });
+});
+
+// ─── Follow-ups from the PR 11 walk (#112) ─────────────────────────────────────
+
+/** Deletes a document's pre-migration blob (D9), so only `_fiscode/` could still have its bytes. */
+const dropBlob = async (sha: string) => {
+  const dir = await (
+    await (await root.getDirectoryHandle("documents")).getDirectoryHandle("blobs")
+  ).getDirectoryHandle(sha.slice(0, 2));
+  await dir.removeEntry(sha);
+};
+
+describe("a deleted file whose bytes this device still has is restorable", () => {
+  it("is missing and restorable when the legacy blob store has its bytes", async () => {
+    const d = await upload("Demo receipt.pdf", "one");
+    await store.remove(d.vaultPath!);
+    const r = done(await scanVault());
+    expect(r.missing).toEqual([
+      { documentId: d.id, name: "Demo receipt.pdf", path: d.vaultPath, restorable: true },
+    ]);
+  });
+
+  it("is restorable from _fiscode/versions/ when the blob is gone", async () => {
+    const d = await upload("Demo receipt.pdf", "one");
+    await store.write(oldBytesPath("versions", d.sha256), file("x", "one"));
+    await store.remove(d.vaultPath!);
+    await dropBlob(d.sha256);
+    expect(done(await scanVault()).missing[0]!.restorable).toBe(true);
+  });
+
+  it("is plain missing when the bytes are nowhere on this device", async () => {
+    const d = await upload("Demo receipt.pdf", "one");
+    await store.remove(d.vaultPath!);
+    await dropBlob(d.sha256);
+    expect(done(await scanVault()).missing).toEqual([
+      { documentId: d.id, name: "Demo receipt.pdf", path: d.vaultPath },
+    ]);
+  });
+
+  it("put back writes the file to its vault path, journaled, and the row is ok again", async () => {
+    const d = await upload("Demo receipt.pdf", "one");
+    await store.remove(d.vaultPath!);
+    await dropBlob(d.sha256);
+    await store.write(oldBytesPath("trash", d.sha256), file("x", "one"));
+    const r = done(await scanVault());
+    await putBack(r.missing);
+    expect(await store.holds(d.vaultPath!, d.sha256)).toBe(true);
+    expect((await readLastScanReport())!.missing).toEqual([]);
+    const again = done(await scanVault());
+    expect([again.ok, again.missing.length]).toEqual([1, 0]);
+  });
+
+  it("put back from the legacy blob store", async () => {
+    const d = await upload("Demo receipt.pdf", "one");
+    await store.remove(d.vaultPath!);
+    await putBack(done(await scanVault()).missing);
+    expect(await store.holds(d.vaultPath!, d.sha256)).toBe(true);
+  });
+
+  it("put back refuses when something is at the path now, and when the bytes are gone", async () => {
+    const d = await upload("Demo receipt.pdf", "one");
+    await store.remove(d.vaultPath!);
+    const r = done(await scanVault());
+    await outside(d.vaultPath!, "something else");
+    await expect(putBack(r.missing)).rejects.toBeInstanceOf(VaultNameTakenError);
+    await store.remove(d.vaultPath!);
+    await dropBlob(d.sha256);
+    await expect(putBack(r.missing)).rejects.toBeInstanceOf(VaultIntegrityError);
+  });
+});
+
+describe("outside edits stay in the report until acknowledged", () => {
+  it("a change survives the next scan", async () => {
+    const d = await upload("Demo receipt.pdf", "one");
+    await outside(d.vaultPath!, "edited outside");
+    const first = done(await scanVault());
+    expect(first.changed).toHaveLength(1);
+    const second = done(await scanVault());
+    expect(second.changed).toEqual(first.changed);
+    expect(scanReviewCount(second)).toBe(1);
+    expect((await readLastScanReport())!.changed).toEqual(first.changed);
+  });
+
+  it("is cleared by acknowledge, one by id or all", async () => {
+    const a = await upload("A.pdf", "aaa");
+    const b = await upload("B.pdf", "bbb");
+    await outside(a.vaultPath!, "aaa edited");
+    await outside(b.vaultPath!, "bbb edited");
+    const r = done(await scanVault());
+    await acknowledgeChanged(r.changed.filter((c) => c.documentId === a.id));
+    expect(done(await scanVault()).changed.map((c) => c.documentId)).toEqual([b.id]);
+    await acknowledgeChanged("all");
+    expect(done(await scanVault()).changed).toEqual([]);
+  });
+
+  it("comes back when the file changes again, from the bytes the user last saw", async () => {
+    const d = await upload("Demo receipt.pdf", "one");
+    await outside(d.vaultPath!, "two");
+    const first = done(await scanVault());
+    await acknowledgeChanged(first.changed);
+    await outside(d.vaultPath!, "three");
+    const r = done(await scanVault());
+    expect(r.changed).toHaveLength(1);
+    expect(r.changed[0]!.fromSha256).toBe(first.changed[0]!.toSha256);
+  });
+
+  it("an unacknowledged change edited again keeps its first old bytes", async () => {
+    const d = await upload("Demo receipt.pdf", "one");
+    await outside(d.vaultPath!, "two");
+    done(await scanVault());
+    await outside(d.vaultPath!, "three");
+    const r = done(await scanVault());
+    expect(r.changed).toHaveLength(1);
+    expect(r.changed[0]!.fromSha256).toBe(d.sha256);
+    expect(r.changed[0]!.toSha256).toBe((await rowOf(d.id)).sha256);
+  });
+
+  it("a move stays in the report until adopted or moved back: the tree still shows it", async () => {
+    const d = await upload("Demo receipt.pdf", "one");
+    await store.move(d.vaultPath!, "documents/Unfiled/Moved.pdf", d.sha256);
+    const first = done(await scanVault());
+    expect(done(await scanVault()).moved).toEqual(first.moved);
+  });
+
+  it("drops a change whose document was deleted", async () => {
+    const d = await upload("Demo receipt.pdf", "one");
+    await outside(d.vaultPath!, "two");
+    done(await scanVault());
+    await documentRepo.softDelete(d.id);
+    expect(done(await scanVault()).changed).toEqual([]);
+  });
+});
+
+describe("adopt creates the folders the file was moved into (D6 a)", () => {
+  const liveFolders = async () => (await folderRepo.list()).filter((f) => f.deletedAt === null);
+
+  it("a new 1-level folder: adopt creates it and files the document there", async () => {
+    const d = await upload("Demo receipt.pdf", "one");
+    const foundAt = "documents/Receipts/Renamed.pdf";
+    await store.move(d.vaultPath!, foundAt, d.sha256);
+    const r = done(await scanVault());
+    expect(r.moved[0]).toMatchObject({ adoptFolderId: null, adoptNewFolders: ["Receipts"] });
+    const out = await adoptMoved(r.moved);
+    const folder = (await liveFolders()).find((f) => f.name === "Receipts")!;
+    expect(folder.parentId).toBeNull();
+    expect(out.folders.map((f) => f.id)).toEqual([folder.id]);
+    const row = await rowOf(d.id);
+    expect(row.folderId).toBe(folder.id);
+    expect(row.vaultPath!.startsWith("documents/Receipts/")).toBe(true);
+    expect(done(await scanVault()).ok).toBe(1);
+  });
+
+  it("a new 2-level folder under a known one", async () => {
+    const expenses = await expensesFolder();
+    const d = await upload("Demo receipt.pdf", "one");
+    const foundAt = "documents/2026/Expenses/Hardware/Monitors/Demo.pdf";
+    await store.move(d.vaultPath!, foundAt, d.sha256);
+    const r = done(await scanVault());
+    expect(r.moved[0]).toMatchObject({
+      adoptFolderId: expenses.id,
+      adoptNewFolders: ["Hardware", "Monitors"],
+    });
+    await adoptMoved(r.moved);
+    const all = await liveFolders();
+    const hw = all.find((f) => f.name === "Hardware")!;
+    const mon = all.find((f) => f.name === "Monitors")!;
+    expect([hw.parentId, mon.parentId]).toEqual([expenses.id, hw.id]);
+    expect(hw.taxYear).toBe(2026);
+    expect(
+      (await rowOf(d.id)).vaultPath!.startsWith("documents/2026/Expenses/Hardware/Monitors/"),
+    ).toBe(true);
+  });
+
+  it("adopt all creates each folder once", async () => {
+    const a = await upload("A.pdf", "aaa");
+    const b = await upload("B.pdf", "bbb");
+    await store.move(a.vaultPath!, "documents/Trips/Lisbon/A.pdf", a.sha256);
+    await store.move(b.vaultPath!, "documents/Trips/Lisbon/B.pdf", b.sha256);
+    const out = await adoptMoved(done(await scanVault()).moved);
+    const all = await liveFolders();
+    expect(all.filter((f) => f.name === "Trips")).toHaveLength(1);
+    expect(all.filter((f) => f.name === "Lisbon")).toHaveLength(1);
+    expect(out.folders).toHaveLength(2);
+    const lisbon = all.find((f) => f.name === "Lisbon")!.id;
+    expect([(await rowOf(a.id)).folderId, (await rowOf(b.id)).folderId]).toEqual([lisbon, lisbon]);
+  });
+
+  it("a name collision: a folder that matches a live one but for accents is that folder", async () => {
+    const cafe = await folderRepo.create({ name: "Cafe" });
+    const d = await upload("Demo receipt.pdf", "one");
+    await store.move(d.vaultPath!, "documents/Café/Demo.pdf", d.sha256);
+    const r = done(await scanVault());
+    expect(r.moved[0]).toMatchObject({ adoptFolderId: cafe.id });
+    expect(r.moved[0]!.adoptNewFolders).toBeUndefined();
+    const out = await adoptMoved(r.moved);
+    expect(out.folders).toEqual([]);
+    expect((await rowOf(d.id)).folderId).toBe(cafe.id);
+    expect((await liveFolders()).filter((f) => f.name.startsWith("Caf"))).toHaveLength(1);
+  });
+
+  it.each([
+    ["a top-level year folder (years are fixed)", "documents/2031/Demo.pdf", "year"],
+    ["a name the vault would rewrite", "documents/a:b/Demo.pdf", "name"],
+    ["a folder inside Unfiled", "documents/Unfiled/Sub/Demo.pdf", "unfiled"],
+    ["deeper than 8", `documents/${"abcdefghi".split("").join("/")}/Demo.pdf`, "too-deep"],
+  ] as const)(
+    "a path that breaks a rule, %s, falls back to Unfiled and says why",
+    async (_, foundAt, reason) => {
+      const d = await upload("Demo receipt.pdf", "one");
+      await store.move(d.vaultPath!, foundAt, d.sha256);
+      const r = done(await scanVault());
+      expect(r.moved[0]).toMatchObject({ adoptFolderId: null, adoptFallback: reason });
+      expect(r.moved[0]!.adoptNewFolders).toBeUndefined();
+      const before = (await liveFolders()).length;
+      const out = await adoptMoved(r.moved);
+      expect(out.unfiled).toEqual([{ documentId: d.id, foundAt, reason }]);
+      expect((await liveFolders()).length).toBe(before);
+      expect((await rowOf(d.id)).folderId).toBeNull();
+    },
+  );
+
+  it("a new folder over the path budget is shortened and reported", async () => {
+    const long = "x".repeat(110);
+    const d = await upload("Demo receipt.pdf", "one");
+    await store.move(d.vaultPath!, `documents/${long}/${long}/Demo.pdf`, d.sha256);
+    const out = await adoptMoved(done(await scanVault()).moved);
+    expect(out.folders).toHaveLength(2);
+    expect(out.shortened.length).toBeGreaterThan(0);
+    const row = await rowOf(d.id);
+    expect(row.vaultPath!.length).toBeLessThanOrEqual(240);
+    expect(done(await scanVault()).ok).toBe(1);
   });
 });

@@ -3,19 +3,36 @@ import {
   DocumentNotFoundError,
   DocumentTooLargeError,
   MAX_DOCUMENT_BYTES,
+  MAX_FOLDER_DEPTH,
   newId,
+  validFolderName,
+  vaultFolderName,
   validDocumentName,
   VaultBusyError,
   VaultIntegrityError,
   VaultNameTakenError,
   VAULT_DOCUMENTS_DIR,
+  VAULT_UNFILED_DIR,
 } from "@fiscode/core";
 import { and, eq, isNull } from "drizzle-orm";
 import { getDb, type AtomicQuery } from "../client.ts";
-import { document, documentFolder, meta, type DocumentRow } from "../schema/index.ts";
+import {
+  document,
+  documentFolder,
+  meta,
+  type DocumentFolderRow,
+  type DocumentRow,
+} from "../schema/index.ts";
 import { isNotFound, type VaultDirHandle } from "../vault/dir.ts";
 import { announceVaultChange, withVaultLock, type LockManagerLike } from "../vault/lock.ts";
-import { byAdded, documentDate, folderDir, folderSegments, pathContext } from "../vault/paths.ts";
+import {
+  byAdded,
+  documentDate,
+  folderDir,
+  folderSegments,
+  pathContext,
+  type ShortenedFolder,
+} from "../vault/paths.ts";
 import { getVaultMigrationState } from "../vault/state.ts";
 import {
   getVaultRoot,
@@ -27,7 +44,13 @@ import {
   type VaultStore,
 } from "../vault/store.ts";
 import { historyQuery, recoverVaultHeld, runTreeChange, runTreeChangeHeld } from "../vault/tree.ts";
-import { changeTree, forHistory, ownDatePrefix, type DocumentChange } from "./document-tree.ts";
+import {
+  changeTree,
+  forHistory,
+  ownDatePrefix,
+  type DocumentChange,
+  type FolderChange,
+} from "./document-tree.ts";
 import { linkedDates } from "./documents.ts";
 
 // The reconcile scan (ADR 0001 § 6, § 11.4): walk `documents/`, compare it to sqlite by path and
@@ -44,8 +67,18 @@ export type ScanMoved = {
   /** Where it is now. */
   foundAt: string;
   sha256: string;
-  /** The folder adopting gives it: the nearest folder fiscode knows above `foundAt`; null = Unfiled. */
+  /**
+   * The folder adopting gives it: the deepest folder fiscode knows on `foundAt`'s path; null =
+   * Unfiled (or, with `adoptNewFolders`, the top level).
+   */
   adoptFolderId: string | null;
+  /**
+   * The folders made outside the app that adopting creates below `adoptFolderId`, top down
+   * (D6 a: the document takes the folder it was moved to). Absent when there are none.
+   */
+  adoptNewFolders?: string[];
+  /** Why adopting files it in Unfiled instead of the folder it was moved to (AdoptFallback). */
+  adoptFallback?: AdoptFallback;
   /**
    * Set when `foundAt` is another row's own path (a swap or rotation of names outside the app).
    * Adopt every entry of the swap together ("adopt all"); move back refuses while the other
@@ -54,14 +87,44 @@ export type ScanMoved = {
   swapped?: true;
 };
 
-/** A row whose file is nowhere in `documents/`: the row shows "File not on this device". */
+/**
+ * A row whose file is nowhere in `documents/`: the row shows "File not on this device", unless
+ * `restorable`.
+ */
 export type ScanMissing = {
   documentId: string;
   name: string;
   path: string | null;
+  /**
+   * This device still has the bytes (`_fiscode/` versions or trash, the pre-migration blob store,
+   * or another document with the same bytes) and nothing is at `path`: putBack writes it there.
+   */
+  restorable?: true;
 };
 
-/** An outside edit, already recorded as a new version (History has it). */
+/**
+ * Why adopt can't create the folder a file was moved into, so it files it in Unfiled:
+ * - `year`: a new top-level folder named like a year (year folders are fixed, § 5, D5);
+ * - `name`: a folder name the vault would rewrite on disk (§ 3 sanitising) or refuses;
+ * - `unfiled`: a folder inside Unfiled, which isn't a folder;
+ * - `too-deep`: deeper than MAX_FOLDER_DEPTH.
+ */
+export type AdoptFallback = "year" | "name" | "unfiled" | "too-deep";
+
+/** What adoptMoved did beyond moving rows: folders it made, shortened, or couldn't make. */
+export type AdoptResult = {
+  /** The folders it created, top down. */
+  folders: DocumentFolderRow[];
+  /** New folder names cut to the path budget (§ 3.8). */
+  shortened: ShortenedFolder[];
+  /** Files it put in Unfiled instead of the folder they were moved to, and why. */
+  unfiled: { documentId: string; foundAt: string; reason: AdoptFallback }[];
+};
+
+/**
+ * An outside edit, already recorded as a new version (History has it). It stays in every later
+ * report until acknowledgeChanged; edited again before that, it keeps its first `fromSha256`.
+ */
 export type ScanChanged = {
   documentId: string;
   name: string;
@@ -181,10 +244,22 @@ const saveReport = (r: ScanReport) => {
     .onConflictDoUpdate({ target: meta.key, set: { value } });
 };
 
-const dropFromLastReport = async (edit: (r: ScanReport) => ScanReport) => {
-  const last = await readLastScanReport();
-  if (last) await saveReport(edit(last));
-};
+/**
+ * Under the vault lock, which a scan holds from reading the last report's `changed` to saving
+ * its own: unlocked, a scan in another tab would save back an edit acknowledged meanwhile.
+ * Waits its turn: it is short, and the action before it has finished.
+ */
+const dropFromLastReport = (
+  edit: (r: ScanReport) => ScanReport,
+  options: { locks?: LockManagerLike } = {},
+) =>
+  withVaultLock(
+    async () => {
+      const last = await readLastScanReport();
+      if (last) await saveReport(edit(last));
+    },
+    { wait: true, ...(options.locks ? { locks: options.locks } : {}) },
+  );
 
 const dropMoved = (items: readonly ScanMoved[]) => {
   const ids = new Set(items.map((m) => m.documentId));
@@ -192,6 +267,25 @@ const dropMoved = (items: readonly ScanMoved[]) => {
     ...r,
     moved: r.moved.filter((m) => !ids.has(m.documentId)),
   }));
+};
+
+/** Carry the last report's unacknowledged edits into this one, for documents still live. */
+const carryChanged = (
+  before: readonly ScanChanged[],
+  now: readonly ScanChanged[],
+  live: ReadonlySet<string>,
+): ScanChanged[] => {
+  const out = new Map(before.filter((c) => live.has(c.documentId)).map((c) => [c.documentId, c]));
+  for (const c of now) {
+    const prev = out.get(c.documentId);
+    out.set(
+      c.documentId,
+      prev
+        ? { ...c, fromSha256: prev.fromSha256, oldBytesKept: prev.oldBytesKept && c.oldBytesKept }
+        : c,
+    );
+  }
+  return [...out.values()].toSorted(byPath);
 };
 
 const folderIsLive = async (id: string | null): Promise<boolean> => {
@@ -248,6 +342,77 @@ const folderLocator = async () => {
   };
 };
 
+type AdoptPlace = {
+  folderId: string | null;
+  newFolders?: string[];
+  fallback?: AdoptFallback;
+};
+
+/**
+ * Where adopt files a document found at a path (D6 a): the folder of that place. Known folders
+ * are matched by disk name, then by name without case or accents (§ 4: one folder, not a
+ * sibling); the rest are folders to create, unless a rule forbids it (AdoptFallback).
+ */
+const adoptPlacer = (live: readonly DocumentFolderRow[]) => {
+  const ctx = pathContext(live);
+  const depthOf = (id: string | null) => {
+    let n = 0;
+    for (let at = id; at !== null; at = ctx.folders.get(at)?.parentId ?? null) n++;
+    return n;
+  };
+  const child = (parentId: string | null, segment: string) => {
+    const siblings = live.filter((f) => (f.parentId ?? null) === parentId);
+    return (
+      siblings.find((f) => key(ctx.disk.get(f.id) ?? "") === key(segment)) ??
+      siblings.find((f) => f.name.localeCompare(segment, "en", { sensitivity: "base" }) === 0)
+    );
+  };
+  const validSegment = (s: string) => {
+    try {
+      return validFolderName(s) === s && vaultFolderName(s) === s;
+    } catch {
+      return false;
+    }
+  };
+  return (foundAt: string): AdoptPlace => {
+    const segments = dirOf(foundAt).split("/").slice(1);
+    if (segments.length === 0) return { folderId: null };
+    if (key(segments[0]!) === key(VAULT_UNFILED_DIR)) {
+      return segments.length === 1 ? { folderId: null } : { folderId: null, fallback: "unfiled" };
+    }
+    let parentId: string | null = null;
+    let i = 0;
+    for (; i < segments.length; i++) {
+      const f = child(parentId, segments[i]!);
+      if (!f) break;
+      parentId = f.id;
+    }
+    const rest = segments.slice(i);
+    if (rest.length === 0) return { folderId: parentId };
+    const fallback: AdoptFallback | undefined =
+      parentId === null && /^\d{4}$/.test(rest[0]!)
+        ? "year"
+        : !rest.every(validSegment)
+          ? "name"
+          : depthOf(parentId) + rest.length > MAX_FOLDER_DEPTH
+            ? "too-deep"
+            : undefined;
+    return fallback ? { folderId: null, fallback } : { folderId: parentId, newFolders: rest };
+  };
+};
+
+const liveFolderRows = async () =>
+  (await getDb()
+    .select()
+    .from(documentFolder)
+    .where(isNull(documentFolder.deletedAt))) as DocumentFolderRow[];
+
+const adoptFields = (p: AdoptPlace) => ({
+  adoptFolderId: p.folderId,
+  ...(p.newFolders ? { adoptNewFolders: p.newFolders } : {}),
+  ...(p.fallback ? { adoptFallback: p.fallback } : {}),
+});
+
 /** The name a file gives its document: the file name without its D2 date prefix. */
 const nameFromFile = (path: string) =>
   validDocumentName(baseOf(path).replace(/^\d{4}-\d{2}-\d{2} (?=.)/, ""));
@@ -300,6 +465,14 @@ const keepOverwrittenBytes = async (store: VaultStore, sha256: string): Promise<
   if (!blob || (await sha256Hex(blob)) !== sha256) return false;
   await store.write(oldBytesPath("versions", sha256), blob);
   return true;
+};
+
+/** Whether this device has `sha256`'s bytes anywhere a put back can copy them from. */
+const hasBytes = async (store: VaultStore, sha256: string, okRows: readonly DocumentRow[]) => {
+  if (okRows.some((r) => r.sha256 === sha256)) return true;
+  if (await store.resolveOldBytes(sha256)) return true;
+  // Not hashed here (every scan, every missing row): putBack verifies the bytes it copies.
+  return store.has(sha256);
 };
 
 export type ScanProgress = { phase: "scanning"; done: number; total: number };
@@ -403,6 +576,7 @@ const scan = async (
   // B1: the row's own path first. A file there with another sha is an outside edit, never a
   // move, even when its old bytes turn up elsewhere (a conflict copy usually holds them).
   const locate = await folderLocator();
+  const place = adoptPlacer(await liveFolderRows());
   const moved: ScanMoved[] = [];
   const ambiguous: ScanAmbiguous[] = [];
 
@@ -439,7 +613,7 @@ const scan = async (
       path: d.row.vaultPath,
       foundAt: found[0]!,
       sha256: d.row.sha256,
-      adoptFolderId: locate(found[0]!),
+      ...adoptFields(place(found[0]!)),
       swapped: true,
     });
   }
@@ -477,7 +651,16 @@ const scan = async (
       (c) => c.sha === d.row.sha256 && !claimed.has(key(c.path)) && !looksLikeConflict(c.path),
     );
     if (found.length === 0) {
-      missing.push({ documentId: d.row.id, name: d.row.name, path: d.row.vaultPath });
+      const restorable =
+        !d.atPath && (await hasBytes(store, d.row.sha256, okRows))
+          ? { restorable: true as const }
+          : {};
+      missing.push({
+        documentId: d.row.id,
+        name: d.row.name,
+        path: d.row.vaultPath,
+        ...restorable,
+      });
       continue;
     }
     for (const f of found) claimed.add(key(f.path));
@@ -497,10 +680,14 @@ const scan = async (
       path: d.row.vaultPath,
       foundAt: found[0]!.path,
       sha256: d.row.sha256,
-      adoptFolderId: locate(found[0]!.path),
+      ...adoptFields(place(found[0]!.path)),
     });
   }
-  const changed = await recordEdits(store, edits);
+  const changed = carryChanged(
+    (await readLastScanReport())?.changed ?? [],
+    await recordEdits(store, edits),
+    new Set(rows.map((r) => r.id)),
+  );
   signal?.throwIfAborted();
 
   const onDisk = new Set(docFiles.map(key));
@@ -688,29 +875,88 @@ const lenient = { strict: false, datesFor: linkedDates };
  * every `moved` entry for "adopt all": one tree change. Never refuses for length (§ 3.8): a file
  * that wouldn't fit stays where it was found. Throws VaultIntegrityError for a stale entry.
  */
-export const adoptMoved = async (items: readonly ScanMoved[]): Promise<void> => {
-  if (items.length === 0) return;
+export const adoptMoved = async (items: readonly ScanMoved[]): Promise<AdoptResult> => {
+  const out: AdoptResult = { folders: [], shortened: [], unfiled: [] };
+  if (items.length === 0) return out;
   const store = getVaultStore();
-  const locate = await folderLocator();
+  const live = await liveFolderRows();
+  const place = adoptPlacer(live);
   const changes: DocumentChange[] = [];
+  const folders: FolderChange[] = [];
+  // Each new folder once, by parent and name: "adopt all" of two files in one new folder makes one.
+  const made = new Map<string, DocumentFolderRow>();
   const at = new Date().toISOString();
   for (const m of items) {
     const row = await liveRow(m.documentId);
     if (row.sha256 !== m.sha256) throw new VaultIntegrityError(m.foundAt);
     await assertHolds(store, m.foundAt, m.sha256);
+    const p = place(m.foundAt);
+    if (p.fallback)
+      out.unfiled.push({ documentId: m.documentId, foundAt: m.foundAt, reason: p.fallback });
+    let folderId = p.folderId;
+    for (const name of p.newFolders ?? []) {
+      const slot = `${folderId}/${key(name)}`;
+      let f = made.get(slot);
+      if (!f) {
+        const parent = [...live, ...made.values()].find((x) => x.id === folderId);
+        f = {
+          id: newId(),
+          name,
+          parentId: folderId,
+          taxYear: parent?.taxYear ?? null,
+          sortOrder: 0,
+          defaultKey: null,
+          deletedAt: null,
+          createdAt: at,
+          updatedAt: at,
+        };
+        made.set(slot, f);
+        folders.push({ next: f, insert: true, op: "insert" });
+      }
+      folderId = f.id;
+    }
     changes.push({
-      next: {
-        ...row,
-        folderId: locate(m.foundAt),
-        name: nameFromFile(m.foundAt),
-        updatedAt: at,
-      },
+      next: { ...row, folderId, name: nameFromFile(m.foundAt), updatedAt: at },
       from: m.foundAt,
       op: "update",
     });
   }
-  await changeTree({ documents: changes }, lenient);
+  const result = await changeTree({ folders, documents: changes }, lenient);
   await dropMoved(items);
+  out.folders = folders.map((c) => result.folders.get(c.next.id) ?? c.next);
+  out.shortened = result.shortened;
+  return out;
+};
+
+/**
+ * Put back (a restorable `missing` entry): copy the bytes this device still has to the row's
+ * path, journaled; no row changes. Throws VaultNameTakenError when something is there now,
+ * VaultIntegrityError for a stale entry or when the bytes are gone.
+ */
+export const putBack = async (items: readonly ScanMissing[]): Promise<void> => {
+  if (items.length === 0) return;
+  const store = getVaultStore();
+  await runTreeChange(async (plan) => {
+    for (const m of items) {
+      const row = await liveRow(m.documentId);
+      if (!m.path || row.vaultPath !== m.path) throw new VaultIntegrityError(m.path ?? m.name);
+      if ((await readFile(store, m.path)) !== undefined) throw new VaultNameTakenError(m.path);
+      let from = await plan.source(row.sha256);
+      if (!from) {
+        // The pre-migration blob store (D9) isn't a vault path: stage its bytes for the copy.
+        const blob = await store.get(row.sha256);
+        if (!blob || (await sha256Hex(blob)) !== row.sha256) throw new VaultIntegrityError(m.path);
+        from = await plan.stage(blob);
+      }
+      plan.ops.push({ op: "copy", from, to: m.path, sha256: row.sha256 });
+    }
+    return { queries: [], result: undefined };
+  });
+  const ids = new Set(items.map((m) => m.documentId));
+  await dropFromLastReport((r) => ({
+    ...r,
+    missing: r.missing.filter((m) => !ids.has(m.documentId)),
+  }));
 };
 
 /**
@@ -787,13 +1033,22 @@ export const importNewFiles = async (items: readonly ScanNewFile[]): Promise<Doc
   return changes.map((c) => documents.get(c.next.id)!);
 };
 
-/** Dismiss outside edits from the badge: they are recorded already (History has them). */
-export const acknowledgeChanged = (items: readonly ScanChanged[]): Promise<void> => {
-  const ids = new Set(items.map((c) => c.documentId));
-  return dropFromLastReport((r) => ({
-    ...r,
-    changed: r.changed.filter((c) => !ids.has(c.documentId)),
-  }));
+/**
+ * Dismiss outside edits from the badge: they are recorded already (History has them). Until
+ * then each stays in every later report. Pass the entries to dismiss, or "all".
+ */
+export const acknowledgeChanged = (
+  items: readonly ScanChanged[] | "all",
+  options: { locks?: LockManagerLike } = {},
+): Promise<void> => {
+  const ids = items === "all" ? undefined : new Set(items.map((c) => c.documentId));
+  return dropFromLastReport(
+    (r) => ({
+      ...r,
+      changed: ids ? r.changed.filter((c) => !ids.has(c.documentId)) : [],
+    }),
+    options,
+  );
 };
 
 /**
