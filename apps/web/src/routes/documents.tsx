@@ -54,7 +54,8 @@ export const Route = createFileRoute("/documents")({
     ]);
     // By default_key, so a renamed year folder is still the year's.
     const yearFolder = folders.find((f) => f.defaultKey === YEAR_ROOT_KEY && f.taxYear === year);
-    const folderId = openFolderId(deps, yearFolder?.id);
+    const linked = deps.doc ? allDocs.find((d) => d.id === deps.doc && !d.deletedAt) : undefined;
+    const folderId = openFolderId(deps, yearFolder?.id, linked?.folderId);
     const docs = deps.q
       ? await documentRepo.search(deps.q)
       : await documentRepo.listInFolder(folderId);
@@ -195,7 +196,7 @@ function DocumentsPage() {
         <FolderTree
           tree={tree}
           selected={folderId}
-          unfiled={search.unfiled === true}
+          unfiled={folderId === null && !search.trash}
           unfiledCount={data.unfiledCount}
           trash={search.trash === true}
         />

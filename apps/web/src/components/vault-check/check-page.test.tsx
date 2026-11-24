@@ -173,7 +173,7 @@ describe("Check folder (vault PR 11)", () => {
   it("adopts one, adopts all, and moves back", async () => {
     render(<CheckPage report={full} migration={undefined} />);
     const s = section(/^Moved/);
-    expect(within(s).getByText(/swapped places/)).toBeVisible();
+    expect(within(s).getByText(/swapped places with each other/)).toBeVisible();
     fireEvent.click(within(s).getByRole("button", { name: "Adopt Demo a" }));
     await vi.waitFor(() => expect(adoptMoved).toHaveBeenCalledWith([full.moved[0]]));
     await settled();
@@ -186,11 +186,11 @@ describe("Check folder (vault PR 11)", () => {
   });
 
   it("shows an action's typed error in its own section", async () => {
-    vi.mocked(moveBack).mockRejectedValueOnce(new VaultNameTakenError(full.moved[1]!.path));
+    vi.mocked(moveBack).mockRejectedValueOnce(new VaultNameTakenError(full.moved[0]!.path));
     render(<CheckPage report={full} migration={undefined} />);
-    fireEvent.click(screen.getByRole("button", { name: "Move back Demo b" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move back Demo a" }));
     const alert = await within(section(/^Moved/)).findByRole("alert");
-    expect(alert).toHaveTextContent(new VaultNameTakenError(full.moved[1]!.path).message);
+    expect(alert).toHaveTextContent(new VaultNameTakenError(full.moved[0]!.path).message);
   });
 
   it("acknowledges an edit, imports a new file, applies a record date", async () => {
@@ -261,6 +261,41 @@ describe("Check folder (vault PR 11)", () => {
     expect(screen.getByRole("button", { name: "Check now" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Adopt all" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Import demo-new.pdf" })).toBeDisabled();
+  });
+
+  it("adopts a swap only as a whole: no per-item Adopt or Move back (REVIEW #112 r1 F1)", async () => {
+    const swap = { ...empty, moved: [moved("a"), moved("b", true), moved("c", true)] };
+    render(<CheckPage report={swap} migration={undefined} />);
+    expect(screen.queryByRole("button", { name: "Adopt Demo b" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Move back Demo c" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Adopt Demo a" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Adopt the swap" }));
+    await vi.waitFor(() => expect(adoptMoved).toHaveBeenCalledWith([swap.moved[1], swap.moved[2]]));
+  });
+
+  it("keeps one error line: the next thing tried clears it (REVIEW #112 r1 F3)", async () => {
+    vi.mocked(scanVault).mockRejectedValueOnce(new VaultBusyError());
+    render(<CheckPage report={full} migration={undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Busy in another tab/);
+    fireEvent.click(screen.getByRole("button", { name: "Import demo-new.pdf" }));
+    await settled();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("hides the migration report when the migration had nothing to do (REVIEW #112 r1 F2)", () => {
+    const nothing: VaultMigrationReport = {
+      finishedAt: "2026-11-22T09:00:00.000Z",
+      documents: 0,
+      placed: 0,
+      oldBytesKept: 0,
+      foldersShortened: [],
+      titlesShortened: [],
+      overBudget: [],
+      missing: [],
+    };
+    render(<CheckPage report={empty} migration={nothing} />);
+    expect(screen.queryByText("Moving into the vault")).toBeNull();
   });
 
   it("shows the migration report", () => {

@@ -45,7 +45,8 @@ export function CheckPage({
   const router = useRouter();
   const readOnly = useVaultReadOnly();
   const [check, setCheck] = useState<Check>({ at: "idle" });
-  // One action at a time; its error shows in its own section.
+  // One action at a time, and one error line: the last thing tried. Check now's shows under it,
+  // an action's in its section; anything tried next clears it (REVIEW #112 r1 F3).
   const [acting, setActing] = useState<string>();
   const [failed, setFailed] = useState<{ section: string; line: string }>();
   const busy = check.at === "running" || acting !== undefined;
@@ -60,13 +61,15 @@ export function CheckPage({
         onProgress: (progress) => setCheck({ at: "running", progress }),
       });
       if (result.status === "skipped") {
-        setCheck({ at: "failed", line: skippedLine(result) });
+        setCheck({ at: "idle" });
+        setFailed({ section: "check", line: skippedLine(result) });
         return;
       }
       setCheck({ at: "idle" });
       await router.invalidate();
     } catch (err) {
-      setCheck({ at: "failed", line: errorLine(err) });
+      setCheck({ at: "idle" });
+      setFailed({ section: "check", line: errorLine(err) });
     }
   };
 
@@ -90,6 +93,9 @@ export function CheckPage({
     ) : null;
 
   const findings = report ? scanReviewCount(report) : 0;
+  // A swap is adopted as a whole: adopting one alone renames its partner's file (REVIEW #112 r1
+  // F1), and Move back refuses while the other file is there.
+  const swapped = report?.moved.filter((m) => m.swapped) ?? [];
 
   return (
     <div className="grid gap-4">
@@ -115,11 +121,7 @@ export function CheckPage({
               {scanProgressLine(check.progress)}…
             </p>
           ) : null}
-          {check.at === "failed" ? (
-            <p role="alert" className="text-sm text-destructive">
-              {check.line}
-            </p>
-          ) : null}
+          {problem("check")}
         </CardContent>
       </Card>
 
@@ -140,15 +142,28 @@ export function CheckPage({
               Found at another place in your folder. Adopt keeps the new place; Move back returns
               the file to where fiscode had it.
             </p>
-            {report.moved.some((m) => m.swapped) ? (
-              <p className="text-sm text-muted-foreground">
-                Some files swapped places with each other: adopt them all together.
-              </p>
+            {swapped.length > 0 ? (
+              <div className="grid gap-2">
+                <p className="text-sm text-muted-foreground">
+                  {count(swapped.length, "file")} swapped places with each other. Adopt them
+                  together, so no file is renamed to make room.
+                </p>
+                <div>
+                  <Button
+                    size="sm"
+                    disabled={off}
+                    onClick={() => void act("moved", () => adoptMoved(swapped))}
+                  >
+                    Adopt the swap
+                  </Button>
+                </div>
+              </div>
             ) : null}
             {report.moved.length > 1 ? (
               <div>
                 <Button
                   size="sm"
+                  variant={swapped.length > 0 ? "outline" : "default"}
                   disabled={off}
                   onClick={() => void act("moved", () => adoptMoved(report.moved))}
                 >
@@ -162,25 +177,28 @@ export function CheckPage({
                 <Item key={m.documentId} title={m.name}>
                   <Path label="Was">{m.path}</Path>
                   <Path label="Now">{m.foundAt}</Path>
-                  {m.swapped ? <Note>Swapped with another file.</Note> : null}
-                  <Actions>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={off}
-                      onClick={() => void act("moved", () => adoptMoved([m]))}
-                    >
-                      Adopt <span className="sr-only">{m.name}</span>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={off}
-                      onClick={() => void act("moved", () => moveBack([m]))}
-                    >
-                      Move back <span className="sr-only">{m.name}</span>
-                    </Button>
-                  </Actions>
+                  {m.swapped ? (
+                    <Note>Swapped with another file: use Adopt the swap above.</Note>
+                  ) : (
+                    <Actions>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={off}
+                        onClick={() => void act("moved", () => adoptMoved([m]))}
+                      >
+                        Adopt <span className="sr-only">{m.name}</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={off}
+                        onClick={() => void act("moved", () => moveBack([m]))}
+                      >
+                        Move back <span className="sr-only">{m.name}</span>
+                      </Button>
+                    </Actions>
+                  )}
                 </Item>
               ))}
             </Items>
@@ -188,8 +206,8 @@ export function CheckPage({
 
           <Section title="Edited outside fiscode" items={report.changed.length}>
             <p className="text-sm text-muted-foreground">
-              Already saved as a new version, so History has the change. Acknowledge to clear it
-              from this list.
+              Already saved as a new version, so History has the change. It shows here until the
+              next check; Acknowledge clears it now.
             </p>
             {report.changed.length > 1 ? (
               <div>
@@ -379,10 +397,21 @@ export function CheckPage({
         </>
       )}
 
-      {migration ? <MigrationReport report={migration} /> : null}
+      {migration && migrationDidSomething(migration) ? (
+        <MigrationReport report={migration} />
+      ) : null}
     </div>
   );
 }
+
+/** A vault that never needed moving has nothing to report (REVIEW #112 r1 F2). */
+export const migrationDidSomething = (r: VaultMigrationReport): boolean =>
+  r.placed > 0 ||
+  r.oldBytesKept > 0 ||
+  r.foldersShortened.length > 0 ||
+  r.titlesShortened.length > 0 ||
+  r.overBudget.length > 0 ||
+  r.missing.length > 0;
 
 function MigrationReport({ report }: { report: VaultMigrationReport }) {
   return (

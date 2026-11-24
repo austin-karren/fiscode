@@ -21,11 +21,20 @@ export const parseDocumentsSearch = (s: Record<string, unknown>): DocumentsSearc
   q: typeof s.q === "string" && s.q ? s.q : undefined,
 });
 
-/** The folder whose list is open: none (null) for Unfiled, else the asked one or the year's. */
+/**
+ * The folder whose list is open: none (null) for Unfiled; else the asked one; else, for a link to
+ * a document alone (`?doc=`), that document's folder (null = Unfiled); else the year's.
+ */
 export const openFolderId = (
   search: DocumentsSearch,
   yearFolderId: string | undefined,
-): string | null => (search.unfiled ? null : (search.folder ?? yearFolderId ?? null));
+  docFolderId?: string | null,
+): string | null => {
+  if (search.unfiled) return null;
+  if (search.folder) return search.folder;
+  if (docFolderId !== undefined) return docFolderId;
+  return yearFolderId ?? null;
+};
 
 /** Where a link to a document goes: its folder's list, or Unfiled when it has none. */
 export const documentLinkSearch = (doc: { id: string; folderId: string | null }): DocumentsSearch =>
