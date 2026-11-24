@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { todayIso } from "@fiscode/core";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import {
   FolderFixedError,
@@ -15,9 +16,11 @@ import {
   vaultStore,
   type VaultDirHandle,
   type VaultStore,
+  documentDate,
 } from "../vault/index.ts";
 import { buildBundle, documentLinkRepo, documentRepo, expenseRepo, folderRepo } from "./index.ts";
 import { importBundle } from "./import.ts";
+import { scanVault } from "./vault-scan.ts";
 import type { TreeProgress } from "./document-tree.ts";
 
 // previewPath (upload and rename dialogs), fixed folders, and folder-op progress and cancel.
@@ -39,7 +42,8 @@ afterEach(() => {
 
 const file = (name: string, text: string, type = "application/pdf") =>
   Object.assign(new Blob([text], { type }), { name });
-const today = () => new Date().toISOString().slice(0, 10);
+// The local day, as the D2 added-date prefix uses.
+const today = () => todayIso();
 
 const tree = async (dir = ""): Promise<string[]> => {
   const out: string[] = [];
@@ -310,5 +314,36 @@ describe("folder rename and move: progress and cancel (§ 11.3)", () => {
     const r = await folderRepo.rename(f.id, "G", { onProgress, signal: ctl.signal });
     expect(r.name).toBe("G");
     expect(await tree()).toEqual(docs.map((d) => d.vaultPath!.replace("/F/", "/G/")).sort());
+  });
+});
+
+describe("the D2 added-date prefix is the local day", () => {
+  it("an upload at 23:30 local is named that day, and the scan's redate check agrees", async () => {
+    // Fake only Date, so the vault's timers and promises run as normal.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      // 23:30 local on 2026-08-12 is already 2026-08-13 in UTC in any US zone.
+      vi.setSystemTime(new Date(2026, 7, 12, 23, 30));
+      const d = await documentRepo.upload(file("Demo bill.pdf", "b"));
+      expect(d.vaultPath).toBe("documents/Unfiled/2026-08-12 Demo bill.pdf");
+      expect(documentDate(d.addedAt, [])).toBe("2026-08-12");
+      expect(
+        (await documentRepo.previewPath({ folderId: null, name: "Demo bill 2.pdf" })).path,
+      ).toBe("documents/Unfiled/2026-08-12 Demo bill 2.pdf");
+      // Linked to a same-day record: the file name doesn't change, so it isn't "redated".
+      const e = await expenseRepo.create({
+        date: "2026-08-12",
+        category: "equipment",
+        description: "Demo bill",
+        amountCents: 1_00,
+      });
+      await documentLinkRepo.link(d.id, "expense", e.id);
+      expect((await documentRepo.get(d.id))!.vaultPath).toBe(d.vaultPath);
+      const r = await scanVault();
+      if (r.status !== "done") throw new Error(`scan skipped: ${r.reason}`);
+      expect(r.redated).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

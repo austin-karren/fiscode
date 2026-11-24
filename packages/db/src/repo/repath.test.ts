@@ -1,3 +1,4 @@
+import { todayIso } from "@fiscode/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 import { setupTestDb, teardownTestDb } from "../test/setup-db.ts";
@@ -38,7 +39,8 @@ afterEach(() => {
 
 const file = (name: string, text: string) =>
   Object.assign(new Blob([text], { type: "application/pdf" }), { name });
-const today = () => new Date().toISOString().slice(0, 10);
+// The local day, as the D2 added-date prefix uses.
+const today = () => todayIso();
 
 const tree = async (dir = ""): Promise<string[]> => {
   const out: string[] = [];

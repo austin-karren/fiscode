@@ -1,3 +1,4 @@
+import { todayIso } from "@fiscode/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 import { VaultMigratingError, VaultPathTooLongError, MAX_VAULT_PATH } from "@fiscode/core";
@@ -41,7 +42,8 @@ afterEach(() => {
 
 const file = (name: string, text: string, type = "application/pdf") =>
   Object.assign(new Blob([text], { type }), { name });
-const today = () => new Date().toISOString().slice(0, 10);
+// The local day, as the D2 added-date prefix uses.
+const today = () => todayIso();
 const text = async (path: string) => (await store.read(path))?.text();
 
 /** Every file under `vault/`, sorted, without the manifest. */
@@ -352,7 +354,7 @@ describe("r1: a path changes exactly when its inputs change", () => {
     expect(await tree()).toEqual(["documents/Unfiled/2026-03-16 Monitor.pdf"]);
     const { documentLinkRepo } = await import("./documents.ts");
     await documentLinkRepo.unlink(link.id);
-    expect(await tree()).toEqual([`documents/Unfiled/${d.addedAt.slice(0, 10)} Monitor.pdf`]);
+    expect(await tree()).toEqual([`documents/Unfiled/${today()} Monitor.pdf`]);
     // Undoing the unlink (a revert) re-dates it again.
     await documentLinkRepo.revertTo(link.id, link);
     expect(await tree()).toEqual(["documents/Unfiled/2026-03-16 Monitor.pdf"]);

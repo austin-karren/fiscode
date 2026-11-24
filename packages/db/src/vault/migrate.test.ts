@@ -162,7 +162,7 @@ describe("migrateToVault", () => {
     const docs = [];
     for (let i = 0; i < 4; i++) {
       docs.push(
-        await seed(`Doc ${i}.pdf`, `bytes ${i}`, { addedAt: `2026-01-0${i + 1}T00:00:00.000Z` }),
+        await seed(`Doc ${i}.pdf`, `bytes ${i}`, { addedAt: `2026-01-0${i + 1}T12:00:00.000Z` }),
       );
     }
     const ac = new AbortController();
