@@ -523,6 +523,29 @@ describe("scanVault: more than one tab (§ 11.9)", () => {
     expect((await scanVault({ trigger: "focus", locks })).status).toBe("done");
   });
 
+  it("an acknowledge in another tab during a scan is never undone by that scan", async () => {
+    const a = await upload("A.pdf", "aaa");
+    const b = await upload("B.pdf", "bbb");
+    await outside(a.vaultPath!, "aaa edited");
+    expect(done(await scanVault()).changed.map((c) => c.documentId)).toEqual([a.id]);
+    await outside(b.vaultPath!, "bbb edited");
+    const locks = fakeLocks();
+    // The other tab acknowledges A while this scan records B's edit: after the scan has read
+    // the last report and before it saves its own.
+    let ack: Promise<void> | undefined;
+    const put = store.put.bind(store);
+    vi.spyOn(store, "put").mockImplementation(async (...args) => {
+      ack ??= acknowledgeChanged("all", { locks });
+      await Promise.race([ack, new Promise((r) => setTimeout(r, 50))]);
+      return put(...args);
+    });
+    await scanVault({ trigger: "check", locks });
+    await ack;
+    vi.mocked(store.put).mockRestore();
+    expect((await readLastScanReport())!.changed).toEqual([]);
+    expect(done(await scanVault({ locks })).changed).toEqual([]);
+  });
+
   it("names the long-op lock apart from the vault lock", () => {
     expect(VAULT_LONG_LOCK).not.toBe(VAULT_LOCK);
   });

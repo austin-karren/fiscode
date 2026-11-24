@@ -244,10 +244,22 @@ const saveReport = (r: ScanReport) => {
     .onConflictDoUpdate({ target: meta.key, set: { value } });
 };
 
-const dropFromLastReport = async (edit: (r: ScanReport) => ScanReport) => {
-  const last = await readLastScanReport();
-  if (last) await saveReport(edit(last));
-};
+/**
+ * Under the vault lock, which a scan holds from reading the last report's `changed` to saving
+ * its own: unlocked, a scan in another tab would save back an edit acknowledged meanwhile.
+ * Waits its turn: it is short, and the action before it has finished.
+ */
+const dropFromLastReport = (
+  edit: (r: ScanReport) => ScanReport,
+  options: { locks?: LockManagerLike } = {},
+) =>
+  withVaultLock(
+    async () => {
+      const last = await readLastScanReport();
+      if (last) await saveReport(edit(last));
+    },
+    { wait: true, ...(options.locks ? { locks: options.locks } : {}) },
+  );
 
 const dropMoved = (items: readonly ScanMoved[]) => {
   const ids = new Set(items.map((m) => m.documentId));
@@ -1025,12 +1037,18 @@ export const importNewFiles = async (items: readonly ScanNewFile[]): Promise<Doc
  * Dismiss outside edits from the badge: they are recorded already (History has them). Until
  * then each stays in every later report. Pass the entries to dismiss, or "all".
  */
-export const acknowledgeChanged = (items: readonly ScanChanged[] | "all"): Promise<void> => {
+export const acknowledgeChanged = (
+  items: readonly ScanChanged[] | "all",
+  options: { locks?: LockManagerLike } = {},
+): Promise<void> => {
   const ids = items === "all" ? undefined : new Set(items.map((c) => c.documentId));
-  return dropFromLastReport((r) => ({
-    ...r,
-    changed: ids ? r.changed.filter((c) => !ids.has(c.documentId)) : [],
-  }));
+  return dropFromLastReport(
+    (r) => ({
+      ...r,
+      changed: ids ? r.changed.filter((c) => !ids.has(c.documentId)) : [],
+    }),
+    options,
+  );
 };
 
 /**
