@@ -413,6 +413,7 @@ function DocumentsPage() {
               ]
             : undefined
         }
+        preview={(name, where) => folderRepo.previewPath({ parentId: where, name })}
         onSubmit={async (name, where) => {
           const made = await folderRepo.create({ name, parentId: where });
           await navigate({
@@ -429,9 +430,20 @@ function DocumentsPage() {
         initial={dialog?.kind === "rename-folder" ? dialog.folder.name : ""}
         note={dialog?.kind === "rename-folder" ? renameNote(dialog.folder) : undefined}
         submitLabel="Rename"
-        onSubmit={async (name) => {
+        progress
+        preview={
+          dialog?.kind === "rename-folder"
+            ? (name) =>
+                folderRepo.previewPath({
+                  id: dialog.folder.id,
+                  parentId: dialog.folder.parentId,
+                  name,
+                })
+            : undefined
+        }
+        onSubmit={async (name, _where, hooks) => {
           if (dialog?.kind !== "rename-folder") return;
-          await folderRepo.rename(dialog.folder.id, name);
+          await folderRepo.rename(dialog.folder.id, name, hooks);
           await refresh();
         }}
       />
@@ -443,6 +455,16 @@ function DocumentsPage() {
         validate={documentNameProblem}
         initial={dialog?.kind === "rename-doc" ? dialog.doc.name : ""}
         submitLabel="Rename"
+        preview={
+          dialog?.kind === "rename-doc"
+            ? (name) =>
+                documentRepo.previewPath({
+                  id: dialog.doc.id,
+                  folderId: dialog.doc.folderId,
+                  name,
+                })
+            : undefined
+        }
         onSubmit={async (name) => {
           if (dialog?.kind !== "rename-doc") return;
           await documentRepo.rename(dialog.doc.id, name);
@@ -457,9 +479,10 @@ function DocumentsPage() {
         exclude={dialog?.kind === "move-folder" ? subtreeOf(folders, dialog.folder.id) : new Set()}
         topLabel="Top level"
         current={dialog?.kind === "move-folder" ? dialog.folder.parentId : null}
-        onMove={async (to) => {
+        progress
+        onMove={async (to, hooks) => {
           if (dialog?.kind !== "move-folder") return;
-          await folderRepo.move(dialog.folder.id, to);
+          await folderRepo.move(dialog.folder.id, to, hooks);
           await refresh();
         }}
       />

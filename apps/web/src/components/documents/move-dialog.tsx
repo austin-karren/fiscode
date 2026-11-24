@@ -1,7 +1,6 @@
 import { useId, useState } from "react";
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -10,9 +9,10 @@ import {
 import { Button } from "@fiscode/ui/components/button";
 import { Label } from "@fiscode/ui/components/label";
 
-import type { FolderNode } from "@fiscode/db";
+import type { FolderNode, RunHooks } from "@fiscode/db";
 import { errorLine, flattenTree, folderPath } from "../../lib/documents-view";
 import { SelectWithLabels } from "../forms/select-with-labels";
+import { guardClose, RunCancelButton, TreeRunLine, useTreeRun, type TreeRun } from "./tree-run";
 
 const TOP = "__top__";
 
@@ -27,18 +27,21 @@ export function MoveDialog(props: {
   /** The choice for no folder: "Top level" for a folder, "Unfiled" for a document. */
   topLabel: string;
   current: string | null;
-  onMove: (folderId: string | null) => Promise<void>;
+  onMove: (folderId: string | null, hooks: RunHooks) => Promise<void>;
+  /** Show progress and Cancel while the move runs (a folder moves every file in it). */
+  progress?: boolean;
   /** Where focus goes on close, as Base UI's finalFocus (the default returns it to the opener). */
   finalFocus?: React.ComponentProps<typeof DialogContent>["finalFocus"];
 }) {
+  const run = useTreeRun();
   return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent finalFocus={props.finalFocus}>
+    <Dialog open={props.open} onOpenChange={guardClose(run, props.onOpenChange)}>
+      <DialogContent finalFocus={props.finalFocus} showCloseButton={!run.running}>
         <DialogHeader>
           <DialogTitle>{props.title}</DialogTitle>
         </DialogHeader>
         {/* Mounted each time it opens, so it starts from where the item is now. */}
-        {props.open ? <MoveForm {...props} /> : null}
+        {props.open ? <MoveForm {...props} run={run} /> : null}
       </DialogContent>
     </Dialog>
   );
@@ -51,16 +54,22 @@ function MoveForm({
   topLabel,
   current,
   onMove,
+  progress = false,
+  run,
 }: {
+  run: TreeRun;
   onOpenChange: (open: boolean) => void;
   tree: FolderNode[];
   exclude: Set<string>;
   topLabel: string;
   current: string | null;
-  onMove: (folderId: string | null) => Promise<void>;
+  onMove: (folderId: string | null, hooks: RunHooks) => Promise<void>;
+  /** Show progress and Cancel while the move runs (a folder moves every file in it). */
+  progress?: boolean;
 }) {
   const [target, setTarget] = useState(current ?? TOP);
   const [error, setError] = useState<string>();
+  const busy = run.running;
   const id = useId();
   const rows = flattenTree(tree);
   const folders = rows.map((r) => r.folder);
@@ -90,14 +99,22 @@ function MoveForm({
           </p>
         ) : null}
       </div>
+      {progress ? <TreeRunLine run={run} /> : null}
       <DialogFooter>
-        <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+        <RunCancelButton run={run} cancellable={progress} />
+        {/* aria-disabled, not disabled, while it runs: a disabled focused button drops focus. */}
         <Button
+          aria-disabled={busy || undefined}
           onClick={async () => {
+            if (busy) return;
+            const hooks = run.start();
             try {
-              await onMove(target === TOP ? null : target);
+              await onMove(target === TOP ? null : target, hooks);
+              run.finish();
               onOpenChange(false);
             } catch (err) {
+              run.finish();
+              // FolderFixedError, OperationCancelledError ("Nothing was changed.") and the rest.
               setError(errorLine(err));
             }
           }}
