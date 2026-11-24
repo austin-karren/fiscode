@@ -264,6 +264,16 @@ describe("switching", () => {
     expect(await has(opfs, "vault/fiscode.json")).toBe(true);
   });
 
+  it("switches back into a folder used before, rewriting only its fiscode.json", async () => {
+    await seed();
+    const { folder } = fakeFolder();
+    await switchVaultToFolder(folder);
+    await switchVaultToOpfs();
+    await getVaultStore().write("fiscode.json", bytes('{"v":2}'));
+    await switchVaultToFolder(folder);
+    expect(await text(await getVaultStore().read("fiscode.json"))).toBe('{"v":2}');
+  });
+
   it("needs the folder granted", async () => {
     await seed();
     const { folder } = fakeFolder({ permission: "prompt" });

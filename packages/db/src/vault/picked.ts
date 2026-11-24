@@ -325,7 +325,7 @@ const listFiles = async (store: VaultStore): Promise<string[]> => {
  * Copies every vault file from `from` to `to`, verifying each sha on the copy. Journaled in OPFS
  * (`vault-switch.json`), so a cancel or crash resumes past what is already verified. The source
  * is left complete. A file at a target path with other bytes is the user's: VaultNameTakenError,
- * unless `overwrite` (OPFS, where only fiscode writes).
+ * unless `overwrite` (OPFS, where only fiscode writes) or it is the manifest.
  */
 const copyTree = async (
   from: VaultStore,
@@ -348,7 +348,9 @@ const copyTree = async (
       if (!bytes) throw new VaultIntegrityError(path);
       const sha = await sha256Hex(bytes);
       if (!(await to.holds(path, sha))) {
-        if (!overwrite && (await to.read(path)) !== undefined) throw new VaultNameTakenError(path);
+        // fiscode.json is rebuilt from sqlite, so a folder used before just gets the new one.
+        const owned = overwrite || path === MANIFEST_FILE;
+        if (!owned && (await to.read(path)) !== undefined) throw new VaultNameTakenError(path);
         await to.write(path, bytes);
         if (!(await to.holds(path, sha))) throw new VaultIntegrityError(path);
       }
