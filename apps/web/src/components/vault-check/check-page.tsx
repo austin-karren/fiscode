@@ -640,7 +640,7 @@ function Section({
     <Card role="region" aria-label={`${title}: ${items}`}>
       <CardHeader>
         <CardTitle>
-          <SectionTitle tabIndex={-1} data-section-heading className="outline-none">
+          <SectionTitle tabIndex={-1} data-section-heading>
             {title}
             <span className="tabular-nums">({items})</span>
           </SectionTitle>

@@ -479,7 +479,10 @@ describe("focus when an item leaves the list (d-ux)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Put all back" }));
     await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
     await frame();
-    expect(screen.getByText(/^Restorable from this device/).closest("h2")).toHaveFocus();
+    const heading = screen.getByText(/^Restorable from this device/).closest("h2")!;
+    expect(heading).toHaveFocus();
+    // Focus shows there, as on the page heading (REVIEW #119 r2).
+    expect(heading.className).not.toMatch(/outline-none/);
   });
 
   it("stays on the pressed button when the action fails", async () => {
