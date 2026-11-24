@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Alert, AlertDescription, AlertTitle } from "@fiscode/ui/components/alert";
 import { Button, buttonVariants } from "@fiscode/ui/components/button";
@@ -64,6 +64,14 @@ export function CheckPage({
   const [adopted, setAdopted] = useState<string[]>([]);
   const busy = check.at === "running" || acting !== undefined;
   const inFlight = useRef(false);
+  const pendingFocus = useRef<(() => HTMLElement | null) | null>(null);
+  // DOM focus synced to the new report: runs after the commit that drops the item's row.
+  useLayoutEffect(() => {
+    const target = pendingFocus.current;
+    if (!target) return;
+    pendingFocus.current = null;
+    focusOn(target());
+  }, [report]);
   const off = busy || !!readOnly;
 
   const checkNow = async () => {
@@ -108,8 +116,10 @@ export function CheckPage({
     setAdopted([]);
     try {
       await run();
+      // Focus moves once the re-read report has rendered (the layout effect below): the router
+      // resolves invalidate before it commits the new report (REVIEW #119 r1).
+      pendingFocus.current = target ?? null;
       await router.invalidate();
-      if (target) requestAnimationFrame(() => focusOn(target()));
     } catch (err) {
       setFailed({ section, line: errorLine(err) });
       // The row stayed, so focus is still on the pressed button.

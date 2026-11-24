@@ -406,17 +406,23 @@ describe("focus when an item leaves the list (d-ux)", () => {
         <CheckPage report={first} migration={undefined} />
       </main>,
     );
+    // As in the app: invalidate resolves first, and the new report commits later (REVIEW #119 r1).
     invalidate.mockImplementationOnce(async () => {
-      view.rerender(
-        <main>
-          <h1>Check folder</h1>
-          <CheckPage report={next} migration={undefined} />
-        </main>,
+      setTimeout(
+        () =>
+          view.rerender(
+            <main>
+              <h1>Check folder</h1>
+              <CheckPage report={next} migration={undefined} />
+            </main>,
+          ),
+        50,
       );
     });
     return view;
   };
-  const frame = () => act(() => new Promise<void>((r) => requestAnimationFrame(() => r())));
+  /** Lets the later re-render land, as the router's commit does after invalidate resolves. */
+  const frame = () => act(() => new Promise<void>((r) => setTimeout(r, 100)));
   const r1 = { documentId: "p1", name: "Demo p1", path: `${D}/p1.pdf`, restorable: true as const };
   const r2 = { ...r1, documentId: "p2", name: "Demo p2", path: `${D}/p2.pdf` };
   const r3 = { ...r1, documentId: "p3", name: "Demo p3", path: `${D}/p3.pdf` };
