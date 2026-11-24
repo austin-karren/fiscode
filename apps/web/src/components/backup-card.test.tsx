@@ -155,7 +155,9 @@ describe("Restore from backup", () => {
     ).toBeVisible();
     expect(within(dialog).getByText("You can undo this restore from History.")).toBeVisible();
     expect(within(dialog).getByText(/the state before this restore\.$/)).toBeVisible();
-    expect(within(dialog).getByRole("button", { name: "Restore" })).toHaveFocus();
+    // Focus moves in an effect, after the confirm step renders.
+    const restore = within(dialog).getByRole("button", { name: "Restore" });
+    await waitFor(() => expect(restore).toHaveFocus());
     expect(within(dialog).getByText("demo-receipt.pdf")).toBeVisible();
     expect(vi.mocked(readBackup).mock.calls[1]![1]?.passphrase).toBe(PASS);
     fireEvent.click(within(dialog).getByRole("button", { name: "Restore" }));
