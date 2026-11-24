@@ -10,9 +10,10 @@ import {
 import { Button } from "@fiscode/ui/components/button";
 import { Label } from "@fiscode/ui/components/label";
 
-import type { FolderNode } from "@fiscode/db";
+import type { FolderNode, RunHooks } from "@fiscode/db";
 import { errorLine, flattenTree, folderPath } from "../../lib/documents-view";
 import { SelectWithLabels } from "../forms/select-with-labels";
+import { TreeRunStatus, useTreeRun } from "./tree-run";
 
 const TOP = "__top__";
 
@@ -27,7 +28,9 @@ export function MoveDialog(props: {
   /** The choice for no folder: "Top level" for a folder, "Unfiled" for a document. */
   topLabel: string;
   current: string | null;
-  onMove: (folderId: string | null) => Promise<void>;
+  onMove: (folderId: string | null, hooks: RunHooks) => Promise<void>;
+  /** Show progress and Cancel while the move runs (a folder moves every file in it). */
+  progress?: boolean;
   /** Where focus goes on close, as Base UI's finalFocus (the default returns it to the opener). */
   finalFocus?: React.ComponentProps<typeof DialogContent>["finalFocus"];
 }) {
@@ -51,16 +54,21 @@ function MoveForm({
   topLabel,
   current,
   onMove,
+  progress,
 }: {
   onOpenChange: (open: boolean) => void;
   tree: FolderNode[];
   exclude: Set<string>;
   topLabel: string;
   current: string | null;
-  onMove: (folderId: string | null) => Promise<void>;
+  onMove: (folderId: string | null, hooks: RunHooks) => Promise<void>;
+  /** Show progress and Cancel while the move runs (a folder moves every file in it). */
+  progress?: boolean;
 }) {
   const [target, setTarget] = useState(current ?? TOP);
   const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const run = useTreeRun();
   const id = useId();
   const rows = flattenTree(tree);
   const folders = rows.map((r) => r.folder);
@@ -90,15 +98,26 @@ function MoveForm({
           </p>
         ) : null}
       </div>
+      {progress && run.running ? (
+        <TreeRunStatus progress={run.progress} onCancel={run.cancel} />
+      ) : null}
       <DialogFooter>
-        <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+        <DialogClose render={<Button type="button" variant="outline" disabled={busy} />}>
+          Cancel
+        </DialogClose>
         <Button
+          disabled={busy}
           onClick={async () => {
             try {
-              await onMove(target === TOP ? null : target);
+              setBusy(true);
+              await onMove(target === TOP ? null : target, run.start());
               onOpenChange(false);
             } catch (err) {
+              // FolderFixedError, OperationCancelledError ("Nothing was changed.") and the rest.
               setError(errorLine(err));
+            } finally {
+              run.finish();
+              setBusy(false);
             }
           }}
         >
