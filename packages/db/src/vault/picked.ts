@@ -297,6 +297,8 @@ export const indexedDbHandleStore = (): HandleStore => {
 };
 
 let handles: HandleStore | undefined;
+const hasFolderApi = (g: object = globalThis) =>
+  typeof (g as DetectGlobals).showDirectoryPicker === "function";
 let picked: PickedDirHandle | undefined;
 const handleStore = () => (handles ??= indexedDbHandleStore());
 
@@ -311,13 +313,19 @@ export const initVaultBackend = async (): Promise<void> => {
     following = true;
     onVaultChange(() => void initVaultBackend());
   }
+  // Only the API's existence gates reading the kept handle. canPickFolder's mobile guess decides
+  // whether to offer the picker; a wrong guess here would boot an empty OPFS vault (N1).
+  let known = true;
   try {
-    picked = canPickFolder() || handles ? await handleStore().get() : undefined;
+    picked = hasFolderApi() ? await handleStore().get() : undefined;
   } catch (err) {
     console.error("vault backend", err);
     picked = undefined;
+    known = false;
   }
   setActiveVaultStore(picked ? pickedFolderStore(picked, getVaultRoot()) : undefined);
+  // An unreadable handle store means the backend is unknown, not OPFS: leave the journal alone.
+  if (!known) return;
   try {
     await settleStaleSwitch();
   } catch (err) {

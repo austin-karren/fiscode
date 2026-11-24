@@ -4,7 +4,7 @@ import {
   VaultNameTakenError,
   VaultPermissionError,
 } from "@fiscode/core";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { memoryDir, type VaultDirHandle } from "./dir.ts";
 import {
   __setVaultBackendForTests,
@@ -90,8 +90,11 @@ beforeEach(() => {
   handles = memoryHandles();
   __setVaultBackendForTests(handles);
   __resetVaultMigrationStateForTests();
+  // Chromium: the File System Access API exists, so boot reads the kept handle.
+  vi.stubGlobal("showDirectoryPicker", () => {});
 });
 afterEach(() => {
+  vi.unstubAllGlobals();
   __setVaultBackendForTests(undefined);
   __setVaultStoreForTests(undefined);
 });
@@ -433,6 +436,42 @@ describe("switching", () => {
     ).rejects.toBeInstanceOf(OperationCancelledError);
     await initVaultBackend();
     expect(await pendingVaultSwitch()).toEqual({ to: "folder", done: 1 });
+  });
+
+  it("on boot, touch and mobile signals still use the kept folder and keep a pending switch (N1)", async () => {
+    await seed();
+    const { folder } = fakeFolder();
+    await switchVaultToFolder(folder);
+    const ac = new AbortController();
+    await expect(
+      switchVaultToOpfs({ signal: ac.signal, onProgress: (p) => p.done === 1 && ac.abort() }),
+    ).rejects.toBeInstanceOf(OperationCancelledError);
+    vi.stubGlobal("navigator", { userAgentData: { mobile: true }, userAgent: "Mobile" });
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q === "(pointer: coarse)" }));
+    expect(canPickFolder()).toBe(false);
+    await initVaultBackend();
+    expect(await vaultPermissionState()).toBe("granted");
+    expect(await text(await getVaultStore().read("exports/x.csv"))).toBe("csv");
+    expect(await pendingVaultSwitch()).toEqual({ to: "opfs", done: 1 });
+    await switchVaultToOpfs();
+    expect(await pendingVaultSwitch()).toBeUndefined();
+    expect(await vaultPermissionState()).toBe("opfs");
+    expect(await text(await getVaultStore().read("documents/2026/Expenses/a.pdf"))).toBe("a");
+  });
+
+  it("on boot, an unreadable handle store leaves a pending switch alone (N1)", async () => {
+    await seed();
+    const { folder } = fakeFolder();
+    await switchVaultToFolder(folder);
+    const ac = new AbortController();
+    await expect(
+      switchVaultToOpfs({ signal: ac.signal, onProgress: (p) => p.done === 1 && ac.abort() }),
+    ).rejects.toBeInstanceOf(OperationCancelledError);
+    handles.get = async () => {
+      throw new Error("idb down");
+    };
+    await initVaultBackend();
+    expect(await pendingVaultSwitch()).toEqual({ to: "opfs", done: 1 });
   });
 
   it("needs the folder granted", async () => {
