@@ -30,21 +30,25 @@ import {
 import { __resetDbForTests, __setDbForTests } from "@fiscode/db/client";
 import { buildBundle } from "@fiscode/db/repo";
 import { tables } from "@fiscode/db/schema";
+import { documentVaultPaths, MANIFEST_FILE } from "@fiscode/db/vault";
 import {
+  BACKUP_MANIFEST_V1,
   buildBackupZip,
   decryptBackup,
   encryptBackup,
   humanPaths,
   isAge,
   readBackup,
-  restoreBackupInto,
+  restoreBackup,
   type BackupManifest,
+  type VaultBackupManifest,
 } from "./index.ts";
 
 // The headless side of backups (contract: drafts/contract-backup.md), for d-dogfood's private
 // repo of backups. A "profile directory" holds what the browser keeps in OPFS, on disk:
 //   <dir>/fiscode.sqlite                         the database (the app's migrations applied)
-//   <dir>/documents/blobs/<sha[0:2]>/<sha256>    document bytes, the same layout as OPFS
+//   <dir>/vault/…                                the vault tree (ADR 0001 § 2), as in OPFS
+//   <dir>/documents/blobs/<sha[0:2]>/<sha256>    legacy by-sha bytes (format-1 restores, D9)
 // It can't read a browser's OPFS: a backup always starts in the app; this works on the zips.
 
 const MIGRATIONS = fileURLToPath(new URL("../../db/src/migrations", import.meta.url));
@@ -225,7 +229,7 @@ export const restoreBackupToDir = async (
   if (!file.ok) throw new Error(refusal(file));
   const close = await openProfileDir(dir);
   try {
-    await restoreBackupInto(file, fsVaultStore(dir));
+    await restoreBackup(file);
   } finally {
     close();
   }
@@ -243,7 +247,7 @@ const zipDir = async (
     return await buildBackupZip(
       await buildBundle({ includeDeleted: true, includeHistory: true }),
       fsVaultStore(dir),
-      options,
+      { ...options, paths: await documentVaultPaths() },
     );
   } finally {
     close();
@@ -278,16 +282,31 @@ const sameBytes = (a: Uint8Array | undefined, b: Uint8Array | undefined) =>
   a !== undefined && b !== undefined && a.length === b.length && a.every((x, i) => x === b[i]);
 
 /**
- * What a restore uses from a backup zip: the CSV's bytes, each stored file's bytes by sha256, and
- * the shas listed as missing. Not the zip's file names, which are only for people.
+ * What a restore uses from a backup zip, in either format: the CSV's bytes, each stored file's
+ * bytes by sha256, the shas listed as missing, and (format 2 only) the `(path, sha256)` pairs
+ * the restored vault holds. Format 1's zip names were only for people, so they aren't compared.
  */
 const restoredContents = (zip: Uint8Array) => {
   const entries = unzipSync(zip);
-  const manifest = JSON.parse(strFromU8(entries["manifest.json"]!)) as BackupManifest;
+  if (entries[MANIFEST_FILE]) {
+    const m = JSON.parse(strFromU8(entries[MANIFEST_FILE])) as VaultBackupManifest;
+    const stored = [
+      ...Object.values(m.documents),
+      ...Object.entries(m.blobs).map(([sha256, b]) => ({ path: b.path, sha256 })),
+    ];
+    return {
+      csv: entries[m.csv.path],
+      files: new Map(stored.map((d) => [d.sha256, entries[d.path]])),
+      missing: m.missing.toSorted(),
+      pairs: stored.map((d) => `${d.path} ${d.sha256}`).toSorted(),
+    };
+  }
+  const manifest = JSON.parse(strFromU8(entries[BACKUP_MANIFEST_V1]!)) as BackupManifest;
   return {
     csv: entries[manifest.csv.path],
     files: new Map(manifest.documents.map((d) => [d.sha256, entries[d.path]])),
     missing: manifest.missing.map((m) => m.sha256).toSorted(),
+    pairs: undefined,
   };
 };
 
@@ -297,8 +316,8 @@ const restoredContents = (zip: Uint8Array) => {
  * decrypted zips are compared:
  * - `sameZip`: byte for byte the same zip;
  * - `identical`: the same contents a restore uses (the CSV's bytes, every file's bytes by sha256,
- *   the missing list). A backup made before the zip's file names changed (#87: Windows-safe
- *   names) restores exactly but zips under other names: `identical` without `sameZip`.
+ *   the missing list, and for format 2 every file's vault path). A format-1 backup restores
+ *   exactly but backs up again as format 2: `identical` without `sameZip`.
  */
 export const checkRoundtrip = async (
   path: string,
@@ -322,7 +341,8 @@ export const checkRoundtrip = async (
       sameBytes(was.csv, now.csv) &&
       was.files.size === now.files.size &&
       [...was.files].every(([sha, bytes]) => sameBytes(bytes, now.files.get(sha))) &&
-      was.missing.join() === now.missing.join();
+      was.missing.join() === now.missing.join() &&
+      (was.pairs === undefined || was.pairs.join() === now.pairs?.join());
     return { identical, sameZip: false, manifest };
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -342,14 +362,17 @@ export const summarizeBackup = async (path: string, passphrase: string | undefin
     file.bundle.documents.filter((d) => d.deletedAt === null).map((d) => d.sha256),
   );
   const live = m.documents.filter((d) => liveShas.has(d.sha256));
+  const vault = file.vault;
   return {
     createdAt: m.createdAt,
     formatVersion: m.formatVersion,
     csvSchema: m.app.csvSchema,
     build: m.app.build,
     counts: m.counts,
-    documents: [...humanPaths(file.bundle).values()].toSorted(),
-    versions: m.documents.length - live.length,
+    documents: vault
+      ? [...vault.documents.values()].map((d) => d.path).toSorted()
+      : [...humanPaths(file.bundle).values()].toSorted(),
+    versions: vault ? vault.blobs.size : m.documents.length - live.length,
     missing: file.missing.map((x) => ({ sha256: x.sha256, names: x.names })),
   };
 };

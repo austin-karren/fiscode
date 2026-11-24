@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { focusAfterRemoval } from "./focus-after-removal";
+import { focusAfterRemoval, targetAfterRemoval } from "./focus-after-removal";
 import { MAIN_ID } from "./nav";
 
 afterEach(() => {
@@ -48,5 +48,41 @@ describe("focusAfterRemoval with a list", () => {
     refocus();
     await nextFrame();
     expect(document.activeElement).toBe(document.querySelector("ul"));
+  });
+});
+
+describe("targetAfterRemoval (a moved document's row)", () => {
+  const heading = () => document.querySelector<HTMLElement>("h2");
+  const withHeading = (rows: string[]) => {
+    const button = page(rows);
+    document.querySelector("main")!.insertAdjacentHTML("afterbegin", "<h2 tabindex='-1'>List</h2>");
+    return button;
+  };
+
+  it("is the next row's first control when the row went", () => {
+    const button = withHeading(["a", "b"]);
+    const target = targetAfterRemoval(button("Delete a"), heading);
+    button("Delete a").closest("tr")!.remove();
+    expect(target()).toBe(button("Edit b"));
+  });
+
+  it("is the previous row's when it was the last row", () => {
+    const button = withHeading(["a", "b"]);
+    const target = targetAfterRemoval(button("Delete b"), heading);
+    button("Delete b").closest("tr")!.remove();
+    expect(target()).toBe(button("Edit a"));
+  });
+
+  it("is the fallback (the list heading) when no row is left", () => {
+    const button = withHeading(["a"]);
+    const target = targetAfterRemoval(button("Delete a"), heading);
+    button("Delete a").closest("tr")!.remove();
+    expect(target()).toBe(heading());
+  });
+
+  it("is the pressed control itself when its row stayed", () => {
+    const button = withHeading(["a", "b"]);
+    const from = button("Delete a");
+    expect(targetAfterRemoval(from, heading)()).toBe(from);
   });
 });

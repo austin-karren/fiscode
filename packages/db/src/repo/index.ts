@@ -45,7 +45,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { EntityPeriodError, periodProblem } from "@fiscode/core";
 
 export { profileRepo };
-export { importBundle, type ImportReason } from "./import.ts";
+export { importBundle, importBundleQueries, type ImportReason } from "./import.ts";
 export { taxYearCacheRepo } from "./tax-year-cache.ts";
 
 export const clientRepo = makeCrudRepo<ClientInsert, ClientRow>(client, "client", {
@@ -282,3 +282,23 @@ export { linkedDates } from "./documents.ts";
 export { prepareVault, resumeVaultMigration, runVaultStartup } from "./vault-boot.ts";
 export { repathDocuments, REPATH_DONE_KEY } from "./vault-repath.ts";
 export type { PathPreview, RunHooks, ShortenedFolder, TreeProgress } from "./document-tree.ts";
+export {
+  acknowledgeChanged,
+  adoptMoved,
+  applyRecordDates,
+  importNewFiles,
+  moveBack,
+  readLastScanReport,
+  scanReviewCount,
+  scanVault,
+  type ScanChanged,
+  type ScanConflict,
+  type ScanMissing,
+  type ScanMoved,
+  type ScanNewFile,
+  type ScanProgress,
+  type ScanRedated,
+  type ScanReport,
+  type ScanResult,
+  type ScanTrigger,
+} from "./vault-scan.ts";

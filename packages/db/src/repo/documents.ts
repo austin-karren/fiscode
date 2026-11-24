@@ -866,6 +866,8 @@ export const documentRepo = {
       .from(historyTable)
       .where(and(eq(historyTable.entity, "document"), eq(historyTable.entityId, id)))
       .orderBy(historyTable.at);
+    // The current version's bytes are the document's own file (the tree), not under _fiscode/.
+    const [row] = await db.select().from(document).where(eq(document.id, id)).limit(1);
     const out: {
       at: string;
       sha256: string;
@@ -882,7 +884,11 @@ export const documentRepo = {
         sha256: after.sha256,
         sizeBytes: after.sizeBytes,
         name: after.name,
-        available: (await readSha(after.sha256)) !== undefined,
+        available:
+          (await readSha(
+            after.sha256,
+            row?.sha256 === after.sha256 && row.deletedAt === null ? row.vaultPath : null,
+          )) !== undefined,
       });
     }
     return out;

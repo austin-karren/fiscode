@@ -29,6 +29,7 @@ import {
 } from "@fiscode/db";
 import { sha256Hex } from "@fiscode/db/vault";
 import { setupTestDb, teardownTestDb } from "@fiscode/db/test";
+import { createBackupV1 } from "./test-format1.ts";
 import {
   createBackup,
   AGE_NO_IDENTITY_MATCHED,
@@ -113,8 +114,8 @@ const zipEntries = async (blob: Blob) => unzipSync(await plain(blob));
 const rezip = (entries: Record<string, Uint8Array>) =>
   new Blob([zipSync(entries) as unknown as ArrayBuffer]);
 
-describe("backup: layout and manifest", () => {
-  it("manifest, CSV, live documents at their folder paths, everything else once by sha", async () => {
+describe("backup: layout and manifest (format 2, the vault layout)", () => {
+  it("fiscode.json, the CSV in exports/, live documents at their vault paths, _fiscode/ as the store keeps it", async () => {
     await seed();
     const { blob, fileName, manifest } = await createBackup({
       createdAt: CREATED,
@@ -124,32 +125,36 @@ describe("backup: layout and manifest", () => {
     expect(fileName).toBe("fiscode-backup-2026-11-21.zip.age");
     const entries = await zipEntries(blob);
     const names = Object.keys(entries);
-    expect(names[0]).toBe("manifest.json");
-    expect(names[1]).toBe("fiscode-full-backup-2026-11-21.csv");
-    const paths = manifest.documents.map((d) => d.path);
-    expect(paths).toContain("documents/2026/Expenses/Demo receipt.pdf");
-    expect(paths).toContain("documents/2026/Expenses/Demo receipt (2).pdf");
-    // v1 of the receipt and the deleted scan: under .versions.
-    expect(paths.filter((p) => p.startsWith("documents/.versions/"))).toHaveLength(2);
-    // v2 is shared by two documents and stored once.
-    const shas = manifest.documents.map((d) => d.sha256);
-    expect(new Set(shas).size).toBe(shas.length);
-    // The shared sha's one path is chosen by path, never by id (review #85 r4): the receipt's
-    // "documents/2026/…" sorts before "documents/Unfiled/copy.pdf".
-    const shared = manifest.documents.find((d) => d.documentIds.length === 2)!;
-    expect(shared.path).toMatch(/^documents\/2026\/Expenses\/Demo receipt( \(2\))?\.pdf$/);
-    expect(paths).not.toContain("documents/Unfiled/copy.pdf");
-    expect(manifest).toMatchObject({
-      format: "fiscode-backup",
-      formatVersion: 1,
-      createdAt: CREATED,
+    expect(names[0]).toBe("fiscode.json");
+    expect(names[1]).toBe("exports/fiscode-full-backup-2026-11-21.csv");
+    const vault = JSON.parse(strFromU8(entries["fiscode.json"]!));
+    expect(vault).toMatchObject({
+      format: "fiscode-vault",
+      formatVersion: 2,
+      writtenAt: CREATED,
       app: { csvSchema: "v6", build: "dev" },
       missing: [],
     });
-    expect(JSON.parse(strFromU8(entries["manifest.json"]!))).toEqual(manifest);
+    // Every live document at its row's vault_path, one copy each, even with shared bytes (D12).
+    const live = (await documentRepo.list()) as { id: string; vaultPath: string | null }[];
+    expect(live).toHaveLength(3);
+    for (const d of live) {
+      expect(vault.documents[d.id].path).toBe(d.vaultPath);
+      expect(names).toContain(d.vaultPath);
+    }
+    // The receipt's v1 is in versions/, the deleted scan in trash/: where the store keeps them.
+    const kept = Object.values(vault.blobs as Record<string, { path: string }>).map((b) => b.path);
+    expect(kept.filter((p) => p.startsWith("_fiscode/versions/"))).toHaveLength(1);
+    expect(kept.filter((p) => p.startsWith("_fiscode/trash/"))).toHaveLength(1);
+    expect(names.slice(2)).toEqual(names.slice(2).toSorted());
+    expect(manifest).toMatchObject({
+      format: "fiscode-vault",
+      formatVersion: 2,
+      createdAt: CREATED,
+    });
   });
 
-  it("an app with no documents still backs up as a zip (CSV + manifest)", async () => {
+  it("an app with no documents still backs up as a zip (CSV + fiscode.json)", async () => {
     await importBundle(exampleBundle() as never, "import-restore");
     const { blob, manifest } = await createBackup({
       createdAt: CREATED,
@@ -234,7 +239,7 @@ describe("backup: restore over existing data", () => {
 describe("backup: refusals (nothing written)", () => {
   const good = async () => {
     await seed();
-    return createBackup({ createdAt: CREATED, passphrase: PASS, scryptWorkFactor: WF });
+    return createBackupV1({ createdAt: CREATED, passphrase: PASS, scryptWorkFactor: WF });
   };
 
   it("not a zip", async () => {
@@ -257,7 +262,7 @@ describe("backup: refusals (nothing written)", () => {
     const m = JSON.parse(strFromU8(entries["manifest.json"]!)) as BackupManifest;
     await expect(
       openBackup(
-        rezip({ ...entries, "manifest.json": strToU8(JSON.stringify({ ...m, formatVersion: 2 })) }),
+        rezip({ ...entries, "manifest.json": strToU8(JSON.stringify({ ...m, formatVersion: 3 })) }),
       ),
     ).rejects.toBeInstanceOf(BackupTooNewError);
   });
@@ -349,7 +354,9 @@ describe("backup: headless (node.ts, the script's functions)", () => {
     await restoreBackupToDir(zip, join(dir, "profile"), PASS);
     expect(await checkRoundtrip(zip, PASS)).toMatchObject({ identical: true });
     const summary = await summarizeBackup(zip, PASS);
-    expect(summary.documents).toContain("documents/2026/Expenses/Demo receipt.pdf");
+    expect(summary.documents).toContain(
+      backup.manifest.documents.find((d) => d.path.endsWith(" Demo receipt.pdf"))!.path,
+    );
 
     sqlite = setupTestDb(); // for afterEach
   });
@@ -406,7 +413,7 @@ describe("review #85 r1", () => {
 
   it("(1) a blob only history references (an older version) dropped from the zip is refused", async () => {
     await seed();
-    const backup = await createBackup({
+    const backup = await createBackupV1({
       createdAt: CREATED,
       passphrase: PASS,
       scryptWorkFactor: WF,
@@ -425,7 +432,7 @@ describe("review #85 r1", () => {
   it("(2) missing files are reported with the documents' names; counts.blobs is cross-checked", async () => {
     await seed();
     __setVaultStoreForTests(vaultStore(memoryDir()));
-    const backup = await createBackup({
+    const backup = await createBackupV1({
       createdAt: CREATED,
       passphrase: PASS,
       scryptWorkFactor: WF,
@@ -448,7 +455,7 @@ describe("review #85 r1", () => {
 
   it("(3) a manifest of the wrong shape is a BackupManifestError, never a TypeError", async () => {
     await seed();
-    const backup = await createBackup({
+    const backup = await createBackupV1({
       createdAt: CREATED,
       passphrase: PASS,
       scryptWorkFactor: WF,
@@ -469,7 +476,7 @@ describe("review #85 r1", () => {
 
   it("(4) formatVersion must be a whole number of 1 or more; a file the manifest doesn't list is refused by name", async () => {
     await seed();
-    const backup = await createBackup({
+    const backup = await createBackupV1({
       createdAt: CREATED,
       passphrase: PASS,
       scryptWorkFactor: WF,
@@ -526,7 +533,7 @@ describe("review #85 r1: the script reports missing files", () => {
 
   it("(6) summary lists every live document from the rows (shared bytes too), and counts versions", async () => {
     await seed();
-    const backup = await createBackup({
+    const backup = await createBackupV1({
       createdAt: CREATED,
       passphrase: PASS,
       scryptWorkFactor: WF,
@@ -559,8 +566,8 @@ describe("encryption (age, scrypt passphrase)", () => {
     const bytes = new Uint8Array(await blob.arrayBuffer());
     expect(strFromU8(bytes.slice(0, 22))).toBe("age-encryption.org/v1\n");
     expect(strFromU8(bytes.slice(0, 200))).toContain("-> scrypt ");
-    expect(strFromU8(bytes)).not.toContain("manifest.json");
-    expect(unzipSync(await plain(blob))["manifest.json"]).toBeDefined();
+    expect(strFromU8(bytes)).not.toContain("fiscode.json");
+    expect(unzipSync(await plain(blob))["fiscode.json"]).toBeDefined();
   });
 
   it("a wrong passphrase is a typed error and nothing changes", async () => {
@@ -835,7 +842,7 @@ describe("#85 follow-ups (r2 a-c, r5 d-f)", () => {
     for (const name of names) {
       await documentRepo.upload(file(name, `bytes of ${name}`), { folderId: con.id });
     }
-    const { manifest } = await createBackup({
+    const { manifest } = await createBackupV1({
       createdAt: CREATED,
       passphrase: PASS,
       scryptWorkFactor: WF,
@@ -855,7 +862,7 @@ describe("#85 follow-ups (r2 a-c, r5 d-f)", () => {
     expect(live).toContain("documents/_CON/console.pdf");
     // Still restores exactly: paths are for people, the manifest's sha256 is what restores.
     const read = await openBackup(
-      (await createBackup({ createdAt: CREATED, passphrase: PASS, scryptWorkFactor: WF })).blob,
+      (await createBackupV1({ createdAt: CREATED, passphrase: PASS, scryptWorkFactor: WF })).blob,
     );
     expect(read.ok).toBe(true);
   });
@@ -864,7 +871,7 @@ describe("#85 follow-ups (r2 a-c, r5 d-f)", () => {
     await importBundle(exampleBundle() as never, "import-restore");
     await documentRepo.upload(file("a?b.pdf", "one"));
     await documentRepo.upload(file("a*b.pdf", "two"));
-    const { manifest } = await createBackup({
+    const { manifest } = await createBackupV1({
       createdAt: CREATED,
       passphrase: PASS,
       scryptWorkFactor: WF,
@@ -880,7 +887,7 @@ describe("#85 follow-ups (r2 a-c, r5 d-f)", () => {
   it("(c) a manifest that lists a path or a sha twice is refused", async () => {
     await seed();
     const entries = await zipEntries(
-      (await createBackup({ createdAt: CREATED, passphrase: PASS, scryptWorkFactor: WF })).blob,
+      (await createBackupV1({ createdAt: CREATED, passphrase: PASS, scryptWorkFactor: WF })).blob,
     );
     const m = manifestOf(entries);
     const first = m.documents[0]!;
@@ -908,7 +915,7 @@ describe("#85 follow-ups (r2 a-c, r5 d-f)", () => {
   it("(b) a sha listed as both missing and in the zip is refused as contradictory", async () => {
     await seed();
     const entries = await zipEntries(
-      (await createBackup({ createdAt: CREATED, passphrase: PASS, scryptWorkFactor: WF })).blob,
+      (await createBackupV1({ createdAt: CREATED, passphrase: PASS, scryptWorkFactor: WF })).blob,
     );
     const m = manifestOf(entries);
     const both = { ...m, missing: [{ sha256: m.documents[0]!.sha256, documentIds: [] }] };
@@ -981,7 +988,7 @@ describe("review #87 r1", () => {
     await importBundle(exampleBundle() as never, "import-restore");
     const con = await folderRepo.create({ name: "CON" });
     await documentRepo.upload(file("a:b.pdf", "demo a:b"), { folderId: con.id });
-    const backup = await createBackup({
+    const backup = await createBackupV1({
       createdAt: CREATED,
       passphrase: PASS,
       scryptWorkFactor: WF,
@@ -1006,7 +1013,8 @@ describe("review #87 r1", () => {
     teardownTestDb(sqlite);
 
     expect(await checkRoundtrip(oldAge, PASS)).toMatchObject({ identical: true, sameZip: false });
-    expect(await checkRoundtrip(now, PASS)).toMatchObject({ identical: true, sameZip: true });
+    // A format-1 backup made today backs up again as format 2: the same contents, a new zip.
+    expect(await checkRoundtrip(now, PASS)).toMatchObject({ identical: true, sameZip: false });
     const bin = fileURLToPath(new URL("../bin/fiscode-backup.ts", import.meta.url));
     const r = spawnSync("bun", [bin, "check-roundtrip", oldAge], {
       encoding: "utf8",
@@ -1027,7 +1035,7 @@ describe("review #87 r1", () => {
     await documentRepo.upload(file("Sub", "demo Sub"), { folderId: q.id });
     const sub = await folderRepo.create({ name: "sub", parentId: q.id });
     await documentRepo.upload(file("y.pdf", "demo y"), { folderId: sub.id });
-    const backup = await createBackup({
+    const backup = await createBackupV1({
       createdAt: CREATED,
       passphrase: PASS,
       scryptWorkFactor: WF,
@@ -1053,7 +1061,7 @@ describe("review #87 r1", () => {
     await importBundle(exampleBundle() as never, "import-restore");
     const names = ["CONIN$", "conout$.txt", "COM¹.txt", "com³", "LPT².pdf", "lpt¹", "COM4.ok"];
     for (const n of names) await documentRepo.upload(file(n, `demo ${n}`));
-    const { manifest } = await createBackup({
+    const { manifest } = await createBackupV1({
       createdAt: CREATED,
       passphrase: PASS,
       scryptWorkFactor: WF,
@@ -1083,7 +1091,7 @@ describe("check-roundtrip when the restored contents differ", () => {
     dir = mkdtempSync(join(tmpdir(), "fiscode-backup-neg-"));
     await importBundle(exampleBundle() as never, "import-restore");
     await documentRepo.upload(file("Demo receipt.pdf", "demo receipt"));
-    const backup = await createBackup({
+    const backup = await createBackupV1({
       createdAt: CREATED,
       passphrase: PASS,
       scryptWorkFactor: WF,

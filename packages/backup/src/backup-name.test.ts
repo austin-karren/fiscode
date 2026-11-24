@@ -50,7 +50,7 @@ describe("backup file name: the local date", () => {
       scryptWorkFactor: 10,
     });
     expect(fileName).toBe("fiscode-backup-2026-11-20.zip.age");
-    expect(manifest.csv.path).toBe("fiscode-full-backup-2026-11-20.csv");
+    expect(manifest.csv.path).toBe("exports/fiscode-full-backup-2026-11-20.csv");
     expect(manifest.createdAt).toBe(LATE_EVENING); // the instant itself stays UTC
   });
 

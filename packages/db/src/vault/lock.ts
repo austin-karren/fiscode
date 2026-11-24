@@ -30,14 +30,30 @@ const defaultLocks = (): LockManagerLike | undefined =>
  */
 export const withVaultLock = async <T>(
   fn: () => Promise<T>,
-  options: { wait?: boolean; locks?: LockManagerLike } = {},
+  options: { wait?: boolean; long?: boolean; locks?: LockManagerLike } = {},
 ): Promise<T> => {
   const locks = options.locks ?? defaultLocks();
   if (!locks) return fn();
   return locks.request(VAULT_LOCK, options.wait ? {} : { ifAvailable: true }, async (lock) => {
     if (lock === null) throw new VaultBusyError();
-    return fn();
+    // Only a holder of VAULT_LOCK takes this one, so it is always free here.
+    return options.long ? locks.request(VAULT_LONG_LOCK, {}, fn) : fn();
   });
+};
+
+/**
+ * Held, inside VAULT_LOCK, by a long op: folder rename/move, migration, export, restore
+ * (§ 11.3). A focus scan that finds it taken is skipped, not queued (§ 11.4).
+ */
+export const VAULT_LONG_LOCK = "fiscode-vault-long";
+
+/**
+ * Whether a long op runs in any tab right now. A probe: it takes and drops the lock at once, so
+ * it never holds it while waiting for VAULT_LOCK (that order would deadlock with the op).
+ */
+export const isLongVaultOpRunning = async (locks = defaultLocks()): Promise<boolean> => {
+  if (!locks) return false;
+  return locks.request(VAULT_LONG_LOCK, { ifAvailable: true }, async (lock) => lock === null);
 };
 
 const defaultChannel = (): ChannelLike | undefined =>

@@ -11,11 +11,12 @@ export const useVaultMigration = (): VaultMigrationState =>
   useSyncExternalStore(onVaultMigrationState, getVaultMigrationState);
 
 /** What a screen holds back until the migration is done: documents, or an import or backup. */
-export type VaultBlocked = "documents" | "import" | "backup";
+export type VaultBlocked = "documents" | "import" | "backup" | "export";
 
 const WAITS: Record<Exclude<VaultBlocked, "documents">, string> = {
   import: "Import waits",
   backup: "Backup and restore wait",
+  export: "Export vault waits",
 };
 
 /**

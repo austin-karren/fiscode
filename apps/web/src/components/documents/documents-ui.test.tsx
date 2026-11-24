@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
 
 vi.mock("@fiscode/db", async () => {
   // SQLite and OPFS don't exist in jsdom: the repos are the in-memory fake.
@@ -335,5 +336,39 @@ describe("folder depth (vault PR 8: user folders to a depth of 8)", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Folders can be nested 8 deep at most.",
     );
+  });
+});
+
+describe("move dialog focus after a move (d-ux follow-up 1)", () => {
+  it("hands focus to finalFocus's target once the dialog closes, not the page body", async () => {
+    const target = document.createElement("button");
+    target.textContent = "Demo next row";
+    document.body.append(target);
+    const finalFocus = vi.fn(() => {
+      target.focus();
+      return false;
+    });
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <MoveDialog
+          open={open}
+          onOpenChange={setOpen}
+          title="Move demo-receipt.pdf"
+          tree={[]}
+          exclude={new Set()}
+          topLabel="Unfiled"
+          current={null}
+          onMove={async () => {}}
+          finalFocus={finalFocus}
+        />
+      );
+    }
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Move" }));
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(finalFocus).toHaveBeenCalled();
+    expect(target).toHaveFocus();
+    target.remove();
   });
 });

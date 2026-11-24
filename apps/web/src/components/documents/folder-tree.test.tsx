@@ -61,3 +61,24 @@ describe("folder tree on a phone (REVIEW #83 r3 F3)", () => {
     expect(names).toContain("Expenses2 documents");
   });
 });
+
+describe("Unfiled (vault PR 12)", () => {
+  const nav = () => screen.getAllByRole("navigation", { name: "Folders" })[0]!;
+  const links = () => [...nav().querySelectorAll("a")].map((a) => a.textContent);
+
+  it("lists documents with no folder first, with their count", () => {
+    render(<FolderTree tree={tree} selected="y" unfiled={false} unfiledCount={3} trash={false} />);
+    expect(links()[0]).toBe("Unfiled3 documents");
+    expect(links().slice(1, 3)).toEqual(["2026", "Expenses2 documents"]);
+  });
+
+  it("is hidden when nothing is unfiled, unless it is the open list", () => {
+    render(<FolderTree tree={tree} selected="y" unfiled={false} unfiledCount={0} trash={false} />);
+    expect(links()).not.toContain("Unfiled");
+    cleanup();
+    render(<FolderTree tree={tree} selected={null} unfiled unfiledCount={0} trash={false} />);
+    const unfiled = screen.getAllByRole("link", { name: "Unfiled" })[0]!;
+    expect(unfiled).toHaveAttribute("aria-current", "page");
+    expect(screen.getAllByRole("link", { name: "2026" })[0]).not.toHaveAttribute("aria-current");
+  });
+});

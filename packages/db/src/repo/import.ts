@@ -64,6 +64,18 @@ export const importBundle = async (
 ): Promise<void> => {
   // An import swaps the document rows the vault migration is placing (ADR § 10): held until done.
   assertVaultWritable();
+  await runAtomic(await importBundleQueries(bundle, reason, options));
+};
+
+/**
+ * `importBundle`'s writes as queries, without running them, for a caller that commits them with
+ * more of its own in one transaction (a backup restore commits them inside its tree change).
+ */
+export const importBundleQueries = async (
+  bundle: Bundle,
+  reason: ImportReason,
+  options: { backup?: { createdAt: string } } = {},
+): Promise<AtomicQuery[]> => {
   const db = getDb();
   // The snapshot holds everything a restore removes, deleted rows too.
   //
@@ -142,7 +154,7 @@ export const importBundle = async (
   // the re-path flag so the next boot's re-path checks them again. It is a no-op on fixed paths.
   queries.push(db.delete(meta).where(eq(meta.key, REPATH_DONE_KEY)));
 
-  await runAtomic(queries);
+  return queries;
 };
 
 const isEmptyBundle = (b: Bundle): boolean =>

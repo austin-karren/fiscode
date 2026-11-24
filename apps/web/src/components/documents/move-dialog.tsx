@@ -28,10 +28,12 @@ export function MoveDialog(props: {
   topLabel: string;
   current: string | null;
   onMove: (folderId: string | null) => Promise<void>;
+  /** Where focus goes on close, as Base UI's finalFocus (the default returns it to the opener). */
+  finalFocus?: React.ComponentProps<typeof DialogContent>["finalFocus"];
 }) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent>
+      <DialogContent finalFocus={props.finalFocus}>
         <DialogHeader>
           <DialogTitle>{props.title}</DialogTitle>
         </DialogHeader>

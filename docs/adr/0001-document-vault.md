@@ -289,6 +289,7 @@ sqlite wins for metadata and the tree wins for bytes, through a **reconcile scan
 | Row's path holds the right sha                                                                                                                | ok                                                                                                                                                                    |
 | Row's path missing, same sha found elsewhere in `documents/`                                                                                  | treat as an outside move: offer to adopt the new folder/name (D6) or move it back                                                                                     |
 | Row's path missing, sha nowhere                                                                                                               | row shows "File not on this device" (existing state)                                                                                                                  |
+| Row's path holds the sha of another row whose own path holds other bytes (a swap or rotation of names)                                        | a move, flagged as swapped: offer to adopt (D6, "adopt all"), never recorded as an outside edit                                                                       |
 | Row's path holds a different sha                                                                                                              | an outside edit: keep the new bytes as a new version (old bytes to `versions/` under the § 2 copy rule, so skipped when either folder holds them), History records it |
 | File with no row                                                                                                                              | listed as "New in folder": one click to import it as a document in that folder                                                                                        |
 | `.*.fiscode-tmp`                                                                                                                              | deleted (leftover of a crashed write)                                                                                                                                 |
@@ -397,7 +398,8 @@ Cancelling stops between documents and leaves both stores readable (the old stor
    `onProgress({phase, done, total})` and an `AbortSignal`, like the backup. Rename/move is
    journaled (§ 6): cancel or failure rolls back, so the state is "nothing changed" and the error
    says so. Migration and export are resumable and cancel between files: the state left is "N of
-   M done, old storage still complete". A scan changes nothing on its own; it returns a report.
+   M done, old storage still complete". A scan changes only what the § 6 table lets it: it records an outside edit (old bytes kept, under the size cap)
+   and deletes leftover temp files; everything else waits for the user in its report.
 4. **Outside changes.** `vault.scan(): Promise<ScanReport>` runs on boot, on window focus (debounced)
    and from a "Check folder" button. Report: `moved[]` (adopt or put back), `missing[]` (row shows the
    existing "File not on this device"), `changed[]` (new version recorded), `unknown[]` ("New in

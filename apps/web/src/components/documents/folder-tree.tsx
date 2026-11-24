@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Folder, FolderOpen, Trash2 } from "lucide-react";
+import { Folder, FolderOpen, Inbox, Trash2 } from "lucide-react";
 
 import type { FolderNode } from "@fiscode/db";
 import { flattenTree } from "../../lib/documents-view";
@@ -10,17 +10,45 @@ import { MAIN_ID } from "../../lib/nav";
 export function FolderTree({
   tree,
   selected,
+  unfiled = false,
+  unfiledCount = 0,
   trash,
 }: {
   tree: FolderNode[];
   selected: string | null;
+  /** The open list is the documents with no folder. */
+  unfiled?: boolean;
+  unfiledCount?: number;
   trash: boolean;
 }) {
   const rows = flattenTree(tree);
+  const unfiledOpen = !trash && unfiled;
   const list = (
     <nav aria-label="Folders" className="grid gap-0.5 text-sm">
+      {/* Documents with no folder have no node of their own; this lists them. Hidden while there
+          are none, unless it is the open list (its last document just moved out). */}
+      {unfiledCount > 0 || unfiledOpen ? (
+        <Link
+          from="/documents"
+          search={{ unfiled: true }}
+          aria-current={unfiledOpen ? "page" : undefined}
+          className={`flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-muted ${unfiledOpen ? "bg-muted font-medium" : ""}`}
+        >
+          <Inbox
+            className={`size-4 shrink-0 ${unfiledOpen ? "" : "text-muted-foreground"}`}
+            aria-hidden
+          />
+          <span className="truncate">Unfiled</span>
+          {unfiledCount > 0 ? (
+            <span className="ms-auto text-xs text-muted-foreground tabular-nums">
+              {unfiledCount}
+              <span className="sr-only"> {unfiledCount === 1 ? "document" : "documents"}</span>
+            </span>
+          ) : null}
+        </Link>
+      ) : null}
       {rows.map(({ folder, depth, documentCount }) => {
-        const isSelected = !trash && folder.id === selected;
+        const isSelected = !trash && !unfiled && folder.id === selected;
         return (
           <Link
             key={folder.id}

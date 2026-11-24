@@ -21,22 +21,16 @@ import { useVaultReadOnly } from "../lib/vault-migration";
 import { ALLOWED_DOCUMENT_MIMES, YEAR_ROOT_KEY, validDocumentName } from "@fiscode/core";
 import { documentLinkRepo, documentRepo, folderRepo } from "@fiscode/db";
 import type { DocumentRow, DocumentFolderRow } from "@fiscode/csv";
+import { openFolderId, parseDocumentsSearch, uploadLinesFor } from "../lib/documents-search";
 import { errorLine, fileKind, folderPath, formatBytes, subtreeOf } from "../lib/documents-view";
 import { softDeleteWithUndo } from "../lib/soft-delete";
 import { uploadFiles, type UploadResult } from "../lib/documents-upload";
 import { landedLine, restoreDocument } from "../lib/documents-restore";
-import { focusAfterRemoval } from "../lib/focus-after-removal";
+import { focusAfterRemoval, targetAfterRemoval } from "../lib/focus-after-removal";
 import { formatDate } from "../lib/format-date";
 
-type Search = { folder?: string; doc?: string; trash?: boolean; q?: string };
-
 export const Route = createFileRoute("/documents")({
-  validateSearch: (s: Record<string, unknown>): Search => ({
-    folder: typeof s.folder === "string" ? s.folder : undefined,
-    doc: typeof s.doc === "string" ? s.doc : undefined,
-    trash: s.trash === true || s.trash === "1" || s.trash === 1 ? true : undefined,
-    q: typeof s.q === "string" && s.q ? s.q : undefined,
-  }),
+  validateSearch: parseDocumentsSearch,
   loaderDeps: ({ search }) => search,
   loader: async ({ deps }) => {
     const year = yearOf(todayIso());
@@ -51,7 +45,7 @@ export const Route = createFileRoute("/documents")({
     ]);
     // By default_key, so a renamed year folder is still the year's.
     const yearFolder = folders.find((f) => f.defaultKey === YEAR_ROOT_KEY && f.taxYear === year);
-    const folderId = deps.folder ?? yearFolder?.id ?? null;
+    const folderId = openFolderId(deps, yearFolder?.id);
     const docs = deps.q
       ? await documentRepo.search(deps.q)
       : await documentRepo.listInFolder(folderId);
@@ -63,6 +57,7 @@ export const Route = createFileRoute("/documents")({
       docs,
       linkCounts,
       allDocs,
+      unfiledCount: allDocs.filter((d) => d.deletedAt === null && d.folderId === null).length,
       trashFolders: allFolders.filter((f) => f.deletedAt !== null),
       trashDocs: allDocs.filter((d) => d.deletedAt !== null),
     };
@@ -87,21 +82,41 @@ function DocumentsPage() {
     | { kind: "rename-folder"; folder: DocumentFolderRow }
     | { kind: "move-folder"; folder: DocumentFolderRow }
     | { kind: "rename-doc"; doc: DocumentRow }
-    | { kind: "move-doc"; doc: DocumentRow }
+    | { kind: "move-doc"; doc: DocumentRow; from: HTMLElement }
     | null
   >(null);
   const [confirmDelete, setConfirmDelete] = useState<{
     folder: DocumentFolderRow;
     counts: { folders: number; documents: number };
   } | null>(null);
-  const [results, setResults] = useState<UploadResult[]>([]);
+  // Upload lines belong to the list they were made in: another folder doesn't show them, and a
+  // move clears them (they'd name where a file no longer is).
+  const [uploaded, setUploaded] = useState<{ folderId: string | null; results: UploadResult[] }>({
+    folderId: null,
+    results: [],
+  });
+  // Leaving the list clears them, so coming back doesn't bring them back (React's "adjust state
+  // when a prop changes": set during render, no effect).
+  const [listedAt, setListedAt] = useState(folderId);
+  if (listedAt !== folderId) {
+    setListedAt(folderId);
+    setUploaded({ folderId: null, results: [] });
+  }
+  const results = uploadLinesFor(uploaded, { folderId, q: search.q });
+  // After a move, where focus lands (resolved as the dialog closes): set only when a move ran.
+  const afterMove = useRef<(() => HTMLElement | null) | null>(null);
+  const listHeading = useRef<HTMLHeadingElement>(null);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const upload = async (files: File[]) => {
     if (files.length === 0) return;
     // A line per file; a duplicate's line names where the first copy is, with a link to it.
-    setResults(await uploadFiles(files, folderId, data.allDocs, (id) => folderPath(folders, id)));
+    const at = folderId;
+    setUploaded({
+      folderId: at,
+      results: await uploadFiles(files, at, data.allDocs, (id) => folderPath(folders, id)),
+    });
     await refresh();
   };
 
@@ -114,7 +129,9 @@ function DocumentsPage() {
     setConfirmDelete(null);
     const deleted = await showingError(() => folderRepo.softDeleteTree(folder.id));
     if (!deleted) return;
-    await navigate({ search: (s) => ({ ...s, folder: folder.parentId ?? undefined }) });
+    await navigate({
+      search: (s) => ({ ...s, folder: folder.parentId ?? undefined, unfiled: undefined }),
+    });
     await refresh();
     toast(`Deleted ${folder.name}.`, {
       duration: 8000,
@@ -152,7 +169,13 @@ function DocumentsPage() {
       description="Receipts, forms and statements, kept on this device and sorted by year."
     >
       <div className="grid gap-4 @3xl:grid-cols-[16rem_1fr]">
-        <FolderTree tree={tree} selected={folderId} trash={search.trash === true} />
+        <FolderTree
+          tree={tree}
+          selected={folderId}
+          unfiled={search.unfiled === true}
+          unfiledCount={data.unfiledCount}
+          trash={search.trash === true}
+        />
 
         <div className="grid min-w-0 content-start gap-4">
           {search.trash ? (
@@ -179,7 +202,7 @@ function DocumentsPage() {
             >
               <CardHeader>
                 <CardTitle>
-                  <SectionTitle>
+                  <SectionTitle ref={listHeading} tabIndex={-1} className="outline-none">
                     {search.q ? `Search: ${search.q}` : folderPath(folders, folderId)}
                   </SectionTitle>
                 </CardTitle>
@@ -323,7 +346,9 @@ function DocumentsPage() {
                                 variant="ghost"
                                 size="sm"
                                 disabled={!!readOnly}
-                                onClick={() => setDialog({ kind: "move-doc", doc: d })}
+                                onClick={(e) =>
+                                  setDialog({ kind: "move-doc", doc: d, from: e.currentTarget })
+                                }
                               >
                                 Move <span className="sr-only">{d.name}</span>
                               </Button>
@@ -366,7 +391,9 @@ function DocumentsPage() {
         }
         onSubmit={async (name, where) => {
           const made = await folderRepo.create({ name, parentId: where });
-          await navigate({ search: (s) => ({ ...s, folder: made.id, q: undefined }) });
+          await navigate({
+            search: (s) => ({ ...s, folder: made.id, unfiled: undefined, q: undefined }),
+          });
           await refresh();
         }}
       />
@@ -422,8 +449,18 @@ function DocumentsPage() {
         current={dialog?.kind === "move-doc" ? dialog.doc.folderId : null}
         onMove={async (to) => {
           if (dialog?.kind !== "move-doc") return;
+          const target = targetAfterRemoval(dialog.from, () => listHeading.current);
           await documentRepo.move(dialog.doc.id, to);
+          setUploaded({ folderId: null, results: [] });
+          afterMove.current = target;
           await refresh();
+        }}
+        finalFocus={() => {
+          const target = afterMove.current?.();
+          afterMove.current = null;
+          if (!target) return true;
+          target.focus();
+          return false;
         }}
       />
       <ConfirmDialog
