@@ -29,3 +29,23 @@ export function focusAfterRemoval(from: HTMLElement): () => void {
     });
   };
 }
+
+/**
+ * Like focusAfterRemoval, for a dialog's finalFocus: resolves the element to focus once the row
+ * holding `from` may have gone. `from` itself while it is still there (its row stayed, as in
+ * search results), else the next row's first control, else the previous row's, else `fallback`.
+ * Capture it before the change.
+ */
+export function targetAfterRemoval(
+  from: HTMLElement,
+  fallback: () => HTMLElement | null,
+): () => HTMLElement | null {
+  const row = from.closest("tr, li");
+  const next = row?.nextElementSibling ?? row?.previousElementSibling ?? null;
+  return () => {
+    if (from.isConnected) return from;
+    const control =
+      next?.isConnected === true ? next.querySelector<HTMLElement>("button, a[href]") : null;
+    return control ?? fallback();
+  };
+}

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentProps } from "react";
 import { cn } from "@fiscode/ui/lib/utils";
 
 /**
@@ -7,15 +7,14 @@ import { cn } from "@fiscode/ui/lib/utils";
  * its own, so CardTitle keeps its slot styles. An info tooltip may follow the
  * text inside it.
  */
-export function SectionTitle({ children, className }: { children: ReactNode; className?: string }) {
+export function SectionTitle({ className, ...props }: ComponentProps<"h2">) {
   return (
     <h2
+      {...props}
       className={cn(
         "inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground",
         className,
       )}
-    >
-      {children}
-    </h2>
+    />
   );
 }
