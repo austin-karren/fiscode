@@ -25,6 +25,7 @@ import { Route as TimeRouteImport } from './routes/time'
 import { Route as VehiclesRouteImport } from './routes/vehicles'
 import { Route as W2JobsRouteImport } from './routes/w2-jobs'
 import { Route as YearEndRouteImport } from './routes/year-end'
+import { Route as DocumentsCheckRouteImport } from './routes/documents_.check'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -106,6 +107,11 @@ const YearEndRoute = YearEndRouteImport.update({
   path: '/year-end',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocumentsCheckRoute = DocumentsCheckRouteImport.update({
+  id: '/documents_/check',
+  path: '/documents/check',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -124,6 +130,7 @@ export interface FileRoutesByFullPath {
   '/vehicles': typeof VehiclesRoute
   '/w2-jobs': typeof W2JobsRoute
   '/year-end': typeof YearEndRoute
+  '/documents/check': typeof DocumentsCheckRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -142,6 +149,7 @@ export interface FileRoutesByTo {
   '/vehicles': typeof VehiclesRoute
   '/w2-jobs': typeof W2JobsRoute
   '/year-end': typeof YearEndRoute
+  '/documents/check': typeof DocumentsCheckRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -161,6 +169,7 @@ export interface FileRoutesById {
   '/vehicles': typeof VehiclesRoute
   '/w2-jobs': typeof W2JobsRoute
   '/year-end': typeof YearEndRoute
+  '/documents_/check': typeof DocumentsCheckRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -181,6 +190,7 @@ export interface FileRouteTypes {
     | '/vehicles'
     | '/w2-jobs'
     | '/year-end'
+    | '/documents/check'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -199,6 +209,7 @@ export interface FileRouteTypes {
     | '/vehicles'
     | '/w2-jobs'
     | '/year-end'
+    | '/documents/check'
   id:
     | '__root__'
     | '/'
@@ -217,6 +228,7 @@ export interface FileRouteTypes {
     | '/vehicles'
     | '/w2-jobs'
     | '/year-end'
+    | '/documents_/check'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -236,6 +248,7 @@ export interface RootRouteChildren {
   VehiclesRoute: typeof VehiclesRoute
   W2JobsRoute: typeof W2JobsRoute
   YearEndRoute: typeof YearEndRoute
+  DocumentsCheckRoute: typeof DocumentsCheckRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -352,6 +365,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof YearEndRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/documents_/check': {
+      id: '/documents_/check'
+      path: '/documents/check'
+      fullPath: '/documents/check'
+      preLoaderRoute: typeof DocumentsCheckRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -372,6 +392,7 @@ const rootRouteChildren: RootRouteChildren = {
   VehiclesRoute: VehiclesRoute,
   W2JobsRoute: W2JobsRoute,
   YearEndRoute: YearEndRoute,
+  DocumentsCheckRoute: DocumentsCheckRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

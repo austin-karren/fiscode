@@ -21,6 +21,13 @@ describe("the /documents URL (REVIEW #110 r1)", () => {
     expect(openFolderId({ folder: "e" }, "y2026")).toBe("e");
   });
 
+  it("opens a linked document's own folder, or Unfiled, for ?doc= alone (REVIEW #112 r1 F5)", () => {
+    expect(openFolderId({ doc: "d" }, "y2026", "e")).toBe("e");
+    expect(openFolderId({ doc: "d" }, "y2026", null)).toBeNull();
+    expect(openFolderId({ doc: "d", folder: "o" }, "y2026", "e")).toBe("o");
+    expect(openFolderId({ doc: "d" }, "y2026", undefined)).toBe("y2026");
+  });
+
   it("links a document with no folder to Unfiled, and others to their folder", () => {
     expect(documentLinkSearch({ id: "d1", folderId: null })).toEqual({ unfiled: true, doc: "d1" });
     expect(documentLinkSearch({ id: "d2", folderId: "e" })).toEqual({ folder: "e", doc: "d2" });

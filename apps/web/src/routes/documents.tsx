@@ -19,7 +19,15 @@ import { FolderActions } from "../components/documents/folder-actions";
 import { ReadOnlyNote } from "../components/read-only-note";
 import { useVaultReadOnly } from "../lib/vault-migration";
 import { ALLOWED_DOCUMENT_MIMES, YEAR_ROOT_KEY, validDocumentName } from "@fiscode/core";
-import { documentLinkRepo, documentRepo, folderRepo } from "@fiscode/db";
+import {
+  documentLinkRepo,
+  documentRepo,
+  folderRepo,
+  readLastScanReport,
+  scanReviewCount,
+} from "@fiscode/db";
+import { useFocusScan } from "../lib/focus-scan";
+import { buttonVariants } from "@fiscode/ui/components/button";
 import type { DocumentRow, DocumentFolderRow } from "@fiscode/csv";
 import { openFolderId, parseDocumentsSearch, uploadLinesFor } from "../lib/documents-search";
 import { errorLine, fileKind, folderPath, formatBytes, subtreeOf } from "../lib/documents-view";
@@ -36,16 +44,18 @@ export const Route = createFileRoute("/documents")({
     const year = yearOf(todayIso());
     // The year's folders, made once; a folder the user deleted stays deleted.
     await folderRepo.ensureYearDefaults(year);
-    const [tree, folders, allFolders, allDocs, linkCounts] = await Promise.all([
+    const [tree, folders, allFolders, allDocs, linkCounts, lastScan] = await Promise.all([
       folderRepo.tree(),
       folderRepo.list(),
       folderRepo.listIncludingDeleted(),
       documentRepo.listIncludingDeleted(),
       documentLinkRepo.countsByDocument(),
+      readLastScanReport(),
     ]);
     // By default_key, so a renamed year folder is still the year's.
     const yearFolder = folders.find((f) => f.defaultKey === YEAR_ROOT_KEY && f.taxYear === year);
-    const folderId = openFolderId(deps, yearFolder?.id);
+    const linked = deps.doc ? allDocs.find((d) => d.id === deps.doc && !d.deletedAt) : undefined;
+    const folderId = openFolderId(deps, yearFolder?.id, linked?.folderId);
     const docs = deps.q
       ? await documentRepo.search(deps.q)
       : await documentRepo.listInFolder(folderId);
@@ -57,6 +67,8 @@ export const Route = createFileRoute("/documents")({
       docs,
       linkCounts,
       allDocs,
+      // The badge on Check folder: what the last scan (focus, boot or Check now) left to review.
+      toReview: lastScan ? scanReviewCount(lastScan) : 0,
       unfiledCount: allDocs.filter((d) => d.deletedAt === null && d.folderId === null).length,
       trashFolders: allFolders.filter((f) => f.deletedAt !== null),
       trashDocs: allDocs.filter((d) => d.deletedAt !== null),
@@ -70,6 +82,7 @@ function DocumentsPage() {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: "/documents" });
   const router = useRouter();
+  useFocusScan();
   const refresh = () => router.invalidate();
   const { tree, folders, folderId, docs, linkCounts } = data;
   const current = folders.find((f) => f.id === folderId);
@@ -167,12 +180,23 @@ function DocumentsPage() {
     <Page
       title="Documents"
       description="Receipts, forms and statements, kept on this device and sorted by year."
+      actions={
+        <Link to="/documents/check" className={buttonVariants({ variant: "outline" })}>
+          Check folder
+          {data.toReview > 0 ? (
+            <span className="rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground tabular-nums">
+              {data.toReview}
+              <span className="sr-only"> to review</span>
+            </span>
+          ) : null}
+        </Link>
+      }
     >
       <div className="grid gap-4 @3xl:grid-cols-[16rem_1fr]">
         <FolderTree
           tree={tree}
           selected={folderId}
-          unfiled={search.unfiled === true}
+          unfiled={folderId === null && !search.trash}
           unfiledCount={data.unfiledCount}
           trash={search.trash === true}
         />
