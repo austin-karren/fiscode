@@ -1,4 +1,4 @@
-import { folderPathFits, VaultPathTooLongError } from "@fiscode/core";
+import { folderPathFits, titleHasDate, VaultPathTooLongError } from "@fiscode/core";
 import { eq, inArray } from "drizzle-orm";
 import { getDb, type AtomicQuery } from "../client.ts";
 import {
@@ -9,6 +9,7 @@ import {
 } from "../schema/index.ts";
 import {
   byAdded,
+  extForMime,
   withoutSuffix,
   documentVaultPath,
   fitFolders,
@@ -21,8 +22,10 @@ import {
 } from "../vault/paths.ts";
 import { isVaultMigrated, placeUnplacedDocuments } from "../vault/migrate.ts";
 import { historyQuery, runTreeChange, type PlanBuilder } from "../vault/tree.ts";
+import type { RunHooks } from "../vault/journal.ts";
 
 export type { ShortenedFolder };
+export type { RunHooks, TreeProgress } from "../vault/journal.ts";
 
 // The one engine behind every document and folder write that moves files (ADR 0001 § 6): it
 // applies the row changes in memory, works out every affected document's new path, plans the file
@@ -96,6 +99,15 @@ const subtrees = (ids: Iterable<string>, live: readonly DocumentFolderRow[]) => 
 export const fileDatePrefix = (path: string | null): string | undefined =>
   path?.slice(path.lastIndexOf("/") + 1).match(/^(\d{4}-\d{2}-\d{2}) /)?.[1];
 
+/**
+ * The date prefix the app put on a placed document's file, or undefined. A file named after a
+ * dated title has no prefix of its own: the date it starts with is the title's.
+ */
+export const ownDatePrefix = (
+  doc: Pick<DocumentRow, "name" | "mime" | "vaultPath">,
+): string | undefined =>
+  titleHasDate(doc.name, extForMime(doc.mime)) ? undefined : fileDatePrefix(doc.vaultPath);
+
 /** A document's place, keeping its " (n)" when its name is otherwise unchanged (§ 4: no renumbering). */
 const placeDocument = (
   doc: DocumentRow,
@@ -119,8 +131,151 @@ const placeDocument = (
 };
 
 /**
+ * The planning half of a tree change, shared by `changeTree` and the previews: the folders as they
+ * will be (shortened when not strict), the path context, the folders that relocate, the documents
+ * to place in upload order with their dates, and the paths already taken.
+ */
+const layoutTree = async (
+  folderRows: readonly DocumentFolderRow[],
+  docRows: readonly DocumentRow[],
+  changes: { folders?: FolderChange[]; documents?: DocumentChange[] },
+  options: TreeChangeOptions,
+) => {
+  const folders = new Map(folderRows.map((f) => [f.id, f]));
+  for (const c of changes.folders ?? []) folders.set(c.next.id, c.next);
+  const docsBefore = new Map(docRows.map((d) => [d.id, d]));
+  const docChanges = new Map((changes.documents ?? []).map((c) => [c.next.id, c]));
+
+  const changedFolderIds = (changes.folders ?? []).map((c) => c.next.id);
+  const affectedFolders = subtrees(
+    changedFolderIds.filter((id) => folders.get(id)!.deletedAt === null),
+    [...folders.values()].filter((f) => f.deletedAt === null),
+  );
+  // Deleted folders take their documents with them only when the caller says so (softDeleteTree
+  // passes those documents as changes), so only live subtrees relocate here.
+  const shortened = options.strict ? [] : fitFolders(folders, affectedFolders);
+  const live = [...folders.values()].filter((f) => f.deletedAt === null);
+  const ctx = pathContext(live);
+  const dirOf = (id: string) => folderDir(folderSegments(id, ctx.folders, ctx.disk) ?? null);
+
+  // Documents to place: the changed ones, and every live one in a relocated folder.
+  const affected = new Set(docChanges.keys());
+  for (const d of docRows) {
+    if (d.deletedAt === null && d.folderId !== null && affectedFolders.has(d.folderId)) {
+      affected.add(d.id);
+    }
+  }
+  const dates = await options.datesFor([...affected]);
+
+  // Taken: every folder's directory, and every live document not being placed.
+  const taken: string[] = live.map((f) => dirOf(f.id));
+  for (const d of docRows) {
+    if (d.deletedAt === null && d.vaultPath && !affected.has(d.id)) taken.push(d.vaultPath);
+  }
+  const order = [...affected]
+    .map((id) => docChanges.get(id)?.next ?? docsBefore.get(id)!)
+    .toSorted(byAdded);
+  return {
+    folders,
+    before: new Map(folderRows.map((f) => [f.id, f])),
+    docsBefore,
+    docChanges,
+    affectedFolders,
+    shortened,
+    ctx,
+    dirOf,
+    dates,
+    taken,
+    order,
+  };
+};
+
+/** Where a live document goes: the D2 date prefix changes only with its links, else it keeps its own. */
+const targetFor = (
+  prev: DocumentRow | undefined,
+  next: DocumentRow,
+  change: DocumentChange | undefined,
+  ctx: PathContext,
+  dates: readonly string[],
+  taken: readonly string[],
+) => {
+  const kept = prev ? ownDatePrefix(prev) : undefined;
+  const useDates = change?.dates ?? (kept ? [kept] : dates);
+  // Place it as if at its old path, so an unchanged name keeps its suffix.
+  return placeDocument({ ...next, vaultPath: prev?.vaultPath ?? null }, ctx, useDates, taken);
+};
+
+export type PathPreview = { path: string; fits: boolean; overBy: number };
+
+const currentRows = async () => {
+  const db = getDb();
+  return {
+    folderRows: (await db.select().from(documentFolder)) as DocumentFolderRow[],
+    docRows: (await db.select().from(document)) as DocumentRow[],
+  };
+};
+
+/**
+ * Where a document would go if saved now, by the rules a strict `changeTree` uses, without writing
+ * anything. Before the migration is done, unplaced documents aren't counted as taken (they have no
+ * place yet); the save places them first, so a rare preview can miss one " (n)".
+ */
+export const previewDocumentPath = async (
+  next: DocumentRow,
+  insert: boolean,
+  datesFor: TreeChangeOptions["datesFor"],
+  dates?: readonly string[],
+): Promise<PathPreview> => {
+  const { folderRows, docRows } = await currentRows();
+  const change: DocumentChange = { next, insert, dates, op: insert ? "insert" : "update" };
+  const plan = await layoutTree(
+    folderRows,
+    docRows,
+    { documents: [change] },
+    {
+      strict: true,
+      datesFor,
+    },
+  );
+  const prev = plan.docsBefore.get(next.id);
+  const placed = targetFor(prev, next, change, plan.ctx, plan.dates.get(next.id) ?? [], plan.taken);
+  return { path: placed.path, fits: placed.fits, overBy: placed.overBy };
+};
+
+/**
+ * A folder's directory if saved now, as `previewDocumentPath`. It fits only when the directory and
+ * every file it would relocate fit; `overBy` is the most any of them is over.
+ */
+export const previewFolderPath = async (
+  next: DocumentFolderRow,
+  insert: boolean,
+  datesFor: TreeChangeOptions["datesFor"],
+): Promise<PathPreview> => {
+  const { folderRows, docRows } = await currentRows();
+  const plan = await layoutTree(
+    folderRows,
+    docRows,
+    { folders: [{ next, insert, op: insert ? "insert" : "update" }] },
+    { strict: true, datesFor },
+  );
+  const path = plan.dirOf(next.id);
+  let { overBy } = folderPathFits(path);
+  for (const id of plan.affectedFolders)
+    overBy = Math.max(overBy, folderPathFits(plan.dirOf(id)).overBy);
+  const taken = [...plan.taken];
+  for (const doc of plan.order) {
+    const placed = targetFor(doc, doc, undefined, plan.ctx, plan.dates.get(doc.id) ?? [], taken);
+    taken.push(placed.path);
+    // A name that can't fit even at its shortest title can be under the path length (overBy 0).
+    overBy = Math.max(overBy, placed.overBy, placed.fits ? 0 : 1);
+  }
+  return { path, fits: overBy === 0, overBy };
+};
+
+/**
  * Apply folder and document changes as one tree change: the rows and their history in one
  * transaction with the plan, every affected file moved, copied or removed by the journal.
+ * `hooks` reports progress and takes a cancel, honoured until the commit (§ 11.3).
  */
 export const changeTree = (
   changes: {
@@ -130,6 +285,7 @@ export const changeTree = (
     queries?: AtomicQuery[];
   },
   options: TreeChangeOptions,
+  hooks: RunHooks = {},
 ): Promise<TreeChangeResult> =>
   runTreeChange(
     async (plan) => {
@@ -140,59 +296,32 @@ export const changeTree = (
       if (await isVaultMigrated()) {
         await placeUnplacedDocuments(plan.store, options.datesFor, { oldBytes: false });
       }
-      const folderRows = (await db.select().from(documentFolder)) as DocumentFolderRow[];
-      const before = new Map(folderRows.map((f) => [f.id, f]));
-      const folders = new Map(before);
-      for (const c of changes.folders ?? []) folders.set(c.next.id, c.next);
-      const docRows = (await db.select().from(document)) as DocumentRow[];
-      const docsBefore = new Map(docRows.map((d) => [d.id, d]));
-      const docChanges = new Map((changes.documents ?? []).map((c) => [c.next.id, c]));
-
-      const changedFolderIds = (changes.folders ?? []).map((c) => c.next.id);
-      let live = [...folders.values()].filter((f) => f.deletedAt === null);
-      const affectedFolders = subtrees(
-        changedFolderIds.filter((id) => folders.get(id)!.deletedAt === null),
-        live,
-      );
-      // Deleted folders take their documents with them only when the caller says so (softDeleteTree
-      // passes those documents as changes), so only live subtrees relocate here.
-      const shortened = options.strict ? [] : fitFolders(folders, affectedFolders);
-      live = [...folders.values()].filter((f) => f.deletedAt === null);
-      const ctx = pathContext(live);
+      const { folderRows, docRows } = await currentRows();
+      const {
+        folders,
+        before,
+        docsBefore,
+        docChanges,
+        affectedFolders,
+        shortened,
+        ctx,
+        dirOf,
+        dates,
+        taken,
+        order,
+      } = await layoutTree(folderRows, docRows, changes, options);
 
       if (options.strict) {
         for (const id of affectedFolders) {
-          const segments = folderSegments(id, ctx.folders, ctx.disk);
-          const dir = folderDir(segments ?? null);
+          const dir = dirOf(id);
           if (!folderPathFits(dir).fits) throw new VaultPathTooLongError(dir);
         }
-      }
-
-      // Documents to place: the changed ones, and every live one in a relocated folder.
-      const affected = new Map<string, DocumentChange | undefined>();
-      for (const [id, c] of docChanges) affected.set(id, c);
-      for (const d of docRows) {
-        if (d.deletedAt === null && d.folderId !== null && affectedFolders.has(d.folderId)) {
-          if (!affected.has(d.id)) affected.set(d.id, undefined);
-        }
-      }
-      const dates = await options.datesFor([...affected.keys()]);
-
-      // Taken: every folder's directory, and every live document not being placed.
-      const taken: string[] = live.map((f) =>
-        folderDir(folderSegments(f.id, ctx.folders, ctx.disk) ?? null),
-      );
-      for (const d of docRows) {
-        if (d.deletedAt === null && d.vaultPath && !affected.has(d.id)) taken.push(d.vaultPath);
       }
 
       const queries: AtomicQuery[] = [...(changes.queries ?? [])];
       const docsOut = new Map<string, DocumentRow>();
       const docQueriesAt = queries.length;
       const repathed: string[] = [];
-      const order = [...affected.keys()]
-        .map((id) => docChanges.get(id)?.next ?? docsBefore.get(id)!)
-        .toSorted(byAdded);
       for (const next of order) {
         const change = docChanges.get(next.id);
         const prev = docsBefore.get(next.id);
@@ -259,6 +388,7 @@ export const changeTree = (
       }
       return { queries, result: { documents: docsOut, folders: foldersOut, shortened } };
     },
+    hooks,
     { long: (changes.folders ?? []).some((c) => !c.insert) },
   );
 
@@ -279,16 +409,7 @@ const placeOne = async (
     const kept = await plan.document(cur, { live: false, path: "", sha256: next.sha256 });
     return { row: { ...next, vaultPath: kept ?? prev?.vaultPath ?? null } };
   }
-  // The date prefix changes only with the links (D2): otherwise keep the one the file has.
-  const kept = fileDatePrefix(prev?.vaultPath ?? null);
-  const useDates = change?.dates ?? (kept ? [kept] : dates);
-  // Place it as if at its old path, so an unchanged name keeps its suffix.
-  const placed = placeDocument(
-    { ...next, vaultPath: prev?.vaultPath ?? null },
-    ctx,
-    useDates,
-    taken,
-  );
+  const placed = targetFor(prev, next, change, ctx, dates, taken);
   if (!placed.fits) {
     // A user action refuses (§ 3.8), including a file its folder change would push over budget.
     if (options.strict) throw new VaultPathTooLongError(placed.path);

@@ -89,6 +89,29 @@ export const vaultFolderName = (name: string): string =>
   vaultSegment(cutBytes(vaultSegment(name), MAX_VAULT_SEGMENT_BYTES - 1));
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const DATED_TITLE = /^(\d{4})-(\d{2})-(\d{2})(?: |$)/;
+// Only a real calendar day counts: "2026-13-40" and "2026-02-30" are not dates.
+const startsWithDate = (t: string): boolean => {
+  const m = DATED_TITLE.exec(t);
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const day = new Date(Date.UTC(y, mo - 1, d));
+  return day.getUTCFullYear() === y && day.getUTCMonth() === mo - 1 && day.getUTCDate() === d;
+};
+// The title without a trailing ".<ext>" (the extension as `vaultFileName` writes it).
+const stripExt = (title: string, ext: string): { t: string; e: string } => {
+  // Capped so a malformed extension can never crowd out the name.
+  const e = vaultSegment(ext.toLowerCase().replace(/^\.+/, "")).replace(/\./g, "_").slice(0, 16);
+  let t = title.normalize("NFC").trim();
+  if (e !== "_" && t.toLowerCase().endsWith(`.${e}`)) t = t.slice(0, -(e.length + 1));
+  return { t, e };
+};
+/**
+ * Whether a title already starts with a valid date, so its file name gets no date prefix. Pass
+ * the file's `ext` when the title may end in it ("2026-08-12.pdf" is a dated title).
+ */
+export const titleHasDate = (title: string, ext = ""): boolean =>
+  startsWithDate(stripExt(title, ext).t);
 
 export interface VaultFileNameInput {
   /** `YYYY-MM-DD`: the linked record's date, else the date added (D2). Null: no prefix. */
@@ -101,13 +124,11 @@ export interface VaultFileNameInput {
 
 // The parts of a file name: "<prefix><title><suffix>.<ext>", sanitised, title not yet cut.
 const nameParts = ({ date, title, ext }: VaultFileNameInput) => {
-  // Capped so a malformed extension can never crowd out the name.
-  const e = vaultSegment(ext.toLowerCase().replace(/^\.+/, "")).replace(/\./g, "_").slice(0, 16);
-  let t = title.normalize("NFC").trim();
-  if (e !== "_" && t.toLowerCase().endsWith(`.${e}`)) t = t.slice(0, -(e.length + 1));
+  const { t, e } = stripExt(title, ext);
+  // A title that already starts with a date names the file as it is, even when that date isn't
+  // the D2 date: prefixing it would give "2026-11-23 2026-08-12 ...".
+  if (startsWithDate(t)) return { prefix: "", title: t, ext: e };
   const prefix = date !== null && ISO_DATE.test(date) ? `${date} ` : "";
-  if (prefix !== "" && t.startsWith(prefix)) t = t.slice(prefix.length);
-  else if (prefix !== "" && t === date) t = "";
   return { prefix, title: t, ext: e };
 };
 
@@ -141,7 +162,8 @@ const buildName = (
 
 /**
  * `<YYYY-MM-DD> <title>.<ext>`, sanitised, at most 120 UTF-8 bytes (the title is shortened at a
- * grapheme boundary). A title that already begins with the date is not prefixed twice.
+ * grapheme boundary). A title that already begins with a date ("YYYY-MM-DD", then a space or the
+ * end) gets no prefix, whatever its date.
  */
 export const vaultFileName = (input: VaultFileNameInput): string =>
   buildName(nameParts(input), "", MAX_VAULT_SEGMENT_BYTES) ??
@@ -217,6 +239,25 @@ export const vaultFolderRules = (defaultKey: string | null): { rename: boolean; 
 };
 
 // Errors (ADR § 11.7). StorageQuotaError already exists in documents.ts.
+
+/** A user rename or move that `vaultFolderRules` forbids (D5, § 5). */
+export class FolderFixedError extends DocumentError {
+  override readonly name = "FolderFixedError";
+  constructor(readonly defaultKey: string | null) {
+    super(
+      defaultKey === YEAR_ROOT_KEY
+        ? "Year folders can't be renamed or moved."
+        : "Default folders can't be moved.",
+    );
+  }
+}
+/** A folder rename or move cancelled before its commit: nothing changed (§ 11.3). */
+export class OperationCancelledError extends DocumentError {
+  override readonly name = "OperationCancelledError";
+  constructor() {
+    super("Cancelled. Nothing was changed.");
+  }
+}
 
 export class VaultPermissionError extends DocumentError {
   override readonly name = "VaultPermissionError";

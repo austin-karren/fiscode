@@ -27,7 +27,7 @@ import {
   type VaultStore,
 } from "../vault/store.ts";
 import { historyQuery, recoverVaultHeld, runTreeChange, runTreeChangeHeld } from "../vault/tree.ts";
-import { changeTree, fileDatePrefix, forHistory, type DocumentChange } from "./document-tree.ts";
+import { changeTree, forHistory, ownDatePrefix, type DocumentChange } from "./document-tree.ts";
 import { linkedDates } from "./documents.ts";
 
 // The reconcile scan (ADR 0001 § 6, § 11.4): walk `documents/`, compare it to sqlite by path and
@@ -552,7 +552,7 @@ const scan = async (
   const dates = await linkedDates(okRows.map((r) => r.id));
   const redated: ScanRedated[] = [];
   for (const row of okRows) {
-    const fileDate = fileDatePrefix(row.vaultPath);
+    const fileDate = ownDatePrefix(row);
     const expectedDate = documentDate(row.addedAt, dates.get(row.id) ?? []);
     if (fileDate && fileDate !== expectedDate) {
       redated.push({

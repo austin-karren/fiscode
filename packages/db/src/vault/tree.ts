@@ -1,8 +1,14 @@
-import { newId } from "@fiscode/core";
+import { newId, OperationCancelledError } from "@fiscode/core";
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { getDb, runAtomic, type AtomicQuery } from "../client.ts";
 import { document, history as historyTable, vaultApplied } from "../schema/index.ts";
-import { vaultJournal, type FileOp, type PlanLedger, type Recovery } from "./journal.ts";
+import {
+  vaultJournal,
+  type FileOp,
+  type PlanLedger,
+  type Recovery,
+  type RunHooks,
+} from "./journal.ts";
 import { announceVaultChange, withVaultLock, type LockManagerLike } from "./lock.ts";
 import { writeManifest } from "./manifest.ts";
 import { assertVaultWritable } from "./state.ts";
@@ -194,10 +200,11 @@ export const historyQuery = (
  */
 export const runTreeChange = async <T>(
   build: (plan: PlanBuilder) => Promise<{ queries: AtomicQuery[]; result: T }>,
+  hooks: RunHooks = {},
   options: { long?: boolean } = {},
 ): Promise<T> => {
   assertVaultWritable();
-  const out = await withVaultLock(() => runTreeChangeHeld(build), options);
+  const out = await withVaultLock(() => runTreeChangeHeld(build, hooks), options);
   announceVaultChange();
   return out;
 };
@@ -208,6 +215,7 @@ export const runTreeChange = async <T>(
  */
 export const runTreeChangeHeld = async <T>(
   build: (plan: PlanBuilder) => Promise<{ queries: AtomicQuery[]; result: T }>,
+  hooks: RunHooks = {},
 ): Promise<T> => {
   assertVaultWritable();
   const store = getVaultStore();
@@ -216,19 +224,26 @@ export const runTreeChangeHeld = async <T>(
   const plan = new PlanBuilder(store);
   try {
     const { queries, result } = await build(plan);
-    if (plan.ops.length === 0) {
+    const total = plan.ops.length;
+    if (total === 0) {
+      if (hooks.signal?.aborted) throw new OperationCancelledError();
+      hooks.onProgress?.({ phase: "saving", done: 0, total });
       await runAtomic(queries);
+      await writeManifest(store);
     } else {
       const applied = getDb().insert(vaultApplied).values({ planId: plan.planId });
       // Step 5 order: the manifest is rewritten before the journal and ledger row go, so a
       // crash after the commit still has a journal to roll forward and then rewrite it.
-      await j.run({ planId: plan.planId, ops: plan.ops }, async () => {
-        await runAtomic([...queries, applied]);
-        await writeManifest(store);
-      });
-      return result;
+      await j.run(
+        { planId: plan.planId, ops: plan.ops },
+        async () => {
+          await runAtomic([...queries, applied]);
+          await writeManifest(store);
+        },
+        hooks,
+      );
     }
-    await writeManifest(store);
+    hooks.onProgress?.({ phase: "done", done: total, total });
     return result;
   } finally {
     await plan.cleanUp();

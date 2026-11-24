@@ -17,6 +17,8 @@ import {
   YEAR_DEFAULT_FOLDERS,
   YEAR_DEFAULT_FOLDER_KEYS,
   YEAR_ROOT_KEY,
+  FolderFixedError,
+  vaultFolderRules,
   validDocumentName,
   freeFolderName,
   documentMimeFor,
@@ -29,7 +31,15 @@ import {
 import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getVaultStore, sha256Hex } from "../vault/store.ts";
 import { assertVaultWritable } from "../vault/state.ts";
-import { changeTree, type DocumentChange, type ShortenedFolder } from "./document-tree.ts";
+import {
+  changeTree,
+  previewDocumentPath,
+  previewFolderPath,
+  type DocumentChange,
+  type PathPreview,
+  type RunHooks,
+  type ShortenedFolder,
+} from "./document-tree.ts";
 import { historyQuery } from "../vault/tree.ts";
 import { getDb, runAtomic, type AtomicQuery } from "../client.ts";
 import {
@@ -120,6 +130,25 @@ const assertNameFree = (
   if (taken) throw new FolderNameTakenError(name);
 };
 
+/** Move rules for `folder` under `newParentId`, before any write: fixed, cycle, depth. */
+const assertMovable = async (
+  folder: DocumentFolderRow,
+  newParentId: string | null,
+  folders: DocumentFolderRow[],
+) => {
+  if (!vaultFolderRules(folder.defaultKey).move) throw new FolderFixedError(folder.defaultKey);
+  const id = folder.id;
+  if (newParentId !== null) {
+    await requireFolder(newParentId);
+    if (subtreeIds(id, folders).includes(newParentId)) throw new FolderCycleError();
+  }
+  const all = new Map(folders.map((f) => [f.id, f]));
+  // The deepest level below this folder, counting itself as 1.
+  const height = (fid: string): number =>
+    1 + Math.max(0, ...folders.filter((f) => f.parentId === fid).map((f) => height(f.id)));
+  if (depthOf(newParentId, all) + height(id) > MAX_FOLDER_DEPTH) throw new FolderTooDeepError();
+};
+
 export const folderRepo = {
   ...folderCrud,
 
@@ -153,39 +182,93 @@ export const folderRepo = {
     return row;
   },
 
-  /** Throws FolderNameTakenError, VaultPathTooLongError (a file below would be over budget). */
-  async rename(id: string, rawName: string): Promise<DocumentFolderRow> {
+  /**
+   * Where a folder would be on disk if saved now (new when `id` is absent), by the same rules as
+   * the save: read-only. `fits` is false when it or a file it relocates would be over budget.
+   */
+  async previewPath(input: {
+    id?: string;
+    parentId: string | null;
+    name: string;
+  }): Promise<PathPreview> {
+    const name = validFolderName(input.name);
+    const existing = input.id ? await requireFolder(input.id) : undefined;
+    const at = nowIso();
+    const next: DocumentFolderRow = existing
+      ? { ...existing, parentId: input.parentId, name, updatedAt: at }
+      : {
+          id: newId(),
+          name,
+          parentId: input.parentId,
+          taxYear: null,
+          sortOrder: 0,
+          defaultKey: null,
+          deletedAt: null,
+          createdAt: at,
+          updatedAt: at,
+        };
+    return previewFolderPath(next, !existing, linkedDates);
+  },
+
+  /**
+   * Throws FolderFixedError (a year folder), FolderNameTakenError, VaultPathTooLongError (a file
+   * below would be over budget), OperationCancelledError (`hooks.signal`, before the commit).
+   */
+  async rename(id: string, rawName: string, hooks: RunHooks = {}): Promise<DocumentFolderRow> {
     const name = validFolderName(rawName);
     const folder = await requireFolder(id);
+    if (!vaultFolderRules(folder.defaultKey).rename) {
+      throw new FolderFixedError(folder.defaultKey);
+    }
     assertNameFree(name, folder.parentId ?? null, await liveFolders(), id);
-    return folderUpdate(folder, { name });
+    return folderUpdate(folder, { name }, hooks);
   },
 
-  /** Move under `newParentId` (null = root). Throws FolderCycleError, FolderNameTakenError, FolderTooDeepError. */
-  async move(id: string, newParentId: string | null): Promise<DocumentFolderRow> {
+  /**
+   * Move under `newParentId` (null = root). Throws FolderFixedError (a year or default folder),
+   * FolderCycleError, FolderNameTakenError, FolderTooDeepError, OperationCancelledError.
+   */
+  async move(
+    id: string,
+    newParentId: string | null,
+    hooks: RunHooks = {},
+  ): Promise<DocumentFolderRow> {
     const folder = await requireFolder(id);
     const folders = await liveFolders();
-    if (newParentId !== null) {
-      await requireFolder(newParentId);
-      if (subtreeIds(id, folders).includes(newParentId)) throw new FolderCycleError();
-    }
-    const all = new Map(folders.map((f) => [f.id, f]));
-    // The deepest level below this folder, counting itself as 1.
-    const height = (fid: string): number =>
-      1 + Math.max(0, ...folders.filter((f) => f.parentId === fid).map((f) => height(f.id)));
-    if (depthOf(newParentId, all) + height(id) > MAX_FOLDER_DEPTH) throw new FolderTooDeepError();
+    await assertMovable(folder, newParentId, folders);
     assertNameFree(folder.name, newParentId, folders, id);
-    return folderUpdate(folder, { parentId: newParentId });
+    return folderUpdate(folder, { parentId: newParentId }, hooks);
   },
 
-  /** Field changes through the tree, so a name or parent change moves the files below (§ 6). */
+  /**
+   * Field changes through the tree, so a name or parent change moves the files below (§ 6). A
+   * name or parent change has the rules and errors of `rename` / `move` (FolderFixedError and the
+   * rest), all checked before any write, and both land in one journaled plan. Revert, restore
+   * and import never come through here.
+   */
   async update(
     id: string,
     patch: Partial<DocumentFolderInsert>,
   ): Promise<DocumentFolderRow | undefined> {
     const folder = await folderCrud.get(id);
     if (!folder) return undefined;
-    return folderUpdate(folder, patch as Partial<DocumentFolderRow>);
+    const { name: rawName, parentId, ...rest } = patch as Partial<DocumentFolderRow>;
+    const fields: Partial<DocumentFolderRow> = { ...rest };
+    const renames = rawName !== undefined && rawName !== folder.name;
+    const moves = parentId !== undefined && parentId !== folder.parentId;
+    if (renames || moves) {
+      const folders = await liveFolders();
+      const name = renames ? validFolderName(rawName) : folder.name;
+      const parent = moves ? parentId : (folder.parentId ?? null);
+      if (renames && !vaultFolderRules(folder.defaultKey).rename) {
+        throw new FolderFixedError(folder.defaultKey);
+      }
+      if (moves) await assertMovable(folder, parent, folders);
+      assertNameFree(name, parent, folders, id);
+      if (renames) fields.name = name;
+      if (moves) fields.parentId = parent;
+    }
+    return folderUpdate(folder, fields);
   },
 
   /** A folder never goes alone: its subtree and documents go with it (`softDeleteTree`). */
@@ -556,10 +639,11 @@ const lenient = { strict: false, datesFor: linkedDates };
 const folderUpdate = async (
   folder: DocumentFolderRow,
   patch: Partial<DocumentFolderRow>,
+  hooks: RunHooks = {},
 ): Promise<DocumentFolderRow> => {
   const next = { ...folder, ...patch, updatedAt: nowIso() };
   if (changesNothing(folder, patch)) return folder;
-  await changeTree({ folders: [{ next, op: "update" }] }, strict);
+  await changeTree({ folders: [{ next, op: "update" }] }, strict, hooks);
   return next;
 };
 
@@ -645,6 +729,43 @@ export const documentRepo = {
       }
     }
     return { ok, failed };
+  },
+
+  /**
+   * Where a document would be in the vault if saved now (an upload when `id` is absent), by the
+   * same rules as the save: read-only. `fits` false means the save would refuse it.
+   */
+  async previewPath(input: {
+    id?: string;
+    folderId: string | null;
+    name: string;
+  }): Promise<PathPreview> {
+    // As the save: a rename validates the name; an upload keeps the file's own name.
+    const name = input.id ? validDocumentName(input.name) : input.name;
+    const at = nowIso();
+    if (input.id) {
+      const doc = await requireDocument(input.id);
+      return previewDocumentPath(
+        { ...doc, folderId: input.folderId, name, updatedAt: at },
+        false,
+        linkedDates,
+      );
+    }
+    const next: DocumentRow = {
+      id: newId(),
+      folderId: input.folderId,
+      name,
+      mime: documentMimeFor(input.name, "") ?? "application/octet-stream",
+      sizeBytes: 0,
+      sha256: "",
+      addedAt: at,
+      notes: null,
+      vaultPath: null,
+      deletedAt: null,
+      createdAt: at,
+      updatedAt: at,
+    };
+    return previewDocumentPath(next, true, linkedDates);
   },
 
   /** Throws DocumentNameInvalidError for an empty, over-long or "/" name (as folders). */

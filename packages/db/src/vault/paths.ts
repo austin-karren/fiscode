@@ -1,4 +1,5 @@
 import {
+  isoFromDate,
   documentMimeFor,
   folderPathFits,
   freeFolderName,
@@ -91,10 +92,20 @@ export const folderSegments = (
 export const folderDir = (segments: readonly string[] | null) =>
   [VAULT_DOCUMENTS_DIR, ...(segments ?? [VAULT_UNFILED_DIR])].join("/");
 
-/** The date prefix (D2): the one linked record's date, else the date the document was added. */
+/**
+ * The local calendar day of an `addedAt` timestamp, as `exportFileName` and `backupFileName` date
+ * theirs: an upload at 23:30 local is that day, not the next UTC day. A bare date stays as it is.
+ */
+export const addedDay = (addedAt: string): string => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(addedAt)) return addedAt;
+  const at = new Date(addedAt);
+  return Number.isNaN(at.getTime()) ? addedAt.slice(0, 10) : isoFromDate(at);
+};
+
+/** The date prefix (D2): the one linked record's date, else the local day the document was added. */
 export const documentDate = (addedAt: string, linkedDates: readonly string[]): string => {
   const dated = linkedDates.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
-  return dated.length === 1 && linkedDates.length === 1 ? dated[0]! : addedAt.slice(0, 10);
+  return dated.length === 1 && linkedDates.length === 1 ? dated[0]! : addedDay(addedAt);
 };
 
 /**
