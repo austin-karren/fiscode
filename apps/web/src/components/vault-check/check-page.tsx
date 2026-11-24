@@ -31,6 +31,7 @@ import {
   skippedLine,
 } from "../../lib/vault-check-view";
 import { useVaultReadOnly } from "../../lib/vault-migration";
+import { targetAfterRemoval } from "../../lib/focus-after-removal";
 import { BACKUP_CARD_ID } from "../backup-card";
 import { ReadOnlyNote } from "../read-only-note";
 import { SectionTitle } from "../section-title";
@@ -62,9 +63,12 @@ export function CheckPage({
   // Check now: the moved items are gone from the list by then. Cleared by the next thing tried.
   const [adopted, setAdopted] = useState<string[]>([]);
   const busy = check.at === "running" || acting !== undefined;
+  const inFlight = useRef(false);
   const off = busy || !!readOnly;
 
   const checkNow = async () => {
+    if (off || inFlight.current) return;
+    inFlight.current = true;
     setCheck({ at: "running" });
     setFailed(undefined);
     setAdopted([]);
@@ -83,19 +87,34 @@ export function CheckPage({
     } catch (err) {
       setCheck({ at: "idle" });
       setFailed({ section: "check", line: errorLine(err) });
+    } finally {
+      inFlight.current = false;
     }
   };
 
-  const act = async (section: string, run: () => Promise<unknown>) => {
+  /**
+   * Runs an action on the report. On success, once the list has re-rendered, focus goes to the
+   * next item, else the previous, else the section heading, else the page heading; never the page
+   * body (d-ux). On failure the row stays, and focus stays on the pressed button.
+   */
+  const act = async (section: string, run: () => Promise<unknown>, from?: HTMLElement) => {
+    // Buttons are aria-disabled, not disabled, while off: a disabled pressed button drops focus.
+    // The ref also stops a second press landing before the re-render.
+    if (off || inFlight.current) return;
+    inFlight.current = true;
+    const target = from ? focusTargetAfter(from) : undefined;
     setActing(section);
     setFailed(undefined);
     setAdopted([]);
     try {
       await run();
       await router.invalidate();
+      if (target) requestAnimationFrame(() => focusOn(target()));
     } catch (err) {
       setFailed({ section, line: errorLine(err) });
+      // The row stayed, so focus is still on the pressed button.
     } finally {
+      inFlight.current = false;
       setActing(undefined);
     }
   };
@@ -106,11 +125,15 @@ export function CheckPage({
       </p>
     ) : null;
 
-  const adopt = (items: ScanReport["moved"]) =>
-    act("moved", async () => {
-      const result = await adoptMoved(items);
-      setAdopted(adoptResultLines(result, new Map(items.map((m) => [m.documentId, m.name]))));
-    });
+  const adopt = (items: ScanReport["moved"], from: HTMLElement) =>
+    act(
+      "moved",
+      async () => {
+        const result = await adoptMoved(items);
+        setAdopted(adoptResultLines(result, new Map(items.map((m) => [m.documentId, m.name]))));
+      },
+      from,
+    );
 
   const findings = report ? scanReviewCount(report) : 0;
   const restorable = report?.missing.filter((m) => m.restorable) ?? [];
@@ -130,7 +153,7 @@ export function CheckPage({
           <ReadOnlyNote reason={readOnly} />
           <div>
             <div className="flex flex-wrap items-center gap-3">
-              <Button disabled={off} onClick={() => void checkNow()}>
+              <Button aria-disabled={off || undefined} onClick={() => void checkNow()}>
                 {check.at === "running" ? "Checking…" : "Check now"}
               </Button>
               {report ? (
@@ -188,7 +211,11 @@ export function CheckPage({
                   together, so no file is renamed to make room.
                 </p>
                 <div>
-                  <Button size="sm" disabled={off} onClick={() => void adopt(swapped)}>
+                  <Button
+                    size="sm"
+                    aria-disabled={off || undefined}
+                    onClick={(e) => void adopt(swapped, e.currentTarget)}
+                  >
                     Adopt the swap
                   </Button>
                 </div>
@@ -199,8 +226,8 @@ export function CheckPage({
                 <Button
                   size="sm"
                   variant={swapped.length > 0 ? "outline" : "default"}
-                  disabled={off}
-                  onClick={() => void adopt(report.moved)}
+                  aria-disabled={off || undefined}
+                  onClick={(e) => void adopt(report.moved, e.currentTarget)}
                 >
                   Adopt all
                 </Button>
@@ -224,16 +251,16 @@ export function CheckPage({
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={off}
-                        onClick={() => void adopt([m])}
+                        aria-disabled={off || undefined}
+                        onClick={(e) => void adopt([m], e.currentTarget)}
                       >
                         Adopt <span className="sr-only">{m.name}</span>
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={off}
-                        onClick={() => void act("moved", () => moveBack([m]))}
+                        aria-disabled={off || undefined}
+                        onClick={(e) => void act("moved", () => moveBack([m]), e.currentTarget)}
                       >
                         Move back <span className="sr-only">{m.name}</span>
                       </Button>
@@ -253,8 +280,10 @@ export function CheckPage({
               <div>
                 <Button
                   size="sm"
-                  disabled={off}
-                  onClick={() => void act("changed", () => acknowledgeChanged("all"))}
+                  aria-disabled={off || undefined}
+                  onClick={(e) =>
+                    void act("changed", () => acknowledgeChanged("all"), e.currentTarget)
+                  }
                 >
                   Acknowledge all
                 </Button>
@@ -275,8 +304,10 @@ export function CheckPage({
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={off}
-                      onClick={() => void act("changed", () => acknowledgeChanged([c]))}
+                      aria-disabled={off || undefined}
+                      onClick={(e) =>
+                        void act("changed", () => acknowledgeChanged([c]), e.currentTarget)
+                      }
                     >
                       Acknowledge <span className="sr-only">{c.name}</span>
                     </Button>
@@ -294,8 +325,10 @@ export function CheckPage({
               <div>
                 <Button
                   size="sm"
-                  disabled={off}
-                  onClick={() => void act("unknown", () => importNewFiles(report.unknown))}
+                  aria-disabled={off || undefined}
+                  onClick={(e) =>
+                    void act("unknown", () => importNewFiles(report.unknown), e.currentTarget)
+                  }
                 >
                   Import all
                 </Button>
@@ -312,8 +345,10 @@ export function CheckPage({
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={off}
-                      onClick={() => void act("unknown", () => importNewFiles([u]))}
+                      aria-disabled={off || undefined}
+                      onClick={(e) =>
+                        void act("unknown", () => importNewFiles([u]), e.currentTarget)
+                      }
                     >
                       Import <span className="sr-only">{u.name}</span>
                     </Button>
@@ -332,8 +367,10 @@ export function CheckPage({
               <div>
                 <Button
                   size="sm"
-                  disabled={off}
-                  onClick={() => void act("redated", () => applyRecordDates(report.redated))}
+                  aria-disabled={off || undefined}
+                  onClick={(e) =>
+                    void act("redated", () => applyRecordDates(report.redated), e.currentTarget)
+                  }
                 >
                   Apply all
                 </Button>
@@ -351,8 +388,10 @@ export function CheckPage({
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={off}
-                      onClick={() => void act("redated", () => applyRecordDates([r]))}
+                      aria-disabled={off || undefined}
+                      onClick={(e) =>
+                        void act("redated", () => applyRecordDates([r]), e.currentTarget)
+                      }
                     >
                       Apply record date <span className="sr-only">{r.name}</span>
                     </Button>
@@ -371,8 +410,10 @@ export function CheckPage({
               <div>
                 <Button
                   size="sm"
-                  disabled={off}
-                  onClick={() => void act("restorable", () => putBack(restorable))}
+                  aria-disabled={off || undefined}
+                  onClick={(e) =>
+                    void act("restorable", () => putBack(restorable), e.currentTarget)
+                  }
                 >
                   Put all back
                 </Button>
@@ -388,8 +429,8 @@ export function CheckPage({
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={off}
-                      onClick={() => void act("restorable", () => putBack([m]))}
+                      aria-disabled={off || undefined}
+                      onClick={(e) => void act("restorable", () => putBack([m]), e.currentTarget)}
                     >
                       Put it back <span className="sr-only">{m.name}</span>
                     </Button>
@@ -555,6 +596,26 @@ function Shortened({ title, children }: { title: string; children: ReactNode }) 
   );
 }
 
+/**
+ * Where focus goes once the item holding `from` may have left the list: the next item, else the
+ * previous (targetAfterRemoval), else its section's heading while the section is still there,
+ * else the page heading. Capture it before the change.
+ */
+const focusTargetAfter = (from: HTMLElement): (() => HTMLElement | null) => {
+  const heading = from
+    .closest("[role=region]")
+    ?.querySelector<HTMLElement>("[data-section-heading]");
+  return targetAfterRemoval(from, () =>
+    heading?.isConnected ? heading : document.querySelector<HTMLElement>("main h1, h1"),
+  );
+};
+
+const focusOn = (el: HTMLElement | null) => {
+  if (!el) return;
+  if (!el.matches("button, a[href], input") && !el.hasAttribute("tabindex")) el.tabIndex = -1;
+  el.focus();
+};
+
 function Section({
   title,
   items,
@@ -569,7 +630,7 @@ function Section({
     <Card role="region" aria-label={`${title}: ${items}`}>
       <CardHeader>
         <CardTitle>
-          <SectionTitle>
+          <SectionTitle tabIndex={-1} data-section-heading className="outline-none">
             {title}
             <span className="tabular-nums">({items})</span>
           </SectionTitle>

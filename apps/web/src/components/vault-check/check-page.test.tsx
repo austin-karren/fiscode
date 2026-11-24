@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ current: { phase: "done" } as object }));
@@ -142,7 +142,9 @@ const full: ScanReport = {
 const section = (name: RegExp) => screen.getByRole("region", { name });
 /** Actions are one at a time: wait until the last one has finished. */
 const settled = () =>
-  vi.waitFor(() => expect(screen.getByRole("button", { name: "Check now" })).toBeEnabled());
+  vi.waitFor(() =>
+    expect(screen.getByRole("button", { name: "Check now" })).not.toHaveAttribute("aria-disabled"),
+  );
 
 describe("Check folder (vault PR 11)", () => {
   it("says Everything matches when the report is empty", () => {
@@ -260,9 +262,18 @@ describe("Check folder (vault PR 11)", () => {
   it("is read-only while the migration runs", () => {
     state.current = { phase: "migrating", done: 1, total: 4 };
     render(<CheckPage report={full} migration={undefined} />);
-    expect(screen.getByRole("button", { name: "Check now" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Adopt all" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Import demo-new.pdf" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Check now" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Adopt all" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Import demo-new.pdf" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   });
 
   it("adopts a swap only as a whole: no per-item Adopt or Move back (REVIEW #112 r1 F1)", async () => {
@@ -270,7 +281,9 @@ describe("Check folder (vault PR 11)", () => {
     render(<CheckPage report={swap} migration={undefined} />);
     expect(screen.queryByRole("button", { name: "Adopt Demo b" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Move back Demo c" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Adopt Demo a" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Adopt Demo a" })).not.toHaveAttribute(
+      "aria-disabled",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Adopt the swap" }));
     await vi.waitFor(() => expect(adoptMoved).toHaveBeenCalledWith([swap.moved[1], swap.moved[2]]));
   });
@@ -381,5 +394,111 @@ describe("Check folder (vault PR 11)", () => {
     expect(screen.getByText("A very long demo folder → A very long")).toBeVisible();
     expect(screen.getByText("1 file name shortened to fit")).toBeVisible();
     expect(screen.getByText(/1 file not on this device, 0 files damaged/)).toBeVisible();
+  });
+});
+
+describe("focus when an item leaves the list (d-ux)", () => {
+  // The real loader re-reads the report after an action: here invalidate re-renders with `next`.
+  const leaves = (first: ScanReport, next: ScanReport) => {
+    const view = render(
+      <main>
+        <h1>Check folder</h1>
+        <CheckPage report={first} migration={undefined} />
+      </main>,
+    );
+    invalidate.mockImplementationOnce(async () => {
+      view.rerender(
+        <main>
+          <h1>Check folder</h1>
+          <CheckPage report={next} migration={undefined} />
+        </main>,
+      );
+    });
+    return view;
+  };
+  const frame = () => act(() => new Promise<void>((r) => requestAnimationFrame(() => r())));
+  const r1 = { documentId: "p1", name: "Demo p1", path: `${D}/p1.pdf`, restorable: true as const };
+  const r2 = { ...r1, documentId: "p2", name: "Demo p2", path: `${D}/p2.pdf` };
+  const r3 = { ...r1, documentId: "p3", name: "Demo p3", path: `${D}/p3.pdf` };
+  const withMissing = (...m: (typeof r1)[]) => ({ ...empty, missing: m });
+
+  it("goes to the next item", async () => {
+    leaves(withMissing(r1, r2, r3), withMissing(r2, r3));
+    fireEvent.click(screen.getByRole("button", { name: "Put it back Demo p1" }));
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    await frame();
+    expect(
+      within(screen.getByText("Demo p2", { selector: "p" }).closest("li")!).getAllByRole("link")[0],
+    ).toHaveFocus();
+  });
+
+  it("goes to the previous item after the last one", async () => {
+    leaves(withMissing(r1, r2), withMissing(r1));
+    fireEvent.click(screen.getByRole("button", { name: "Put it back Demo p2" }));
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    await frame();
+    expect(
+      within(screen.getByText("Demo p1", { selector: "p" }).closest("li")!).getAllByRole("link")[0],
+    ).toHaveFocus();
+  });
+
+  it("goes to the previous item in Edited after acknowledging the last", async () => {
+    const two = {
+      ...full,
+      changed: [full.changed[0]!, { ...full.changed[0]!, documentId: "c2", name: "Demo c2" }],
+    };
+    leaves(two, { ...two, changed: [two.changed[0]!] });
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge Demo c2" }));
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    await frame();
+    expect(
+      within(screen.getByText("Demo edited", { selector: "p" }).closest("li")!).getAllByRole(
+        "link",
+      )[0],
+    ).toHaveFocus();
+  });
+
+  it("goes to the page heading when the whole section went, never body", async () => {
+    leaves({ ...empty, moved: [moved("a")] }, empty);
+    fireEvent.click(screen.getByRole("button", { name: "Move back Demo a" }));
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    await frame();
+    expect(screen.getByRole("heading", { level: 1, name: "Check folder" })).toHaveFocus();
+  });
+
+  it("goes to the section heading after an 'all' action when the section stays", async () => {
+    const restorableAndMissing = withMissing(r1, r2);
+    // Put all back fails for one: the section stays with it.
+    leaves(restorableAndMissing, withMissing(r2));
+    fireEvent.click(screen.getByRole("button", { name: "Put all back" }));
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    await frame();
+    expect(screen.getByText(/^Restorable from this device/).closest("h2")).toHaveFocus();
+  });
+
+  it("stays on the pressed button when the action fails", async () => {
+    vi.mocked(moveBack).mockRejectedValueOnce(new VaultNameTakenError("x"));
+    render(<CheckPage report={{ ...empty, moved: [moved("a")] }} migration={undefined} />);
+    const button = screen.getByRole("button", { name: "Move back Demo a" });
+    button.focus();
+    fireEvent.click(button);
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button).toHaveFocus();
+    await screen.findByRole("alert");
+    await frame();
+    expect(button).toHaveFocus();
+  });
+});
+
+describe("a second press while an action runs", () => {
+  it("is ignored, even before the re-render", async () => {
+    let finish!: () => void;
+    vi.mocked(moveBack).mockImplementationOnce(() => new Promise<void>((r) => (finish = r)));
+    render(<CheckPage report={{ ...empty, moved: [moved("a")] }} migration={undefined} />);
+    const button = screen.getByRole("button", { name: "Move back Demo a" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await act(async () => finish());
+    expect(moveBack).toHaveBeenCalledTimes(1);
   });
 });
