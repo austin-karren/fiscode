@@ -198,6 +198,31 @@ describe("names made by the old UTC-day rule", () => {
   });
 });
 
+describe("bare-year titles (re-path v3)", () => {
+  it("uses its own done flag", () => {
+    expect(REPATH_DONE_KEY).toBe("vault_repath_v3");
+  });
+
+  it("drops the app-added prefix from a bare-year title, where the v2 flag was set", async () => {
+    sqlite.prepare("INSERT INTO meta (key, value) VALUES ('vault_repath_v2', 'done')").run();
+    const w2 = await documentRepo.upload(file("2025 W-2 Demo employer.pdf", "w"));
+    expect(w2.vaultPath).toBe("documents/Unfiled/2025 W-2 Demo employer.pdf");
+    const plain = await documentRepo.upload(file("Demo receipt.pdf", "p"));
+    const plainPath = plain.vaultPath!;
+    const old = await oldPlace(w2.id);
+    expect(old).toBe(`documents/Unfiled/${today()} 2025 W-2 Demo employer.pdf`);
+
+    expect(await repathDocuments()).toBe(1);
+    const after = (await documentRepo.get(w2.id))!;
+    expect(after.vaultPath).toBe("documents/Unfiled/2025 W-2 Demo employer.pdf");
+    expect(after.name).toBe("2025 W-2 Demo employer.pdf");
+    expect((await documentRepo.get(plain.id))!.vaultPath).toBe(plainPath);
+    expect(await store.read(old)).toBeUndefined();
+    expect(doneFlag()).toBe("done");
+    expect(await repathDocuments()).toBe(0);
+  });
+});
+
 describe("a restore of an older backup", () => {
   it("clears the flag, so the re-path runs again and no double dates come back", async () => {
     const { a } = await setUp();
