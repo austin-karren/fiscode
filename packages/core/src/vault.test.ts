@@ -70,8 +70,21 @@ describe("vaultFileName", () => {
     it("a date not at the start: prefixed", () => {
       expect(name("Receipt 2026-08-12")).toBe("2026-11-23 Receipt 2026-08-12.pdf");
     });
-    it("a leading number that isn't a date: prefixed", () => {
-      expect(name("2026 budget")).toBe("2026-11-23 2026 budget.pdf");
+    it("a leading bare year and a space: the title as it is", () => {
+      expect(name("2025 W-2")).toBe("2025 W-2.pdf");
+      expect(name("2026 budget")).toBe("2026 budget.pdf");
+      expect(name("1900 deed")).toBe("1900 deed.pdf");
+      expect(name("2199 plan")).toBe("2199 plan.pdf");
+    });
+    it("a bare year with no space after it: prefixed", () => {
+      // "2025" alone and "2025-budget" don't read as a year label, so they keep the prefix.
+      expect(name("2025")).toBe("2026-11-23 2025.pdf");
+      expect(name("2025-budget")).toBe("2026-11-23 2025-budget.pdf");
+    });
+    it("a leading number that isn't a plausible year: prefixed", () => {
+      expect(name("12345 receipt")).toBe("2026-11-23 12345 receipt.pdf");
+      expect(name("1899 deed")).toBe("2026-11-23 1899 deed.pdf");
+      expect(name("2200 plan")).toBe("2026-11-23 2200 plan.pdf");
       expect(name("2026-08-12x")).toBe("2026-11-23 2026-08-12x.pdf");
     });
     it("a leading date that isn't a calendar day: prefixed", () => {
@@ -91,6 +104,13 @@ describe("vaultFileName", () => {
       expect(titleHasDate("2026-13-40 notes")).toBe(false);
       expect(titleHasDate("2026-02-30")).toBe(false);
       expect(titleHasDate("2026-02-28")).toBe(true);
+    });
+    it("counts a leading year 1900-2199 followed by a space", () => {
+      expect(titleHasDate("2025 W-2.pdf", "pdf")).toBe(true);
+      expect(titleHasDate("2025.pdf", "pdf")).toBe(false);
+      expect(titleHasDate("2025-budget")).toBe(false);
+      expect(titleHasDate("12345 receipt")).toBe(false);
+      expect(titleHasDate("1899 deed")).toBe(false);
     });
   });
   it("prefixes the date and lower-cases the extension", () => {

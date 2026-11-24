@@ -6,7 +6,7 @@ import { changeTree, ownDatePrefix, previewDocumentPath, type RunHooks } from ".
 import { linkedDates } from "./documents.ts";
 
 /** Set to "done" in `meta` once every file has the path the fixed name rule gives. */
-export const REPATH_DONE_KEY = "vault_repath_v2";
+export const REPATH_DONE_KEY = "vault_repath_v3";
 
 /**
  * The local-day date a file named before the local-day fix should have, or undefined. Narrow:
@@ -22,7 +22,7 @@ const utcDayFix = (doc: DocumentRow, linked: readonly string[]): string | undefi
 
 /**
  * The one-time re-path after the double-date fix (`vaultFileName`: a title that already starts
- * with a date gets no prefix). Every live placed document whose path differs from what the rule
+ * with a date, or with a year and a space, gets no prefix). Every live placed document whose path differs from what the rule
  * gives now moves (and a prefix the app gave by the old UTC day takes the local day), each in
  * its own journaled plan under the vault lock, with the collision rule.
  * A crash or cancel leaves the moved files moved; the next run finishes the rest, then marks it
