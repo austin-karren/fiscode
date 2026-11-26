@@ -21,6 +21,15 @@ vi.mock("@fiscode/db", () => ({
       done
   )({ phase: "done" }),
   onVaultMigrationState: () => () => {},
+  // The vault settings banner and card (ADR 0001 § 11): nothing picked, nothing to reconnect.
+  onVaultChange: () => () => {},
+  vaultPermissionState: async () => "opfs",
+  requestVaultPermission: async () => "opfs",
+  canPickFolder: () => false,
+  pickedFolderName: () => undefined,
+  pendingVaultSwitch: async () => undefined,
+  switchVaultToFolder: vi.fn(),
+  switchVaultToOpfs: vi.fn(),
 
   profileRepo: {
     get: async () => store.profile,
