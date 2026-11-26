@@ -271,6 +271,13 @@ export class VaultPermissionError extends DocumentError {
     super("Reconnect your vault folder to save changes.");
   }
 }
+/** A switch to a picked folder while the vault is already in one: switch back to OPFS first. */
+export class VaultAlreadyPickedError extends DocumentError {
+  override readonly name = "VaultAlreadyPickedError";
+  constructor() {
+    super("Your vault is already in a folder. Move it back to this browser first.");
+  }
+}
 export class VaultNameTakenError extends DocumentError {
   override readonly name = "VaultNameTakenError";
   constructor(readonly path: string) {

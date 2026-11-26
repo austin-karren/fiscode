@@ -110,14 +110,22 @@ const split = (path: string) => {
   return { dirs: parts, name };
 };
 
-/** The vault over a directory handle: OPFS's root in the app, a fake in tests. */
-export const vaultStore = (root: VaultDirHandle): VaultStore => {
+/**
+ * The vault over a directory handle: OPFS's root in the app, a fake in tests. By-sha blobs are
+ * always under `root`; the by-path tree is `root/vault/` unless `tree` gives another folder (the
+ * user-picked one, picked.ts, where the folder itself is the vault).
+ */
+export const vaultStore = (
+  root: VaultDirHandle,
+  options: { tree?: (create: boolean) => Promise<VaultDirHandle> } = {},
+): VaultStore => {
   const walk = async (from: VaultDirHandle, dirs: string[], create: boolean) => {
     let dir = from;
     for (const d of dirs) dir = await dir.getDirectoryHandle(d, { create });
     return dir;
   };
-  const vaultDir = (create: boolean) => root.getDirectoryHandle(VAULT_DIR, { create });
+  const vaultDir =
+    options.tree ?? ((create: boolean) => root.getDirectoryHandle(VAULT_DIR, { create }));
   const fileAt = async (path: string): Promise<VaultFileHandle | undefined> => {
     const { dirs, name } = split(path);
     try {
@@ -343,11 +351,19 @@ let _root: VaultDirHandle | undefined;
 /** The OPFS root: the vault (`vault/`), the old blobs and the journal are all under it. */
 const defaultRoot = () => (_root ??= lazyDir(opfsRoot));
 
-/** The store in use: OPFS unless a test set another. */
+/** The store in use: OPFS unless the picked folder (picked.ts) or a test set another. */
 export const getVaultStore = (): VaultStore => (_store ??= vaultStore(defaultRoot()));
 
 /** Where the journal lives (ADR § 2: OPFS, beside the vault, never in it). */
 export const getVaultRoot = (): VaultDirHandle => defaultRoot();
+
+/** The OPFS backend, whichever store is in use. */
+export const opfsVaultStore = (): VaultStore => vaultStore(defaultRoot());
+
+/** Picked.ts switches the backend here; undefined goes back to OPFS. The journal stays in OPFS. */
+export const setActiveVaultStore = (store: VaultStore | undefined) => {
+  _store = store;
+};
 
 /**
  * For tests and the headless backup: use `store` (pass undefined to go back to OPFS). `root` is

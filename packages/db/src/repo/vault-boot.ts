@@ -6,6 +6,7 @@ import {
   type MigrationProgress,
   type VaultMigrationReport,
 } from "../vault/migrate.ts";
+import { initVaultBackend } from "../vault/picked.ts";
 import { setVaultMigrationState } from "../vault/state.ts";
 import { errorMessage } from "../vault/paths.ts";
 import { getVaultStore } from "../vault/store.ts";
@@ -45,11 +46,13 @@ const repathOnce = async (options: Pick<StartupOptions, "onRepathProgress" | "si
 };
 
 /**
- * Reads whether the migration is done and sets the state. No lock, no file access. Never throws:
+ * Picks the backend (the kept folder, else OPFS; ADR § 7), then reads whether the migration is
+ * done and sets the state. No lock, no file access. Never throws:
  * the app must render even when the vault can't start (Documents is then read-only,
  * `migration-incomplete`).
  */
 export const prepareVault = async (): Promise<void> => {
+  await initVaultBackend();
   try {
     setVaultMigrationState(
       (await isVaultMigrated()) ? { phase: "done" } : { phase: "migrating", done: 0, total: 0 },

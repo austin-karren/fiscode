@@ -7,3 +7,4 @@ export * from "./state.ts";
 export * from "./tree.ts";
 export * from "./manifest.ts";
 export * from "./migrate.ts";
+export * from "./picked.ts";
