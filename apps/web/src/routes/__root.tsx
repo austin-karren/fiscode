@@ -12,6 +12,7 @@ import { NotFoundEmpty } from "../components/empty-states/not-found";
 import { SetupRequiredEmpty } from "../components/empty-states/setup-required";
 import { Page } from "../components/page";
 import { VaultMigrationBanner } from "../components/vault-migration-banner";
+import { VaultReconnectBanner } from "../components/vault-reconnect-banner";
 import { MAIN_ID, routeLabel } from "../lib/nav";
 
 export const Route = createRootRoute({
@@ -87,6 +88,7 @@ function RootLayout() {
             className="@container px-4 py-6 outline-none md:px-8 print:p-0"
           >
             <VaultMigrationBanner />
+            <VaultReconnectBanner />
             {needsSetup ? (
               <Page title={routeLabel(pathname)}>
                 <SetupRequiredEmpty />
